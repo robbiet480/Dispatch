@@ -64,6 +64,23 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
     #expect(Set(tokens.map(\.text)).isSuperset(of: ["Testing", "Coding"]))
 }
 
+@Test func emptyOptionsProducePayloadlessResponse() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let answers: [AnswerDraft] = [
+        AnswerDraft(question: ref("q-empty-opts", "Working?", .yesNo), value: .options([])),
+        AnswerDraft(question: ref("q-empty-tokens", "Doing?", .tokens), value: .tokens([])),
+    ]
+    let report = try ReportBuilder.save(kind: .regular, trigger: .manual, date: Date(),
+                                        timeZone: .current, outcomes: [:],
+                                        answers: answers, in: context)
+    #expect(report.responses.count == 2)
+    for response in report.responses {
+        #expect(response.answeredOptions == nil)
+        #expect(response.tokens == nil)
+    }
+}
+
 @Test func lastReportDateReturnsMostRecent() throws {
     let container = try DispatchStore.inMemoryContainer()
     let context = ModelContext(container)

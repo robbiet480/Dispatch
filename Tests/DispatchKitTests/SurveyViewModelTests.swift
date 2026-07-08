@@ -36,6 +36,20 @@ private func makeQuestion(_ id: String, _ prompt: String, _ type: QuestionType,
     #expect(viewModel.pages[0].choices == ["Yes", "No"])
 }
 
+@Test func selectClampsAndMoves() {
+    let questions = [
+        makeQuestion("q1", "Working?", .yesNo, sort: 0),
+        makeQuestion("q2", "Doing?", .tokens, sort: 1),
+    ]
+    let viewModel = SurveyViewModel(questions: questions, kind: .regular)
+    viewModel.select(1)
+    #expect(viewModel.currentIndex == 1)
+    viewModel.select(99) // clamps to last
+    #expect(viewModel.currentIndex == 1)
+    viewModel.select(-5) // clamps to first
+    #expect(viewModel.currentIndex == 0)
+}
+
 @Test func navigationAndAnswers() {
     let questions = [
         makeQuestion("q1", "Working?", .yesNo, sort: 0),

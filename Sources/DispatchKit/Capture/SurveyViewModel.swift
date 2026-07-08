@@ -47,6 +47,12 @@ public final class SurveyViewModel {
         currentIndex = max(currentIndex - 1, 0)
     }
 
+    /// Jumps to `index`, clamped to a valid page. Used by the TabView swipe
+    /// binding so gestures stay in sync with the footer and page counter.
+    public func select(_ index: Int) {
+        currentIndex = min(max(index, 0), max(pages.count - 1, 0))
+    }
+
     public func answer(_ value: AnswerValue, for id: String) {
         answers[id] = value
     }

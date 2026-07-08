@@ -49,9 +49,13 @@ final class HealthKitReader: Sendable {
 
     func latest(_ id: HKQuantityTypeIdentifier, unit: HKUnit) async throws -> (value: Double, date: Date)? {
         let type = HKQuantityType(id)
+        // Bound to the last 24h so HRV/resting/latest-HR can't surface
+        // weeks-old samples when today has no reading.
+        let start = Date().addingTimeInterval(-24 * 60 * 60)
         return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: nil)
             let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1,
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1,
                                       sortDescriptors: sort) { _, samples, error in
                 if let error { continuation.resume(throwing: error); return }
                 guard let sample = samples?.first as? HKQuantitySample else {

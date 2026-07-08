@@ -73,7 +73,10 @@ public enum ReportBuilder {
             let response = Response()
             response.questionPrompt = draft.question.prompt
             response.questionIdentifier = draft.question.uniqueIdentifier
-            switch draft.value {
+            // Empty collections carry no answer — normalize to skipped so the
+            // Response is payload-less (matches v1 export semantics).
+            let value = normalizeEmpty(draft.value)
+            switch value {
             case .tokens(let texts):
                 response.tokens = texts.map { TokenValue(text: $0) }
             case .options(let options):
@@ -97,6 +100,16 @@ public enum ReportBuilder {
         try context.save()
         try VocabularyBuilder.rebuild(in: context)
         return report
+    }
+
+    /// Treats `.tokens([])` and `.options([])` as `.skipped` — an emptied
+    /// collection is not an answer.
+    private static func normalizeEmpty(_ value: AnswerValue) -> AnswerValue {
+        switch value {
+        case .tokens(let t) where t.isEmpty: return .skipped
+        case .options(let o) where o.isEmpty: return .skipped
+        default: return value
+        }
     }
 }
 

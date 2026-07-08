@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Runs all enabled providers concurrently, each raced against `timeout`.
 /// Emits exactly one CaptureEvent per provider; the stream finishes when
@@ -33,22 +34,41 @@ public enum CaptureCoordinator {
         }
     }
 
+    /// One-shot continuation race that ALWAYS resumes within `timeout`. A
+    /// `withTaskGroup`-based race can't return until every child finishes, so
+    /// a provider suspended in a never-resumed continuation (ignoring
+    /// cancellation) would keep the group — and the whole stream — alive
+    /// forever. Here the timeout branch resumes the continuation independently.
+    ///
+    /// After the timeout fires we `cancel()` the provider Task: cooperative
+    /// providers unwind and stop, but a non-cooperative (hung) provider Task is
+    /// intentionally ABANDONED — it keeps running detached until the process
+    /// exits. That leak is the deliberate cost of never hanging the report.
     private static func resolve(_ provider: any SensorProvider, timeout: Duration) async -> SensorOutcome {
-        await withTaskGroup(of: SensorOutcome.self) { group in
-            group.addTask {
-                do {
-                    return .captured(try await provider.capture())
-                } catch {
-                    return .unavailable(reason: String(describing: error))
+        await withCheckedContinuation { (continuation: CheckedContinuation<SensorOutcome, Never>) in
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+            func resumeOnce(_ outcome: SensorOutcome) {
+                let shouldResume = resumed.withLock { already -> Bool in
+                    if already { return false }
+                    already = true
+                    return true
                 }
+                if shouldResume { continuation.resume(returning: outcome) }
             }
-            group.addTask {
+            let work = Task {
+                let outcome: SensorOutcome
+                do {
+                    outcome = .captured(try await provider.capture())
+                } catch {
+                    outcome = .unavailable(reason: String(describing: error))
+                }
+                resumeOnce(outcome)
+            }
+            Task {
                 try? await Task.sleep(for: timeout)
-                return .unavailable(reason: "timed out")
+                work.cancel() // cooperative providers stop; hung ones are abandoned
+                resumeOnce(.unavailable(reason: "timed out"))
             }
-            let first = await group.next() ?? .unavailable(reason: "no result")
-            group.cancelAll()
-            return first
         }
     }
 }

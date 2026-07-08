@@ -36,6 +36,10 @@ public struct Placemark: Codable, Hashable, Sendable {
 }
 
 public struct LocationSnapshot: Codable, Hashable, Sendable {
+    // latitude/longitude are deliberately optional: coordinate-less snapshots
+    // are legal (denied permission or a partial fix), and non-optional Doubles
+    // trapped SwiftData decoding of payload-less location answers. See Plan 2
+    // Task 4 fix — keep these optional.
     public var latitude: Double?
     public var longitude: Double?
     public var altitude: Double?

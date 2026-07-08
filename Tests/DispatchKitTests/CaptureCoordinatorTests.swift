@@ -15,6 +15,13 @@ struct StubProvider: SensorProvider {
 
 struct StubError: Error {}
 
+struct HangingProvider: SensorProvider {
+    let kind: SensorKind
+    func capture() async throws -> SensorPayload {
+        await withCheckedContinuation { (_: CheckedContinuation<Never, Never>) in }
+    }
+}
+
 private func collect(_ stream: AsyncStream<CaptureEvent>) async -> [SensorKind: SensorOutcome] {
     var outcomes: [SensorKind: SensorOutcome] = [:]
     for await event in stream { outcomes[event.kind] = event.outcome }
@@ -59,6 +66,19 @@ private func testSettings() -> SensorSettings {
     let outcomes = await collect(CaptureCoordinator.capture(
         providers: providers, settings: testSettings(), timeout: .seconds(1)))
     guard case .unavailable = outcomes[.location] else { Issue.record("expected unavailable"); return }
+}
+
+@Test func hungProviderStillTimesOutAndStreamFinishes() async {
+    let providers: [any SensorProvider] = [
+        HangingProvider(kind: .weather),
+        StubProvider(kind: .battery, delay: .milliseconds(1), result: .success(.battery(1.0))),
+    ]
+    let start = ContinuousClock.now
+    let outcomes = await collect(CaptureCoordinator.capture(
+        providers: providers, settings: testSettings(), timeout: .milliseconds(100)))
+    #expect(outcomes.count == 2)
+    guard case .unavailable = outcomes[.weather] else { Issue.record("expected timeout"); return }
+    #expect(ContinuousClock.now - start < .seconds(5)) // stream finished, not hung
 }
 
 @Test func disabledSensorsSkipCapture() async {

@@ -5,10 +5,12 @@ struct BatteryProvider: SensorProvider {
     let kind = SensorKind.battery
 
     func capture() async throws -> SensorPayload {
-        await MainActor.run {
+        let level = await MainActor.run { () -> Float in
+            let previous = UIDevice.current.isBatteryMonitoringEnabled
             UIDevice.current.isBatteryMonitoringEnabled = true
+            defer { UIDevice.current.isBatteryMonitoringEnabled = previous }
+            return UIDevice.current.batteryLevel
         }
-        let level = await MainActor.run { UIDevice.current.batteryLevel }
         guard level >= 0 else {
             throw ProviderError("battery level unavailable")
         }

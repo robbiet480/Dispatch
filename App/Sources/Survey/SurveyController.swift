@@ -8,7 +8,6 @@ import SwiftData
 final class SurveyController {
     let survey: SurveyViewModel
     private(set) var outcomes: [SensorKind: SensorOutcome] = [:]
-    private(set) var captureFinished = false
     private let kind: ReportKind
     private let trigger: ReportTrigger
     private let settings = SensorSettings()
@@ -24,8 +23,12 @@ final class SurveyController {
             return MockProviders.all
         }
         let health = HealthKitReader()
+        // One fix store per capture session — no cross-report reuse.
+        let fixStore = LocationFixStore()
         return [
-            LocationProvider(), AltitudeFromLocationProvider(), WeatherProvider(),
+            LocationProvider(store: fixStore),
+            AltitudeFromLocationProvider(store: fixStore),
+            WeatherProvider(store: fixStore),
             BatteryProvider(), ConnectionProvider(), AudioProvider(),
             PhotosProvider(since: since), FocusProvider(),
             HealthMetricProvider(kind: .healthSteps, reader: health, since: since),
@@ -36,6 +39,7 @@ final class SurveyController {
             HealthMetricProvider(kind: .healthSleep, reader: health, since: since),
             HealthMetricProvider(kind: .healthWorkouts, reader: health, since: since),
             HealthMetricProvider(kind: .healthCaffeine, reader: health, since: since),
+            HealthMetricProvider(kind: .healthMedications, reader: health, since: since),
         ]
     }
 
@@ -45,7 +49,6 @@ final class SurveyController {
         for await event in stream {
             outcomes[event.kind] = event.outcome
         }
-        captureFinished = true
     }
 
     func save(in context: ModelContext) throws {

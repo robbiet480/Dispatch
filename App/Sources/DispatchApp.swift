@@ -1,6 +1,9 @@
 import DispatchKit
+import os
 import SwiftData
 import SwiftUI
+
+private let seedLog = Logger(subsystem: "com.robbiet480.dispatch", category: "seed")
 
 @main
 struct DispatchApp: App {
@@ -42,6 +45,10 @@ struct DispatchApp: App {
             }
             context.insert(question)
         }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            seedLog.error("failed to seed default questions: \(error, privacy: .public)")
+        }
     }
 }

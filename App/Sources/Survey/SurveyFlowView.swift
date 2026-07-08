@@ -36,7 +36,7 @@ struct SurveyFlowView: View {
 
             TabView(selection: Binding(
                 get: { controller.survey.currentIndex },
-                set: { _ in })) {
+                set: { controller.survey.select($0) })) {
                 ForEach(Array(controller.survey.pages.enumerated()), id: \.element.id) { index, page in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {

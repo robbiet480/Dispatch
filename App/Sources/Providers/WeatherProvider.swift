@@ -7,15 +7,13 @@ import WeatherKit
 /// unavailable when the entitlement, network, or fix is missing.
 struct WeatherProvider: SensorProvider {
     let kind = SensorKind.weather
+    let store: LocationFixStore
 
     func capture() async throws -> SensorPayload {
-        var fix: CLLocation?
-        for _ in 0..<20 {
-            fix = await LocationFixStore.shared.lastFix
-            if fix != nil { break }
-            try await Task.sleep(for: .milliseconds(400))
-        }
-        guard let location = fix else { throw ProviderError("no location fix for weather") }
+        // Awaits the shared session fix. If none ever arrives this hangs
+        // cooperatively; the coordinator timeout (see CaptureCoordinator.resolve)
+        // abandons the waiter and yields `.unavailable`.
+        let location = await store.awaitFix()
 
         let current = try await WeatherService.shared.weather(for: location, including: .current)
         var observation = WeatherObservation()
