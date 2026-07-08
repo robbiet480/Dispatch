@@ -59,11 +59,9 @@ a paid Apple Developer Program membership tied to a real team ID —
 `project.yml` is configured with `DEVELOPMENT_TEAM: UTQFCBPQRF`; change
 it to your own.
 
-Focus-state capture additionally needs the **Communication Notifications**
-capability (`com.apple.developer.usernotifications.communication`), which
-is what Apple gates `INFocusStatusCenter` behind. Enable it on your App ID
-(or let Xcode's automatic signing add it), add the key to
-`App/Dispatch.entitlements`, and rebuild. Until then, Focus context is
+Focus-state capture needs no entitlement — only the Focus Status usage
+description (already set) and the user's authorization, which iOS prompts
+for on first capture. If authorization is declined, Focus context is
 simply omitted from reports.
 
 If you build with a free-tier team, Xcode will drop entitlements it

@@ -6,12 +6,16 @@ import HealthKit
 final class HealthKitReader: Sendable {
     let store = HKHealthStore()
 
+    // NOTE: medicationDoseEventType is deliberately ABSENT. Including it in a
+    // bulk requestAuthorization read set throws an uncatchable ObjC
+    // NSInvalidArgumentException on device ("Authorization to read the
+    // following types is disallowed") — medications require a separate
+    // authorization flow that Dispatch does not implement yet.
     static let readTypes: Set<HKObjectType> = [
         HKQuantityType(.stepCount), HKQuantityType(.flightsClimbed),
         HKQuantityType(.heartRate), HKQuantityType(.heartRateVariabilitySDNN),
         HKQuantityType(.restingHeartRate), HKQuantityType(.dietaryCaffeine),
         HKCategoryType(.sleepAnalysis), HKObjectType.workoutType(),
-        HKObjectType.medicationDoseEventType(),
     ]
 
     func authorize() async throws {
@@ -191,8 +195,11 @@ struct HealthMetricProvider: SensorProvider {
             let workouts = try await reader.workoutsToday(now: now)
             return .health(workouts)
         case .healthMedications:
-            let doses = try await reader.medicationDosesToday(now: now)
-            return .health(doses)
+            // Reading dose events requires an authorization flow beyond the
+            // bulk requestAuthorization (which rejects the type outright);
+            // disabled until that flow is implemented. medicationDosesToday
+            // is kept for that future work.
+            throw ProviderError("medications reading not yet supported")
         default:
             throw ProviderError("not a health metric: \(kind.rawValue)")
         }

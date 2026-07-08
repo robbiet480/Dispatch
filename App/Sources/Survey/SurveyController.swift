@@ -54,7 +54,9 @@ final class SurveyController {
             HealthMetricProvider(kind: .healthSleep, reader: health, since: since),
             HealthMetricProvider(kind: .healthWorkouts, reader: health, since: since),
             HealthMetricProvider(kind: .healthCaffeine, reader: health, since: since),
-            HealthMetricProvider(kind: .healthMedications, reader: health, since: since),
+            // .healthMedications intentionally not composed: its read type is
+            // rejected by bulk requestAuthorization (device crash) — see
+            // HealthKitReader.readTypes.
         ]
     }
 
