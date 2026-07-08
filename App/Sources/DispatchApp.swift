@@ -41,6 +41,9 @@ struct DispatchApp: App {
         visualizationFilterStore = VisualizationFilterStore(defaults: appDefaults)
         appLockStore = AppLockStore(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
         appLockStore.lockAtLaunchIfNeeded()
+        if arguments.contains("--enable-app-lock") {
+            appLockStore.forceLockForUITesting()
+        }
 
         let scheduler = NotificationScheduler(container: container, isTestEnvironment: isTestEnvironment)
         notificationScheduler = scheduler

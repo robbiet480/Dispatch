@@ -37,3 +37,34 @@ private func freshSuite() -> UserDefaults {
     _ = AwakeStore(defaults: defaults).toggle()
     #expect(!AwakeStore(defaults: defaults).isAwake)
 }
+
+@Test func appLockPolicyNeverLocksWhenDisabled() {
+    let now = Date()
+    #expect(!AppLockPolicy.shouldLock(enabled: false, backgroundedAt: now.addingTimeInterval(-1000), now: now))
+    #expect(!AppLockPolicy.shouldLock(enabled: false, backgroundedAt: nil, now: now))
+}
+
+@Test func appLockPolicyNeverLocksWithoutBackgroundedAt() {
+    #expect(!AppLockPolicy.shouldLock(enabled: true, backgroundedAt: nil, now: Date()))
+}
+
+@Test func appLockPolicyStaysUnlockedWithinGrace() {
+    let now = Date()
+    let backgroundedAt = now.addingTimeInterval(-59)
+    #expect(!AppLockPolicy.shouldLock(enabled: true, backgroundedAt: backgroundedAt, now: now))
+}
+
+@Test func appLockPolicyLocksAfterGrace() {
+    let now = Date()
+    let backgroundedAt = now.addingTimeInterval(-61)
+    #expect(AppLockPolicy.shouldLock(enabled: true, backgroundedAt: backgroundedAt, now: now))
+}
+
+@Test func appLockPolicyAtExactlyGraceDoesNotLock() {
+    // Documented choice: elapsed time exactly equal to the grace interval does
+    // NOT lock — only strictly-greater-than-grace elapsed time locks. This
+    // matches the original `> backgroundGraceInterval` behavior being replaced.
+    let now = Date()
+    let backgroundedAt = now.addingTimeInterval(-60)
+    #expect(!AppLockPolicy.shouldLock(enabled: true, backgroundedAt: backgroundedAt, now: now))
+}

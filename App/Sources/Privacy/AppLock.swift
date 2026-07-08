@@ -44,11 +44,27 @@ public final class AppLockStore: @unchecked Sendable {
         isLocked = true
     }
 
+    /// Test-only hook for the `--enable-app-lock` launch argument: forces
+    /// `enabled` and `isLocked` on at startup even though `isTestEnvironment`
+    /// is true, so UI tests can exercise the lock screen. Unlocking still
+    /// goes through `attemptUnlock()`, which succeeds instantly in test mode
+    /// without touching LocalAuthentication.
+    public func forceLockForUITesting() {
+        guard isTestEnvironment else { return }
+        enabled = true
+        isLocked = true
+    }
+
     /// Call when the scene becomes active again after having backgrounded
     /// at `backgroundedAt`. Locks only if enabled and the grace interval elapsed.
     public func evaluateReturnFromBackground(backgroundedAt: Date?) {
-        guard !isTestEnvironment, enabled, let backgroundedAt else { return }
-        if Date().timeIntervalSince(backgroundedAt) > Self.backgroundGraceInterval {
+        guard !isTestEnvironment else { return }
+        if AppLockPolicy.shouldLock(
+            enabled: enabled,
+            backgroundedAt: backgroundedAt,
+            now: Date(),
+            graceSeconds: Self.backgroundGraceInterval
+        ) {
             isLocked = true
         }
     }
@@ -141,7 +157,21 @@ struct AppLockView: View {
                 .disabled(isAuthenticating)
             }
         }
-        .onAppear { unlock() }
+        // .contain keeps this identifier on its own element rather than letting
+        // SwiftUI merge the ZStack with its single interactive descendant (the
+        // Unlock button), which otherwise makes "app-lock-view" resolve to a
+        // Button carrying the button's own label/actions in UI tests.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("app-lock-view")
+        .onAppear {
+            // Skip the auto-unlock-on-appear in test mode: attemptUnlock()
+            // succeeds instantly there (no real biometric prompt), which
+            // would race ahead of any UI test assertion that the lock view
+            // is shown. Tests must explicitly tap app-lock-unlock-button,
+            // matching how a real user dismisses the lock screen.
+            guard !appLockStore.isTestEnvironment else { return }
+            unlock()
+        }
     }
 
     private var appName: String {

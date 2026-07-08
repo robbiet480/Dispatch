@@ -36,15 +36,21 @@ struct ContentView: View {
             surveyPresenter.request = pending
             notificationScheduler.pendingSurveyRequest = nil
         }
-        .fullScreenCover(item: Binding(
-            get: { surveyPresenter.request },
-            set: { surveyPresenter.request = $0 })) { request in
-            SurveyFlowView(kind: request.kind, trigger: request.trigger)
-        }
         .onChange(of: notificationScheduler.pendingSurveyRequest) { _, newValue in
             guard let newValue else { return }
             surveyPresenter.request = newValue
             notificationScheduler.pendingSurveyRequest = nil
+        }
+        // Single choke point: while locked, the survey cover's item is always nil,
+        // so it can never appear simultaneously with the lock cover below. The
+        // underlying request is preserved (only the setter clears it on dismiss),
+        // so a request set while locked — via notification tap, cold-launch drain,
+        // or StartReportIntent — presents automatically once isLocked flips false,
+        // since isLocked is @Observable state read inside this getter.
+        .fullScreenCover(item: Binding(
+            get: { appLockStore.isLocked ? nil : surveyPresenter.request },
+            set: { surveyPresenter.request = $0 })) { request in
+            SurveyFlowView(kind: request.kind, trigger: request.trigger)
         }
         .fullScreenCover(isPresented: Binding(
             get: { appLockStore.isLocked },
