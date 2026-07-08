@@ -6,7 +6,9 @@ struct SensorSettingsView: View {
     @State private var temperatureUnit: TemperatureUnit
     @State private var lengthUnit: LengthUnit
     @State private var enabledByKind: [SensorKind: Bool]
+    @State private var isRequestingPermissions = false
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(PermissionCascade.self) private var permissionCascade
 
     private var theme: Theme { themeStore.theme }
 
@@ -34,6 +36,21 @@ struct SensorSettingsView: View {
                             .tint(.white.opacity(0.4))
                             .foregroundStyle(.white)
                     }
+
+                    Button {
+                        Task { await requestSensorAccess() }
+                    } label: {
+                        HStack {
+                            Text("Request Sensor Access…")
+                            Spacer()
+                            if isRequestingPermissions {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .disabled(isRequestingPermissions)
+                    .accessibilityIdentifier("request-sensor-access")
                 } header: {
                     sectionHeader("SENSORS")
                 }
@@ -66,6 +83,13 @@ struct SensorSettingsView: View {
         .navigationTitle("Sensors")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private func requestSensorAccess() async {
+        guard !isRequestingPermissions else { return }
+        isRequestingPermissions = true
+        await permissionCascade.requestAll()
+        isRequestingPermissions = false
     }
 
     private func enabledBinding(_ kind: SensorKind) -> Binding<Bool> {

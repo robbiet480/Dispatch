@@ -6,13 +6,18 @@ struct OnboardingPage: Identifiable {
     let theme: Theme
     let headline: String
     let body: String
+    /// Only true for the sensors page — swaps the footer copy/button for the
+    /// permission-cascade trigger instead of the plain swipe-to-continue hint.
+    var isSensorsPage: Bool = false
 }
 
 struct OnboardingView: View {
     let onDone: () -> Void
 
     @Environment(\.appDefaults) private var appDefaults
+    @Environment(PermissionCascade.self) private var permissionCascade
     @State private var selection = 0
+    @State private var isRequestingPermissions = false
 
     private let pages: [OnboardingPage] = [
         OnboardingPage(
@@ -28,7 +33,8 @@ struct OnboardingView: View {
         OnboardingPage(
             theme: .chartreuse,
             headline: "Embrace your sensors.",
-            body: "Grant access to things like location, health, and photos, and Dispatch will quietly attach that context to each report. The more permissions you allow, the richer and more automatic your reports become."
+            body: "Grant access to things like location, health, and photos, and Dispatch will quietly attach that context to each report. The more permissions you allow, the richer and more automatic your reports become. You can always change this later in Settings.",
+            isSensorsPage: true
         ),
         OnboardingPage(
             theme: .gray,
@@ -47,7 +53,24 @@ struct OnboardingView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
 
-            if selection == pages.count - 1 {
+            if pages[selection].isSensorsPage {
+                Button {
+                    Task { await enableSensors() }
+                } label: {
+                    if isRequestingPermissions {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text("ENABLE SENSORS")
+                    }
+                }
+                .font(.headline)
+                .foregroundStyle(.white)
+                .padding()
+                .accessibilityIdentifier("onboarding-enable-sensors")
+                .disabled(isRequestingPermissions)
+                .padding(.bottom, 32)
+            } else if selection == pages.count - 1 {
                 Button("DONE") {
                     appDefaults.set(true, forKey: OnboardingFlag.key)
                     onDone()
@@ -60,6 +83,19 @@ struct OnboardingView: View {
             }
         }
         .ignoresSafeArea()
+    }
+
+    /// Runs the sequential permission cascade, then auto-advances to the
+    /// next onboarding page. The page can still be skipped via a manual
+    /// swipe — this button is a convenience, not a gate.
+    private func enableSensors() async {
+        guard !isRequestingPermissions else { return }
+        isRequestingPermissions = true
+        await permissionCascade.requestAll()
+        isRequestingPermissions = false
+        withAnimation {
+            selection = min(selection + 1, pages.count - 1)
+        }
     }
 }
 

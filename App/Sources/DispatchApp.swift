@@ -18,6 +18,7 @@ struct DispatchApp: App {
     let surveyPresenter = SurveyPresenter()
     let notificationScheduler: NotificationScheduler
     let appLockStore: AppLockStore
+    let permissionCascade: PermissionCascade
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
     @State private var backgroundedAt: Date?
@@ -49,6 +50,14 @@ struct DispatchApp: App {
         notificationScheduler = scheduler
         UNUserNotificationCenter.current().delegate = scheduler
 
+        permissionCascade = PermissionCascade(
+            healthReader: HealthKitReader(),
+            notificationScheduler: scheduler,
+            notificationPrefs: notificationPrefs,
+            awakeStore: awakeStore,
+            isTestEnvironment: isTestEnvironment
+        )
+
         seedDefaultQuestionsIfNeeded()
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
@@ -73,6 +82,7 @@ struct DispatchApp: App {
                 .environment(surveyPresenter)
                 .environment(notificationScheduler)
                 .environment(appLockStore)
+                .environment(permissionCascade)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onAppear {
