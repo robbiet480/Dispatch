@@ -114,6 +114,28 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
     #expect(shares[0].share == 1.0)
 }
 
+@Test func optionSharesYesNoImplicitOrderingWhenChoicesEmpty() {
+    let question = makeQuestion(id: "q-implicit-yesno", prompt: "Working?", type: .yesNo, choices: [])
+    let reports = [
+        makeReport(responses: [makeResponse(questionIdentifier: "q-implicit-yesno", answeredOptions: ["Yes"])]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-implicit-yesno", answeredOptions: ["No"])]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-implicit-yesno", answeredOptions: ["No"])]),
+    ]
+
+    let result = VisualizationData.build(for: question, reports: reports)
+
+    guard case .optionShares(let shares) = result else {
+        Issue.record("expected .optionShares, got \(result)")
+        return
+    }
+    // Even though No has the majority (2/3), the implicit yes/no ordering ["Yes", "No"] must be preserved.
+    #expect(shares.count == 2)
+    #expect(shares[0].option == "Yes")
+    #expect(shares[1].option == "No")
+    #expect(abs(shares[0].share - (1.0 / 3.0)) < 0.0001)
+    #expect(abs(shares[1].share - (2.0 / 3.0)) < 0.0001)
+}
+
 // MARK: - numericSeries
 
 @Test func numericSeriesSortsByDateAndComputesAverage() {
@@ -211,6 +233,37 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
     }
     #expect(items.map(\.name) == ["Home", "Work"])
     #expect(items.map(\.count) == [2, 1])
+}
+
+@Test func placesGroupsByVenueIdFirst() {
+    let question = makeQuestion(id: "q-loc-venue", prompt: "Where?", type: .location)
+
+    // Helper to create LocationAnswer with both venueId and text
+    let locationWithVenue: (String, String) -> LocationAnswer = { text, venue in
+        var answer = LocationAnswer()
+        answer.text = text
+        answer.foursquareVenueId = venue
+        return answer
+    }
+
+    let reports = [
+        // Same venue ID but different text — should group as 1 place
+        makeReport(responses: [makeResponse(questionIdentifier: "q-loc-venue", locationResponse: locationWithVenue("Starbucks Downtown", "venue-123"))]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-loc-venue", locationResponse: locationWithVenue("Starbucks Coffee", "venue-123"))]),
+        // Different venue ID, same text — should be 2 places
+        makeReport(responses: [makeResponse(questionIdentifier: "q-loc-venue", locationResponse: locationWithVenue("Coffee Shop", "venue-456"))]),
+    ]
+
+    let result = VisualizationData.build(for: question, reports: reports)
+
+    guard case .places(let items) = result else {
+        Issue.record("expected .places, got \(result)")
+        return
+    }
+    // Should have 2 places: the shared venue-123 (count 2) and venue-456 (count 1)
+    #expect(items.count == 2)
+    let venues = items.map(\.count).sorted(by: >)
+    #expect(venues == [2, 1])
 }
 
 // MARK: - recentNotes

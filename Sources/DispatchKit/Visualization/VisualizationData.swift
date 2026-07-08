@@ -86,7 +86,13 @@ public enum VisualizationData {
 
         var orderedOptions: [String] = []
         var seen: Set<String> = []
-        for choice in question.choices where counts[choice] != nil {
+
+        // Use question.choices, or implicit ["Yes", "No"] for empty yesNo questions
+        let choicesToConsider = question.type == .yesNo && question.choices.isEmpty
+            ? ["Yes", "No"]
+            : question.choices
+
+        for choice in choicesToConsider where counts[choice] != nil {
             orderedOptions.append(choice)
             seen.insert(choice)
         }
@@ -144,20 +150,50 @@ public enum VisualizationData {
     }
 
     private static func buildPlaces(responses: [Response]) -> QuestionVisualization {
-        var counts: [String: Int] = [:]
-        for response in responses {
-            guard let text = response.locationResponse?.text, !text.isEmpty else { continue }
-            counts[text, default: 0] += 1
-        }
-        guard !counts.isEmpty else { return .empty }
+        // Group by venue ID (if present) or text, following ReportsOverview.secondaryStats convention:
+        // - foursquareVenueId gets "venue:" prefix and takes precedence
+        // - text gets "text:" prefix as fallback
+        // Track grouping key -> (count, most frequent or first-seen text)
+        var groupedByKey: [String: (count: Int, text: String)] = [:]
 
-        let items = counts
+        for response in responses {
+            guard let location = response.locationResponse else { continue }
+
+            let key: String
+            let displayText: String
+
+            if let venue = location.foursquareVenueId {
+                key = "venue:\(venue)"
+                displayText = location.text ?? ""
+            } else if let text = location.text, !text.isEmpty {
+                key = "text:\(text)"
+                displayText = text
+            } else {
+                continue
+            }
+
+            if var existing = groupedByKey[key] {
+                existing.count += 1
+                // Keep the most frequent (or first-seen) text for this key
+                // For simplicity with the current data model, keep the existing text unless new is non-empty and old is empty
+                if existing.text.isEmpty && !displayText.isEmpty {
+                    existing.text = displayText
+                }
+                groupedByKey[key] = existing
+            } else {
+                groupedByKey[key] = (count: 1, text: displayText)
+            }
+        }
+
+        guard !groupedByKey.isEmpty else { return .empty }
+
+        let items = groupedByKey
             .sorted { lhs, rhs in
-                if lhs.value != rhs.value { return lhs.value > rhs.value }
-                return lhs.key < rhs.key
+                if lhs.value.count != rhs.value.count { return lhs.value.count > rhs.value.count }
+                return lhs.value.text < rhs.value.text
             }
             .prefix(topLimit)
-            .map { (name: $0.key, count: $0.value) }
+            .map { (name: $0.value.text, count: $0.value.count) }
         return .places(Array(items))
     }
 
