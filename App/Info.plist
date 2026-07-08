@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Merged with the generated Info.plist (GENERATE_INFOPLIST_FILE=YES +
+         INFOPLIST_FILE set → Xcode merges; explicit keys here win). Only keys
+         that have no INFOPLIST_KEY_* build-setting equivalent belong here.
+         UIBackgroundModes: CloudKit silent pushes (sync while backgrounded);
+         without it, sync still works but only while foregrounded. -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
+</dict>
+</plist>

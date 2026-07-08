@@ -27,8 +27,6 @@ struct DispatchApp: App {
     @State private var backgroundedAt: Date?
 
     init() {
-        container = try! ModelContainer(for: Schema(DispatchStore.allModels))
-
         let arguments = ProcessInfo.processInfo.arguments
         isTestEnvironment = arguments.contains("--mock-sensors") || arguments.contains("--ui-testing")
         if isTestEnvironment,
@@ -38,6 +36,11 @@ struct DispatchApp: App {
         } else {
             appDefaults = .standard
         }
+
+        // Container construction consults the sync policy (defaults suite +
+        // test environment), so defaults selection above must precede it.
+        let syncPolicy = SyncPolicy(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
+        container = Self.makeContainer(syncEnabled: syncPolicy.shouldSync)
 
         // One-time legacy default-question ID migration. Must run before
         // anything reads questions — in particular before
@@ -181,6 +184,45 @@ struct DispatchApp: App {
                 }
         }
         .modelContainer(container)
+    }
+
+    /// Builds the app's ModelContainer against the SAME default store URL in
+    /// both modes — CloudKit mirroring attaches to the existing store, so
+    /// toggling sync never migrates or relocates data.
+    ///
+    /// The app must NEVER fail to launch over sync: the CloudKit-backed
+    /// configuration is wrapped in do/catch and any construction error is
+    /// logged and answered with the plain local container. The local path
+    /// passes `cloudKitDatabase: .none` explicitly — with the iCloud
+    /// entitlements now present, the default `.automatic` would infer
+    /// CloudKit from them, which must not happen for the sync-disabled and
+    /// test paths.
+    private static func makeContainer(syncEnabled: Bool) -> ModelContainer {
+        let schema = Schema(DispatchStore.allModels)
+        if syncEnabled {
+            do {
+                let config = ModelConfiguration(
+                    schema: schema,
+                    cloudKitDatabase: .private(SyncPolicy.containerIdentifier)
+                )
+                let container = try ModelContainer(for: schema, configurations: [config])
+                syncLog.info("CloudKit-mirrored container active (\(SyncPolicy.containerIdentifier, privacy: .public))")
+                return container
+            } catch {
+                syncLog.error("CloudKit container construction failed, falling back to local: \(error, privacy: .public)")
+            }
+        }
+        do {
+            let config = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
+            let container = try ModelContainer(for: schema, configurations: [config])
+            syncLog.info("local (non-CloudKit) container active")
+            return container
+        } catch {
+            // Same hard-failure semantics the app has always had for an
+            // unopenable local store (previously `try!` at this call site) —
+            // this is not a sync failure.
+            fatalError("failed to open local model container: \(error)")
+        }
     }
 
     private func seedDefaultQuestionsIfNeeded() {
