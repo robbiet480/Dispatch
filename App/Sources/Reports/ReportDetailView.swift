@@ -70,6 +70,9 @@ struct ReportDetailView: View {
         if let flights = healthValue("flightsClimbed") {
             rows.append(("figure.stairs", "Flights climbed", String(format: "%.0f", flights)))
         }
+        for workout in workoutRows {
+            rows.append(("figure.run", "Workout", workout))
+        }
         if let battery = report.battery {
             rows.append(("battery.75percent", "Battery", String(format: "%.0f%%", battery * 100)))
         }
@@ -91,6 +94,21 @@ struct ReportDetailView: View {
 
     private func healthValue(_ type: String) -> Double? {
         report.health.first { $0.type == type }?.value
+    }
+
+    /// Renders each `workout.<raw>` health reading as "<Name> — <Xm Ys>".
+    private var workoutRows: [String] {
+        report.health.compactMap { reading in
+            guard let name = WorkoutActivityName.displayName(forHealthType: reading.type) else { return nil }
+            return "\(name) — \(formattedDuration(reading.value))"
+        }
+    }
+
+    private func formattedDuration(_ seconds: Double) -> String {
+        let totalSeconds = max(0, Int(seconds.rounded()))
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
+        return "\(minutes)m \(remainingSeconds)s"
     }
 
     private var placeText: String? {
