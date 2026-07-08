@@ -6,7 +6,40 @@ public struct V2Export: Codable {
     public var schemaVersion: Int = DispatchKitInfo.schemaVersion
     public var questions: [V2Question] = []
     public var reports: [V2Report] = []
+    /// Prompt groups (plan 12). Optional and omitted when nil/empty so
+    /// pre-group v2 exports stay byte-identical; import tolerates absence.
+    public var promptGroups: [V2PromptGroup]?
     public init() {}
+}
+
+public struct V2PromptGroup: Codable {
+    public var uniqueIdentifier: String
+    public var name: String
+    public var questionIDs: [String]?
+    public var scheduleKind: String
+    public var scheduleHours: Int?
+    public var scheduleCount: Int?
+    public var scheduleDistribution: String?
+    /// "HH:mm" strings for the dailyAt schedule kind.
+    public var scheduledTimes: [String]?
+    public var isEnabled: Bool
+    public var sortOrder: Int
+
+    public init(uniqueIdentifier: String, name: String, questionIDs: [String]?,
+                scheduleKind: String, scheduleHours: Int? = nil, scheduleCount: Int? = nil,
+                scheduleDistribution: String? = nil, scheduledTimes: [String]? = nil,
+                isEnabled: Bool, sortOrder: Int) {
+        self.uniqueIdentifier = uniqueIdentifier
+        self.name = name
+        self.questionIDs = questionIDs
+        self.scheduleKind = scheduleKind
+        self.scheduleHours = scheduleHours
+        self.scheduleCount = scheduleCount
+        self.scheduleDistribution = scheduleDistribution
+        self.scheduledTimes = scheduledTimes
+        self.isEnabled = isEnabled
+        self.sortOrder = sortOrder
+    }
 }
 
 public struct V2Question: Codable {
@@ -67,6 +100,9 @@ public struct V2Report: Codable {
     public var focus: FocusState?
     public var stateOfMindSampleIDs: [String]?
     public var responses: [V2Response]?
+    /// The PromptGroup this report was filed against (plan 12). Omitted when
+    /// nil; import tolerates absence.
+    public var promptGroupID: String?
 
     public init(uniqueIdentifier: String, date: Date, timeZone: String,
                 kind: ReportKind, trigger: ReportTrigger) {

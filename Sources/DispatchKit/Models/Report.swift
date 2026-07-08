@@ -25,6 +25,9 @@ public final class Report {
     public var health: [HealthReading] = []
     public var focus: FocusState?
     public var stateOfMindSampleIDs: [String] = []
+    /// The PromptGroup this report was filed against (group-scoped survey);
+    /// nil for ordinary global reports. Additive, plan 12.
+    public var promptGroupID: String?
 
     @Relationship(deleteRule: .cascade, inverse: \Response.report)
     public var responses: [Response] = []

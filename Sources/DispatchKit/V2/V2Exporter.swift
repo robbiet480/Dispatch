@@ -38,6 +38,7 @@ public enum V2Exporter {
             dto.health = r.health.isEmpty ? nil : r.health
             dto.focus = r.focus
             dto.stateOfMindSampleIDs = r.stateOfMindSampleIDs.isEmpty ? nil : r.stateOfMindSampleIDs
+            dto.promptGroupID = r.promptGroupID
             let responses = r.responses
                 .sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
                 .map { resp in
@@ -54,6 +55,20 @@ public enum V2Exporter {
             dto.responses = responses.isEmpty ? nil : responses
             return dto
         }
+
+        let groups = try context.fetch(
+            FetchDescriptor<PromptGroup>(sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.uniqueIdentifier)]))
+        let groupDTOs = groups.map { g in
+            V2PromptGroup(uniqueIdentifier: g.uniqueIdentifier, name: g.name,
+                          questionIDs: g.questionIDs.isEmpty ? nil : g.questionIDs,
+                          scheduleKind: g.scheduleKindRaw,
+                          scheduleHours: g.scheduleHours,
+                          scheduleCount: g.scheduleCount,
+                          scheduleDistribution: g.scheduleDistributionRaw,
+                          scheduledTimes: g.scheduledTimeStrings.isEmpty ? nil : g.scheduledTimeStrings,
+                          isEnabled: g.isEnabled, sortOrder: g.sortOrder)
+        }
+        export.promptGroups = groupDTOs.isEmpty ? nil : groupDTOs
         return export
     }
 

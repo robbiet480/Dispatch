@@ -4,6 +4,7 @@ import SwiftData
 public enum DispatchStore {
     public static let allModels: [any PersistentModel.Type] = [
         Question.self, Report.self, Response.self, TokenEntity.self, PersonEntity.self,
+        PromptGroup.self,
     ]
 
     public static func inMemoryContainer() throws -> ModelContainer {

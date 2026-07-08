@@ -5,6 +5,7 @@ public struct ImportSummary: Sendable, Equatable {
     public var questionsImported = 0
     public var reportsImported = 0
     public var responsesImported = 0
+    public var promptGroupsImported = 0
     public var skipped = 0
     public init() {}
 }

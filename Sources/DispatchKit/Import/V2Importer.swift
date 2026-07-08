@@ -66,6 +66,7 @@ public enum V2Importer {
             report.health = dto.health ?? []
             report.focus = dto.focus
             report.stateOfMindSampleIDs = dto.stateOfMindSampleIDs ?? []
+            report.promptGroupID = dto.promptGroupID
             summary.reportsImported += 1
 
             for rdto in dto.responses ?? [] {
@@ -88,6 +89,30 @@ public enum V2Importer {
                 response.report = report
                 summary.responsesImported += 1
             }
+        }
+
+        // Prompt groups (plan 12): deduped by uniqueIdentifier, same upsert
+        // pattern as questions. Absent in older exports → no-op.
+        for dto in export.promptGroups ?? [] {
+            let id = dto.uniqueIdentifier
+            var descriptor = FetchDescriptor<PromptGroup>(predicate: #Predicate { $0.uniqueIdentifier == id })
+            descriptor.fetchLimit = 1
+            let group = try context.fetch(descriptor).first ?? {
+                let g = PromptGroup()
+                g.uniqueIdentifier = id
+                context.insert(g)
+                return g
+            }()
+            group.name = dto.name
+            group.questionIDs = dto.questionIDs ?? []
+            group.scheduleKindRaw = dto.scheduleKind
+            group.scheduleHours = dto.scheduleHours
+            group.scheduleCount = dto.scheduleCount
+            group.scheduleDistributionRaw = dto.scheduleDistribution
+            group.scheduledTimeStrings = dto.scheduledTimes ?? []
+            group.isEnabled = dto.isEnabled
+            group.sortOrder = dto.sortOrder
+            summary.promptGroupsImported += 1
         }
 
         try context.save()
