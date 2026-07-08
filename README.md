@@ -54,13 +54,21 @@ Or just open `Dispatch.xcodeproj` in Xcode after running `xcodegen generate`.
 
 ### Entitlements note
 
-Dispatch requests WeatherKit, HealthKit, and Focus status entitlements.
-These require a paid Apple Developer Program membership tied to a real
-team ID — `project.yml` is configured with `DEVELOPMENT_TEAM: UTQFCBPQRF`.
-If you build with a personal free-tier team, Xcode will drop entitlements
-it can't provision; Dispatch is written to degrade gracefully in that
-case (weather, Health, and Focus context are simply omitted from
-reports) rather than crash.
+Dispatch ships with WeatherKit and HealthKit entitlements. These require
+a paid Apple Developer Program membership tied to a real team ID —
+`project.yml` is configured with `DEVELOPMENT_TEAM: UTQFCBPQRF`; change
+it to your own.
+
+Focus-state capture additionally needs the Focus Status capability
+(`com.apple.developer.focus-status`), which automatic provisioning cannot
+add — enable it manually on your App ID in the Apple Developer portal,
+then add the key to `App/Dispatch.entitlements` and rebuild. Until then,
+Focus context is simply omitted from reports.
+
+If you build with a free-tier team, Xcode will drop entitlements it
+can't provision; Dispatch degrades gracefully in every such case
+(weather, Health, and Focus context are omitted from reports) rather
+than crash.
 
 ## Importing an original Reporter export
 
