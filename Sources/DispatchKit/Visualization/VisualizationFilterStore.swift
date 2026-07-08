@@ -7,7 +7,10 @@ import Observation
 /// ids are stored. Criteria default to none.
 @Observable
 public final class VisualizationFilterStore: @unchecked Sendable {
-    private static let hiddenIDsKey = "visualization.hiddenQuestionIDs"
+    /// Defaults key for the hidden-question-ID array. Public so the one-time
+    /// default-question ID migration can rewrite persisted entries in place.
+    public static let hiddenQuestionIDsDefaultsKey = "visualization.hiddenQuestionIDs"
+    private static var hiddenIDsKey: String { hiddenQuestionIDsDefaultsKey }
     private static let criteriaKey = "visualization.filterCriteria"
 
     private let defaults: UserDefaults

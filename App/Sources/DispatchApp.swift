@@ -5,6 +5,7 @@ import SwiftUI
 import UserNotifications
 
 private let seedLog = Logger(subsystem: "io.robbie.Dispatch", category: "seed")
+private let migrationLog = Logger(subsystem: "io.robbie.Dispatch", category: "migrationLog")
 
 @main
 struct DispatchApp: App {
@@ -36,6 +37,18 @@ struct DispatchApp: App {
             appDefaults = uiTestingDefaults
         } else {
             appDefaults = .standard
+        }
+
+        // One-time legacy default-question ID migration. Must run before
+        // anything reads questions — in particular before
+        // VisualizationFilterStore below, which caches the hidden-ID set from
+        // defaults at init.
+        do {
+            try DefaultQuestionIDMigration.runIfNeeded(
+                context: ModelContext(container), defaults: appDefaults
+            )
+        } catch {
+            migrationLog.error("default-question ID migration failed: \(error, privacy: .public)")
         }
 
         themeStore = ThemeStore(defaults: appDefaults)
@@ -165,25 +178,17 @@ struct DispatchApp: App {
     private func seedDefaultQuestionsIfNeeded() {
         let context = ModelContext(container)
         guard ((try? context.fetchCount(FetchDescriptor<Question>())) ?? 0) == 0 else { return }
-        let defaults: [(String, QuestionType)] = [
-            ("How did you sleep?", .multipleChoice),
-            ("Are you working?", .yesNo),
-            ("What are you doing?", .tokens),
-            ("Where are you?", .location),
-            ("Who are you with?", .people),
-            ("How many coffees did you have today?", .number),
-            ("What did you learn today?", .note),
-        ]
-        for (index, (prompt, type)) in defaults.enumerated() {
+        // Table-driven from the frozen catalog: deterministic UUIDv5
+        // identifiers so fresh installs on different devices seed IDENTICAL
+        // IDs and iCloud sync merges rather than duplicates.
+        for (index, seed) in DefaultQuestions.all.enumerated() {
             let question = Question()
-            question.uniqueIdentifier = "default-question-\(index)"
-            question.prompt = prompt
-            question.type = type
+            question.uniqueIdentifier = seed.identifier
+            question.prompt = seed.prompt
+            question.type = seed.type
             question.sortOrder = index
-            if prompt == "How did you sleep?" {
-                question.reportKinds = [.wake]
-                question.choices = ["Great", "OK", "Poorly"]
-            }
+            question.reportKinds = seed.reportKinds
+            question.choices = seed.choices
             context.insert(question)
         }
         do {
