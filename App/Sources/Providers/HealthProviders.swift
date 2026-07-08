@@ -98,7 +98,8 @@ final class HealthKitReader: Sendable {
                 if let error { continuation.resume(throwing: error); return }
                 let readings = (samples ?? []).compactMap { sample -> HealthReading? in
                     guard let event = sample as? HKMedicationDoseEvent else { return nil }
-                    return HealthReading(type: "medicationDose.\(event.medicationConceptIdentifier)",
+                    // Use stable type string; per-medication identification awaits public name API
+                    return HealthReading(type: "medicationDose",
                                          value: 1, unit: "dose",
                                          startDate: event.startDate, endDate: event.endDate)
                 }
