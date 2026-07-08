@@ -81,6 +81,25 @@ public final class NotificationPrefs: @unchecked Sendable {
         }
     }
 
+    /// When the user last acted on a prompt (quick answer, snooze,
+    /// tap-through, or in-app report save). Replans use this to avoid
+    /// resurrecting nag chains for prompts the user already dealt with.
+    /// Stored as a timeIntervalSince1970 double; nil when never set.
+    public var lastActedAt: Date? {
+        get {
+            let stored = defaults.double(forKey: "lastActedAt")
+            guard stored > 0 else { return nil }
+            return Date(timeIntervalSince1970: stored)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue.timeIntervalSince1970, forKey: "lastActedAt")
+            } else {
+                defaults.removeObject(forKey: "lastActedAt")
+            }
+        }
+    }
+
     public var scheduledTimes: [DateComponents] {
         get {
             guard let jsonData = defaults.data(forKey: "scheduledTimes") else {

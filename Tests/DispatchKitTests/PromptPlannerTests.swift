@@ -145,6 +145,24 @@ private let dayEnd = ISO8601DateFormatter().date(from: "2026-07-09T00:00:00Z")! 
     #expect(NotificationPrefs(defaults: defaults).distribution == .random)
 }
 
+@Test func lastActedAtDefaultsNilAndRoundTrips() {
+    let defaults = UserDefaults(suiteName: "np-acted-\(UUID().uuidString)")!
+    let p = NotificationPrefs(defaults: defaults)
+    #expect(p.lastActedAt == nil)
+
+    let acted = Date(timeIntervalSince1970: 1_750_000_000)
+    p.lastActedAt = acted
+    #expect(p.lastActedAt == acted)
+    // Persists across instances over the same defaults suite.
+    #expect(NotificationPrefs(defaults: defaults).lastActedAt == acted)
+
+    p.lastActedAt = nil
+    #expect(p.lastActedAt == nil)
+    // Zero/unset sentinel reads back as nil, not the epoch.
+    defaults.set(0.0, forKey: "lastActedAt")
+    #expect(p.lastActedAt == nil)
+}
+
 @Test func distributionDescriptions() {
     #expect(PromptDistribution.random.description(alertsPerDay: 6) == "6 randomly timed alerts every 24 hours")
     #expect(PromptDistribution.semiRandom.description(alertsPerDay: 6) == "1 random alert every 4 hours")

@@ -37,6 +37,7 @@ enum NotificationIdentifiers {
 final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
     private let container: ModelContainer
+    private let prefs: NotificationPrefs
     private let isTestEnvironment: Bool
 
     /// Guards against re-firing the permission request when the scene is
@@ -44,8 +45,9 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// which would otherwise call `requestPermissionIfNeeded` again).
     private var hasRequestedThisLaunch = false
 
-    init(container: ModelContainer, isTestEnvironment: Bool) {
+    init(container: ModelContainer, prefs: NotificationPrefs, isTestEnvironment: Bool) {
         self.container = container
+        self.prefs = prefs
         self.isTestEnvironment = isTestEnvironment
         super.init()
     }
@@ -59,10 +61,17 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// category definition each time.
     func registerCategory() {
         let context = ModelContext(container)
-        let question = Self.firstEnabledYesNoQuestion(in: context)
+        registerCategory(question: Self.firstEnabledYesNoQuestion(in: context))
+    }
 
+    private func registerCategory(question: Question?) {
         let yesTitle = question?.choices.first ?? "Yes"
-        let noTitle = question?.choices.count ?? 0 > 1 ? question!.choices[1] : "No"
+        let noTitle: String
+        if let question, question.choices.count > 1 {
+            noTitle = question.choices[1]
+        } else {
+            noTitle = "No"
+        }
 
         let yesAction = UNNotificationAction(
             identifier: NotificationIdentifiers.answerYesAction,
@@ -138,13 +147,19 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// daemon processes an add before a stale remove and the new schedule
     /// gets deleted out from under it.
     func replanNow(prefs: NotificationPrefs, awakeStore: AwakeStore, now: Date = Date(), calendar: Calendar = .current) async {
+        // Fetch the quick-answer question ONCE per replan and thread it
+        // through category registration and every content build below —
+        // avoids a full sorted Question fetch per scheduled request.
+        let questionContext = ModelContext(container)
+        let question = Self.firstEnabledYesNoQuestion(in: questionContext)
+
         // Re-register the category on every replan (not just at launch) so
         // question renames/reorders can't leave the quick-answer action
         // titles stale or mismatched with the notification body. This only
         // affects requests scheduled/updated after this point — already
         // DELIVERED notifications keep whatever content/actions they were
         // presented with, which is acceptable (the user already saw them).
-        registerCategory()
+        registerCategory(question: question)
 
         let pending = await center.pendingNotificationRequests()
         var identifiersToRemove = pending
@@ -165,13 +180,12 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
 
         guard awakeStore.isAwake else { return }
 
-        let dates = plannedDates(prefs: prefs, now: now, calendar: calendar)
-            .filter { $0 > now }
+        let allPlannedDates = plannedDates(prefs: prefs, now: now, calendar: calendar)
+        let dates = allPlannedDates.filter { $0 > now }
 
-        let context = ModelContext(container)
         for date in dates {
             let identifier = "\(NotificationIdentifiers.promptPrefix)\(Self.isoMinuteFormatter.string(from: date))"
-            let content = Self.makeContent(in: context)
+            let content = Self.makeContent(question: question)
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
@@ -183,15 +197,25 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         }
 
         guard prefs.nagEnabled else { return }
-        await scheduleNagChains(for: dates, prefs: prefs, now: now, calendar: calendar, context: context)
+        // Nag chains are computed from ALL planned dates — including prompts
+        // that already fired — so a replan (e.g. foregrounding the app)
+        // doesn't kill the in-flight chain of a delivered-but-unanswered
+        // prompt (they share the `nag-` removal batch above). Chains whose
+        // parent the user already acted on (quick answer, snooze, tap,
+        // in-app save — tracked via `lastActedAt`) stay dead.
+        let lastActedAt = prefs.lastActedAt ?? .distantPast
+        let nagParents = allPlannedDates.filter { $0 > lastActedAt }
+        await scheduleNagChains(for: nagParents, question: question, prefs: prefs, now: now, calendar: calendar)
     }
 
-    /// Schedules the pre-planned nag chains for freshly-added prompts:
-    /// `nag-<yyyyMMdd-HHmm>-<n>` children at `prompt + delay + (n-1)*interval`.
-    /// Fires at or before `now` are skipped (a mid-window replan shouldn't
-    /// immediately nag about a prompt whose chain is partially in the past).
+    /// Schedules the pre-planned nag chains: `nag-<yyyyMMdd-HHmm>-<n>`
+    /// children at `prompt + delay + (n-1)*interval`. Parents may be in the
+    /// past (delivered-but-unanswered prompts being resurrected on replan),
+    /// so fires at or before `now` are skipped — only the still-future tail
+    /// of a partially-elapsed chain is re-added, and past parents whose
+    /// fires have all elapsed add no requests at all.
     private func scheduleNagChains(
-        for promptDates: [Date], prefs: NotificationPrefs, now: Date, calendar: Calendar, context: ModelContext
+        for promptDates: [Date], question: Question?, prefs: NotificationPrefs, now: Date, calendar: Calendar
     ) async {
         let chains = NagPlanner.plan(
             promptDates: promptDates,
@@ -210,7 +234,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             let stamp = Self.isoMinuteFormatter.string(from: chain.parent)
             for (index, fireDate) in chain.fires.enumerated() where fireDate > now {
                 let identifier = "\(NotificationIdentifiers.nagPrefix)\(stamp)-\(index + 1)"
-                let content = Self.makeContent(in: context)
+                let content = Self.makeContent(question: question)
                 content.title = "Still waiting on your report"
                 content.interruptionLevel = .timeSensitive
                 let components = calendar.dateComponents(
@@ -232,8 +256,11 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// A report was just filed in-app: past-due nag chains are moot, so
     /// remove pending nags whose parent prompt fired at or before `now`.
     /// Chains for FUTURE prompts stay — they're nagging about prompts that
-    /// haven't happened yet.
+    /// haven't happened yet. The `lastActedAt` marker is persisted BEFORE
+    /// any removal so a concurrent replan can't resurrect the chains being
+    /// removed here.
     func reportFiled(now: Date = Date()) {
+        prefs.lastActedAt = now
         center.getPendingNotificationRequests { requests in
             let stale = requests
                 .map(\.identifier)
@@ -344,9 +371,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         let requestIdentifier = response.notification.request.identifier
         Task { @MainActor in
             // ANY action on a prompt or one of its nags counts as "acting on
-            // it" — cancel the sibling nag chain before handling the action.
-            // Snooze notifications carry uuid identifiers (no stamp): no-op.
+            // it" — persist the `lastActedAt` marker FIRST (so a replan
+            // triggered by the action, e.g. the default tap foregrounding
+            // the app, can't resurrect the chain), then cancel the sibling
+            // nag chain before handling the action. Snooze notifications
+            // carry uuid identifiers (no stamp): no-op.
             if let stamp = Self.parentStamp(fromRequestIdentifier: requestIdentifier) {
+                prefs.lastActedAt = Date()
                 removeNagChain(forStamp: stamp)
             }
             switch actionIdentifier {
@@ -372,7 +403,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     private func scheduleSnooze() {
         let identifier = "\(NotificationIdentifiers.snoozePrefix)\(UUID().uuidString)"
         let context = ModelContext(container)
-        let content = Self.makeContent(in: context)
+        let content = Self.makeContent(question: Self.firstEnabledYesNoQuestion(in: context))
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 15 * 60, repeats: false)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         center.add(request) { error in
@@ -422,10 +453,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// actions on the notification are unambiguous about what they answer.
     /// Falls back to the generic body when there's no quick-answer question
     /// (and therefore no quick-answer actions to disambiguate).
-    private static func makeContent(in context: ModelContext) -> UNMutableNotificationContent {
+    private static func makeContent(question: Question?) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = "Time to report"
-        if let question = firstEnabledYesNoQuestion(in: context) {
+        if let question {
             content.body = question.prompt
         } else {
             content.body = "What are you up to right now?"

@@ -46,7 +46,9 @@ struct DispatchApp: App {
             appLockStore.forceLockForUITesting()
         }
 
-        let scheduler = NotificationScheduler(container: container, isTestEnvironment: isTestEnvironment)
+        let scheduler = NotificationScheduler(
+            container: container, prefs: notificationPrefs, isTestEnvironment: isTestEnvironment
+        )
         notificationScheduler = scheduler
         UNUserNotificationCenter.current().delegate = scheduler
 
