@@ -1,0 +1,118 @@
+{
+  "questions": [
+    {"questionType": 0, "prompt": "What are you doing?", "uniqueIdentifier": "q-tokens"},
+    {"questionType": 1, "prompt": "What is your anxiety level?", "uniqueIdentifier": "q-multi"},
+    {"questionType": 2, "prompt": "Are you working?", "uniqueIdentifier": "q-yesno"},
+    {"questionType": 3, "prompt": "Where are you?", "uniqueIdentifier": "q-location"},
+    {"questionType": 4, "prompt": "Who are you with?", "uniqueIdentifier": "q-people", "placeholderString": "No one"},
+    {"questionType": 5, "prompt": "How many coffees did you have today?", "uniqueIdentifier": "q-number"},
+    {"questionType": 6, "prompt": "What did you learn today?", "uniqueIdentifier": "q-note"}
+  ],
+  "snapshots": [
+    {
+      "uniqueIdentifier": "snap-1",
+      "date": "2016-02-11T19:08:54-0400",
+      "sectionIdentifier": "1-2016-2-11",
+      "battery": 0.96,
+      "steps": 481,
+      "altitude": 12.5,
+      "background": 0,
+      "draft": 0,
+      "connection": 0,
+      "reportImpetus": 0,
+      "audio": {"avg": -43.57, "peak": -34.0, "uniqueIdentifier": "aud-1"},
+      "location": {
+        "latitude": 37.8116, "longitude": -122.2642,
+        "speed": -1, "course": 0, "altitude": 0,
+        "horizontalAccuracy": 65, "verticalAccuracy": 10,
+        "timestamp": "2016-02-11T19:08:54-0400",
+        "uniqueIdentifier": "loc-1",
+        "placemark": {
+          "locality": "Oakland", "administrativeArea": "CA",
+          "country": "United States", "postalCode": "94612",
+          "thoroughfare": "Valdez St", "name": "2201–2295 Valdez St",
+          "uniqueIdentifier": "pm-1"
+        }
+      },
+      "weather": {
+        "tempF": 68.7, "tempC": 20.4, "weather": "Mostly Cloudy",
+        "relativeHumidity": "60%", "windMPH": 0, "windKPH": 0,
+        "pressureIn": 30.12, "pressureMb": 1020, "visibilityMi": 10,
+        "uv": 1, "stationID": "KCAOAKLA38", "windDirection": "East",
+        "windDegrees": 84, "feelslikeF": 68.7, "feelslikeC": 20.4,
+        "dewpointC": 12, "precipTodayIn": 0, "precipTodayMetric": 0,
+        "windGustMPH": 4, "windGustKPH": 6.4, "visibilityKM": 16.1,
+        "latitude": 37.8086, "longitude": -122.2675,
+        "uniqueIdentifier": "wx-1"
+      },
+      "responses": [
+        {"questionPrompt": "What are you doing?", "uniqueIdentifier": "r-1a",
+         "tokens": [{"uniqueIdentifier": "t-1", "text": "Working"}, {"uniqueIdentifier": "t-2", "text": "Coding"}]},
+        {"questionPrompt": "Are you working?", "uniqueIdentifier": "r-1b",
+         "answeredOptions": ["Yes"]},
+        {"questionPrompt": "What is your anxiety level?", "uniqueIdentifier": "r-1c",
+         "answeredOptions": ["Low"]},
+        {"questionPrompt": "How many coffees did you have today?", "uniqueIdentifier": "r-1d",
+         "numericResponse": "3"}
+      ]
+    },
+    {
+      "uniqueIdentifier": "snap-2",
+      "date": "2015-10-21T20:10:24-0400",
+      "sectionIdentifier": "0-2015-10-21",
+      "battery": 0.5,
+      "steps": 12034,
+      "altitude": 41.0,
+      "background": 0,
+      "draft": 0,
+      "connection": 1,
+      "reportImpetus": 2,
+      "audio": {"avg": -20.1, "peak": -8.4, "uniqueIdentifier": "aud-2"},
+      "location": {
+        "latitude": 37.8114, "longitude": -122.2652,
+        "speed": -1, "course": 0, "altitude": 0,
+        "horizontalAccuracy": 30, "verticalAccuracy": -1,
+        "timestamp": "2015-10-21T20:10:24-0400",
+        "uniqueIdentifier": "loc-2",
+        "placemark": {"locality": "Oakland", "administrativeArea": "CA", "uniqueIdentifier": "pm-2"}
+      },
+      "photoSet": {
+        "uniqueIdentifier": "ps-2",
+        "photos": [
+          {"uniqueIdentifier": "ph-1", "assetUrl": "assets-library://asset/asset.PNG?id=AAA&ext=PNG",
+           "pixelWidth": 1242, "pixelHeight": 2208, "dateTime": "2015-10-21T16:43:16-0400",
+           "latitude": 0, "longitude": 0, "altitude": 0, "depth": 8, "resolutionUnit": 0}
+        ]
+      },
+      "responses": [
+        {"questionPrompt": "Where are you?", "uniqueIdentifier": "r-2a",
+         "locationResponse": {
+           "text": "The Grand", "foursquareVenueId": "4c4a6895",
+           "uniqueIdentifier": "lr-1",
+           "location": {"latitude": 37.8114, "longitude": -122.2652, "speed": -1, "course": 0,
+                        "altitude": 0, "horizontalAccuracy": 0, "verticalAccuracy": -1,
+                        "timestamp": "2015-10-21T20:10:24-0400", "uniqueIdentifier": "loc-2b"}}},
+        {"questionPrompt": "What did you learn today?", "uniqueIdentifier": "r-2b",
+         "textResponses": [{"uniqueIdentifier": "tr-1", "text": "SwiftData exists"}]},
+        {"questionPrompt": "Who are you with?", "uniqueIdentifier": "r-2c"}
+      ]
+    },
+    {
+      "uniqueIdentifier": "snap-3",
+      "date": "2017-02-28T13:08:09-0500",
+      "sectionIdentifier": "0-2017-2-28",
+      "battery": 0.12,
+      "steps": 27851,
+      "altitude": 63.0,
+      "background": 0,
+      "draft": 0,
+      "connection": 0,
+      "reportImpetus": 4,
+      "audio": {"avg": -50.0, "peak": -41.2, "uniqueIdentifier": "aud-3"},
+      "responses": [
+        {"questionPrompt": "Who are you with?", "uniqueIdentifier": "r-3a",
+         "tokens": [{"uniqueIdentifier": "t-3", "text": "Melissa"}]}
+      ]
+    }
+  ]
+}
