@@ -59,11 +59,12 @@ a paid Apple Developer Program membership tied to a real team ID —
 `project.yml` is configured with `DEVELOPMENT_TEAM: UTQFCBPQRF`; change
 it to your own.
 
-Focus-state capture additionally needs the Focus Status capability
-(`com.apple.developer.focus-status`), which automatic provisioning cannot
-add — enable it manually on your App ID in the Apple Developer portal,
-then add the key to `App/Dispatch.entitlements` and rebuild. Until then,
-Focus context is simply omitted from reports.
+Focus-state capture additionally needs the **Communication Notifications**
+capability (`com.apple.developer.usernotifications.communication`), which
+is what Apple gates `INFocusStatusCenter` behind. Enable it on your App ID
+(or let Xcode's automatic signing add it), add the key to
+`App/Dispatch.entitlements`, and rebuild. Until then, Focus context is
+simply omitted from reports.
 
 If you build with a free-tier team, Xcode will drop entitlements it
 can't provision; Dispatch degrades gracefully in every such case
