@@ -52,6 +52,13 @@ func fixtureData(_ name: String) throws -> Data {
     #expect(cal.component(.hour, from: parsed.date) == 23) // 19:08 -0400 == 23:08 UTC
 }
 
+@Test func parsesColonOffsetDates() throws {
+    let parsed = try #require(V1DateParser.parse("2016-02-11T19:08:54-04:00"))
+    #expect(parsed.utcOffsetSeconds == -4 * 3600)
+    let colonless = try #require(V1DateParser.parse("2016-02-11T19:08:54-0400"))
+    #expect(parsed.date == colonless.date)
+}
+
 @Test func decodesLegacyVariants() throws {
     // Legacy exports: numeric dates (seconds since 2001-01-01 GMT),
     // bare-string tokens, singular textResponse (gist.github.com/dbreunig/9315705).
