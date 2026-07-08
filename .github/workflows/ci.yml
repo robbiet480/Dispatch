@@ -23,8 +23,19 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
       - name: Install iOS platform
         # Xcode 26 ships the iOS simulator platform as a separate download,
-        # and CI images may omit it. No-op when already installed.
-        run: sudo xcodebuild -downloadPlatform iOS
+        # and CI images may omit it. The download is occasionally flaky on
+        # runners (transient exit 70), so retry with backoff and skip when
+        # a runtime is already present.
+        run: |
+          if xcrun simctl runtime list 2>/dev/null | grep -q "iOS"; then
+            echo "iOS platform already installed"; exit 0
+          fi
+          for i in 1 2 3; do
+            sudo xcodebuild -downloadPlatform iOS && exit 0
+            echo "downloadPlatform attempt $i failed; retrying in 30s"
+            sleep 30
+          done
+          echo "iOS platform download failed after 3 attempts"; exit 1
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
