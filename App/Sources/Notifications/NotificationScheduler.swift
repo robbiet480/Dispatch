@@ -18,6 +18,7 @@ enum NotificationIdentifiers {
     static let snoozeAction = "snooze"
     static let promptPrefix = "prompt-"
     static let snoozePrefix = "snooze-"
+    static let nagPrefix = "nag-"
 }
 
 /// Owns UNUserNotificationCenter: permission, request building/re-planning,
@@ -148,7 +149,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         let pending = await center.pendingNotificationRequests()
         var identifiersToRemove = pending
             .map(\.identifier)
-            .filter { $0.hasPrefix(NotificationIdentifiers.promptPrefix) }
+            .filter {
+                $0.hasPrefix(NotificationIdentifiers.promptPrefix)
+                    || $0.hasPrefix(NotificationIdentifiers.nagPrefix)
+            }
 
         if !awakeStore.isAwake {
             let snoozeIdentifiers = pending
@@ -177,6 +181,99 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 notificationLog.error("failed to schedule prompt \(identifier, privacy: .public): \(error, privacy: .public)")
             }
         }
+
+        guard prefs.nagEnabled else { return }
+        await scheduleNagChains(for: dates, prefs: prefs, now: now, calendar: calendar, context: context)
+    }
+
+    /// Schedules the pre-planned nag chains for freshly-added prompts:
+    /// `nag-<yyyyMMdd-HHmm>-<n>` children at `prompt + delay + (n-1)*interval`.
+    /// Fires at or before `now` are skipped (a mid-window replan shouldn't
+    /// immediately nag about a prompt whose chain is partially in the past).
+    private func scheduleNagChains(
+        for promptDates: [Date], prefs: NotificationPrefs, now: Date, calendar: Calendar, context: ModelContext
+    ) async {
+        let chains = NagPlanner.plan(
+            promptDates: promptDates,
+            delayMinutes: prefs.nagDelayMinutes,
+            intervalMinutes: prefs.nagIntervalMinutes,
+            maxCount: prefs.nagMaxCount,
+            budget: 60
+        )
+        if let first = chains.first, first.fires.count < prefs.nagMaxCount {
+            notificationLog.info(
+                "nag count clamped to \(first.fires.count, privacy: .public) (budget) from \(prefs.nagMaxCount, privacy: .public)"
+            )
+        }
+
+        for chain in chains {
+            let stamp = Self.isoMinuteFormatter.string(from: chain.parent)
+            for (index, fireDate) in chain.fires.enumerated() where fireDate > now {
+                let identifier = "\(NotificationIdentifiers.nagPrefix)\(stamp)-\(index + 1)"
+                let content = Self.makeContent(in: context)
+                content.title = "Still waiting on your report"
+                content.interruptionLevel = .timeSensitive
+                let components = calendar.dateComponents(
+                    [.year, .month, .day, .hour, .minute, .second], from: fireDate
+                )
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                do {
+                    try await center.add(request)
+                } catch {
+                    notificationLog.error("failed to schedule nag \(identifier, privacy: .public): \(error, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    // MARK: - Nag cancellation
+
+    /// A report was just filed in-app: past-due nag chains are moot, so
+    /// remove pending nags whose parent prompt fired at or before `now`.
+    /// Chains for FUTURE prompts stay — they're nagging about prompts that
+    /// haven't happened yet.
+    func reportFiled(now: Date = Date()) {
+        center.getPendingNotificationRequests { requests in
+            let stale = requests
+                .map(\.identifier)
+                .filter { identifier in
+                    guard let stamp = Self.nagParentStamp(fromNagIdentifier: identifier),
+                          let parentDate = Self.isoMinuteFormatter.date(from: stamp) else {
+                        return false
+                    }
+                    return parentDate <= now
+                }
+            guard !stale.isEmpty else { return }
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: stale)
+        }
+    }
+
+    /// Removes the sibling nag chain for the prompt stamped `stamp`.
+    /// Identifiers are enumerable (`nag-<stamp>-1...10`, nagMaxCount's upper
+    /// clamp), so we remove the full range blindly — removing an identifier
+    /// with no pending request is a documented no-op.
+    private func removeNagChain(forStamp stamp: String) {
+        let identifiers = (1...10).map { "\(NotificationIdentifiers.nagPrefix)\(stamp)-\($0)" }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    /// Parent stamp (`yyyyMMdd-HHmm`) from a prompt or nag identifier;
+    /// nil for snoozes and anything else.
+    private static func parentStamp(fromRequestIdentifier identifier: String) -> String? {
+        if identifier.hasPrefix(NotificationIdentifiers.promptPrefix) {
+            return String(identifier.dropFirst(NotificationIdentifiers.promptPrefix.count))
+        }
+        return nagParentStamp(fromNagIdentifier: identifier)
+    }
+
+    /// Parent stamp from `nag-<yyyyMMdd-HHmm>-<n>`; nil for non-nag identifiers.
+    private static func nagParentStamp(fromNagIdentifier identifier: String) -> String? {
+        guard identifier.hasPrefix(NotificationIdentifiers.nagPrefix) else { return nil }
+        let suffix = String(identifier.dropFirst(NotificationIdentifiers.nagPrefix.count))
+        // suffix = "<yyyyMMdd>-<HHmm>-<n>" — the stamp is everything before the last dash.
+        guard let lastDash = suffix.lastIndex(of: "-"), lastDash != suffix.startIndex else { return nil }
+        return String(suffix[..<lastDash])
     }
 
     private func plannedDates(prefs: NotificationPrefs, now: Date, calendar: Calendar) -> [Date] {
@@ -244,7 +341,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
         let actionIdentifier = response.actionIdentifier
+        let requestIdentifier = response.notification.request.identifier
         Task { @MainActor in
+            // ANY action on a prompt or one of its nags counts as "acting on
+            // it" — cancel the sibling nag chain before handling the action.
+            // Snooze notifications carry uuid identifiers (no stamp): no-op.
+            if let stamp = Self.parentStamp(fromRequestIdentifier: requestIdentifier) {
+                removeNagChain(forStamp: stamp)
+            }
             switch actionIdentifier {
             case NotificationIdentifiers.snoozeAction:
                 scheduleSnooze()

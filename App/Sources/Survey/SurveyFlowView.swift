@@ -8,6 +8,7 @@ struct SurveyFlowView: View {
     @Environment(\.appDefaults) private var appDefaults
     @Query private var questions: [Question]
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(NotificationScheduler.self) private var notificationScheduler
     @State private var controller: SurveyController?
     /// Text fields register a synchronous flush closure here (see
     /// `LocalTextEditorField`/`PendingFlushRegistry`). Called immediately
@@ -83,7 +84,11 @@ struct SurveyFlowView: View {
                 Button(controller.survey.isLastPage ? "DONE" : "NEXT") {
                     flushRegistry.flushAll()
                     if controller.survey.isLastPage {
-                        try? controller.save(in: modelContext)
+                        if (try? controller.save(in: modelContext)) != nil {
+                            // A filed report satisfies any past-due prompt:
+                            // cancel their pending nag reminders.
+                            notificationScheduler.reportFiled()
+                        }
                         dismiss()
                     } else {
                         controller.survey.advance()

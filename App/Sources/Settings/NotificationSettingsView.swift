@@ -16,6 +16,10 @@ struct NotificationSettingsView: View {
     @State private var alertsPerDay: Int
     @State private var distribution: PromptDistribution
     @State private var scheduledTimes: [DateComponents]
+    @State private var nagEnabled: Bool
+    @State private var nagDelayMinutes: Int
+    @State private var nagIntervalMinutes: Int
+    @State private var nagMaxCount: Int
     @State private var nextAlertText: String = "—"
     @State private var isAddingTime = false
     @State private var newTimeSelection = Date()
@@ -26,6 +30,10 @@ struct NotificationSettingsView: View {
         _alertsPerDay = State(initialValue: prefs.alertsPerDay)
         _distribution = State(initialValue: prefs.distribution)
         _scheduledTimes = State(initialValue: prefs.scheduledTimes)
+        _nagEnabled = State(initialValue: prefs.nagEnabled)
+        _nagDelayMinutes = State(initialValue: prefs.nagDelayMinutes)
+        _nagIntervalMinutes = State(initialValue: prefs.nagIntervalMinutes)
+        _nagMaxCount = State(initialValue: prefs.nagMaxCount)
     }
 
     var body: some View {
@@ -38,6 +46,7 @@ struct NotificationSettingsView: View {
                 frequencySection
                 distributionSection
                 scheduledSection
+                nagSection
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -160,6 +169,90 @@ struct NotificationSettingsView: View {
         }
     }
 
+    private var nagSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { nagEnabled },
+                set: { updateNagEnabled($0) }
+            )) {
+                Text("Persistent Reminders")
+                    .foregroundStyle(.white)
+            }
+            .accessibilityIdentifier("nag-enabled")
+            .listRowBackground(Color.white.opacity(0.12))
+
+            if nagEnabled {
+                nagStepperRow(
+                    title: "Remind after",
+                    value: minutesLabel(minutes: nagDelayMinutes),
+                    identifier: "nag-delay",
+                    decrementDisabled: nagDelayMinutes <= 1,
+                    incrementDisabled: nagDelayMinutes >= 120,
+                    onDecrement: { updateNagDelay(nagDelayMinutes - 1) },
+                    onIncrement: { updateNagDelay(nagDelayMinutes + 1) }
+                )
+                nagStepperRow(
+                    title: "Repeat every",
+                    value: minutesLabel(minutes: nagIntervalMinutes),
+                    identifier: "nag-interval",
+                    decrementDisabled: nagIntervalMinutes <= 1,
+                    incrementDisabled: nagIntervalMinutes >= 60,
+                    onDecrement: { updateNagInterval(nagIntervalMinutes - 1) },
+                    onIncrement: { updateNagInterval(nagIntervalMinutes + 1) }
+                )
+                nagStepperRow(
+                    title: "Max reminders",
+                    value: "\(nagMaxCount)",
+                    identifier: "nag-max-count",
+                    decrementDisabled: nagMaxCount <= 1,
+                    incrementDisabled: nagMaxCount >= 10,
+                    onDecrement: { updateNagMaxCount(nagMaxCount - 1) },
+                    onIncrement: { updateNagMaxCount(nagMaxCount + 1) }
+                )
+            }
+        } header: {
+            sectionHeader("PERSISTENT REMINDERS")
+        } footer: {
+            Text("Follow-up reminders are Time Sensitive and can break through Focus modes. They stop as soon as you act on a prompt or file a report.")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+        }
+    }
+
+    private func nagStepperRow(
+        title: String, value: String, identifier: String,
+        decrementDisabled: Bool, incrementDisabled: Bool,
+        onDecrement: @escaping () -> Void, onIncrement: @escaping () -> Void
+    ) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.white)
+            Spacer()
+            Button(action: onDecrement) {
+                Image(systemName: "minus.circle")
+            }
+            .disabled(decrementDisabled)
+            .accessibilityIdentifier("\(identifier)-decrement")
+
+            Text(value)
+                .frame(minWidth: 48)
+                .foregroundStyle(.white)
+                .accessibilityIdentifier("\(identifier)-value")
+
+            Button(action: onIncrement) {
+                Image(systemName: "plus.circle")
+            }
+            .disabled(incrementDisabled)
+            .accessibilityIdentifier("\(identifier)-increment")
+        }
+        .foregroundStyle(.white)
+        .listRowBackground(Color.white.opacity(0.12))
+    }
+
+    private func minutesLabel(minutes: Int) -> String {
+        "\(minutes) min"
+    }
+
     private var addTimeSheet: some View {
         NavigationStack {
             ZStack {
@@ -224,6 +317,33 @@ struct NotificationSettingsView: View {
         sorted.remove(atOffsets: offsets)
         scheduledTimes = sorted
         prefs.scheduledTimes = sorted
+        replan()
+    }
+
+    private func updateNagEnabled(_ value: Bool) {
+        nagEnabled = value
+        prefs.nagEnabled = value
+        replan()
+    }
+
+    private func updateNagDelay(_ value: Int) {
+        let clamped = max(1, min(120, value))
+        nagDelayMinutes = clamped
+        prefs.nagDelayMinutes = clamped
+        replan()
+    }
+
+    private func updateNagInterval(_ value: Int) {
+        let clamped = max(1, min(60, value))
+        nagIntervalMinutes = clamped
+        prefs.nagIntervalMinutes = clamped
+        replan()
+    }
+
+    private func updateNagMaxCount(_ value: Int) {
+        let clamped = max(1, min(10, value))
+        nagMaxCount = clamped
+        prefs.nagMaxCount = clamped
         replan()
     }
 
