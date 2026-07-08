@@ -1,0 +1,69 @@
+import DispatchKit
+import SwiftUI
+
+struct CaptureChecklistView: View {
+    let outcomes: [SensorKind: SensorOutcome]
+
+    private static let rows: [(SensorKind, String, String)] = [
+        (.location, "mappin", "LOCATION"),
+        (.weather, "cloud.fill", "WEATHER CONDITIONS"),
+        (.altitude, "mountain.2.fill", "ALTITUDE"),
+        (.photos, "camera.fill", "PHOTOS"),
+        (.audio, "mic.fill", "AUDIO"),
+        (.healthSteps, "figure.walk", "STEPS"),
+        (.healthFlights, "stairs", "STAIRS"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(Self.rows, id: \.0) { kind, icon, label in
+                HStack(spacing: 12) {
+                    Image(systemName: icon).frame(width: 24)
+                    Text(text(for: kind, label: label))
+                        .font(.subheadline.weight(.semibold))
+                        .kerning(1.2)
+                }
+                .opacity(outcomes[kind] == nil ? 0.55 : 1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+    }
+
+    private func text(for kind: SensorKind, label: String) -> String {
+        switch outcomes[kind] {
+        case nil: "GETTING \(label)…"
+        case .disabled: "\(label) OFF"
+        case .unavailable: "UNABLE TO DETECT \(label)"
+        case .captured(let payload): captured(payload, label: label)
+        }
+    }
+
+    private func captured(_ payload: SensorPayload, label: String) -> String {
+        switch payload {
+        case .location(let snapshot):
+            let place = [snapshot.placemark?.locality, snapshot.placemark?.administrativeArea]
+                .compactMap(\.self).joined(separator: ", ")
+            return place.isEmpty ? "LOCATION CAPTURED" : place.uppercased()
+        case .weather(let observation):
+            return (observation.condition ?? "WEATHER CAPTURED").uppercased()
+        case .altitude(let meters):
+            return "\(Int(meters * 3.28084)) FEET"
+        case .photos(let count, _):
+            return "\(count) PHOTOS ADDED"
+        case .audio(let sample):
+            let display = AudioLevel.displayValue(fromRaw: sample.avg)
+            return "\(AudioLevel.label(forDisplay: display)) \(String(format: "%.2f", display)) DB"
+        case .health(let readings):
+            if let steps = readings.first(where: { $0.type == "steps" }) {
+                return "\(Int(steps.value).formatted()) STEPS TAKEN"
+            }
+            if let flights = readings.first(where: { $0.type == "flightsClimbed" }) {
+                return "\(Int(flights.value)) STAIRCASES"
+            }
+            return "\(label) CAPTURED"
+        case .battery, .connection, .focus:
+            return "\(label) CAPTURED"
+        }
+    }
+}

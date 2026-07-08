@@ -1,0 +1,73 @@
+import DispatchKit
+import Foundation
+import Observation
+import SwiftData
+
+@MainActor
+@Observable
+final class SurveyController {
+    let survey: SurveyViewModel
+    private(set) var outcomes: [SensorKind: SensorOutcome] = [:]
+    private(set) var captureFinished = false
+    private let kind: ReportKind
+    private let trigger: ReportTrigger
+    private let settings = SensorSettings()
+
+    init(questions: [Question], kind: ReportKind, trigger: ReportTrigger) {
+        self.survey = SurveyViewModel(questions: questions, kind: kind)
+        self.kind = kind
+        self.trigger = trigger
+    }
+
+    static func providers(since: Date?) -> [any SensorProvider] {
+        if ProcessInfo.processInfo.arguments.contains("--mock-sensors") {
+            return MockProviders.all
+        }
+        let health = HealthKitReader()
+        return [
+            LocationProvider(), AltitudeFromLocationProvider(), WeatherProvider(),
+            BatteryProvider(), ConnectionProvider(), AudioProvider(),
+            PhotosProvider(since: since), FocusProvider(),
+            HealthMetricProvider(kind: .healthSteps, reader: health, since: since),
+            HealthMetricProvider(kind: .healthFlights, reader: health, since: since),
+            HealthMetricProvider(kind: .healthHeart, reader: health, since: since),
+            HealthMetricProvider(kind: .healthHRV, reader: health, since: since),
+            HealthMetricProvider(kind: .healthRestingHeart, reader: health, since: since),
+            HealthMetricProvider(kind: .healthSleep, reader: health, since: since),
+            HealthMetricProvider(kind: .healthWorkouts, reader: health, since: since),
+            HealthMetricProvider(kind: .healthCaffeine, reader: health, since: since),
+        ]
+    }
+
+    func startCapture(since: Date?) async {
+        let stream = CaptureCoordinator.capture(providers: Self.providers(since: since),
+                                                settings: settings)
+        for await event in stream {
+            outcomes[event.kind] = event.outcome
+        }
+        captureFinished = true
+    }
+
+    func save(in context: ModelContext) throws {
+        try ReportBuilder.save(kind: kind, trigger: trigger, date: Date(),
+                               timeZone: TimeZone.current, outcomes: outcomes,
+                               answers: survey.drafts(), in: context)
+    }
+}
+
+/// Deterministic providers for XCUITest (--mock-sensors).
+enum MockProviders {
+    static let all: [any SensorProvider] = [
+        Mock(kind: .battery, payload: .battery(0.8)),
+        Mock(kind: .audio, payload: .audio(AudioSample(avg: -52.8, peak: -40))),
+        Mock(kind: .altitude, payload: .altitude(63)),
+        Mock(kind: .connection, payload: .connection(1)),
+        Mock(kind: .healthSteps, payload: .health([HealthReading(type: "steps", value: 27851, unit: "count")])),
+    ]
+
+    struct Mock: SensorProvider {
+        let kind: SensorKind
+        let payload: SensorPayload
+        func capture() async throws -> SensorPayload { payload }
+    }
+}
