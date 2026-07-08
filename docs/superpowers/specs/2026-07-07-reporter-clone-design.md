@@ -77,6 +77,8 @@ v2 changes:
   visitDeparture | wake | workoutEnd | widget | control | intent`.
 - `stateOfMindSampleIDs`: HealthKit UUIDs written from this report's
   answers (for dedupe/undo).
+- `focus`: optional `{label?, isFocused}` — active Focus at report time
+  (label when a Focus Filter is configured, boolean otherwise).
 
 ### Response
 
@@ -134,6 +136,7 @@ or disabled toggle degrades to "UNABLE TO DETECT X" / omission.
 | Battery / connection | UIDevice / NWPathMonitor |
 | **All health metrics** | HealthKit statistics + sample queries (steps, flights, HR, HRV, resting HR, sleep, workouts, medications, caffeine). No CoreMotion anywhere. |
 | **State of Mind** | HKStateOfMind: written from mapped questions; latest sample also read as context |
+| **Focus** | Focus Filter (`SetFocusFilterIntent`) records the active Focus's user-assigned label as it changes (one-time per-Focus setup in Settings); falls back to the `INFocusStatusCenter` focused/not-focused boolean (Focus Status entitlement). Captured as a context row; Focus-change *prompting* is already covered by Shortcuts automations → `StartReportIntent` |
 
 Permissions requested just-in-time mid-flow; onboarding primes them.
 
