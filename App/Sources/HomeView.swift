@@ -42,7 +42,7 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack {
-            NavigationLink(destination: Text("Reports")) {
+            NavigationLink(destination: ReportsListView()) {
                 Image(systemName: "list.bullet")
                     .font(.title2)
                     .foregroundStyle(.white)
