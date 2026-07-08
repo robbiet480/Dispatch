@@ -3,6 +3,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(NotificationScheduler.self) private var scheduler
+    @Environment(\.notificationPrefs) private var notificationPrefs
+    @Environment(\.appDefaults) private var appDefaults
+    @State private var nextAlertCaption: String?
 
     private var theme: Theme { themeStore.theme }
 
@@ -24,15 +28,43 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .onAppear(perform: refreshNextAlertCaption)
     }
+
+    private func refreshNextAlertCaption() {
+        scheduler.nextPromptDate { date in
+            Task { @MainActor in
+                guard let date else {
+                    nextAlertCaption = nil
+                    return
+                }
+                nextAlertCaption = "Next alert at: \(Self.timeFormatter.string(from: date))"
+            }
+        }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 
     // MARK: - Sections
 
     private var scheduleSection: some View {
         Section {
-            NavigationLink(destination: Text("Coming in Plan 4")) {
-                settingsLabel("Notifications")
+            NavigationLink(destination: NotificationSettingsView(prefs: notificationPrefs)) {
+                HStack {
+                    settingsLabel("Notifications")
+                    Spacer()
+                    if let nextAlertCaption {
+                        Text(nextAlertCaption)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                }
             }
+            .accessibilityIdentifier("notifications-settings-link")
             .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("SCHEDULE")
@@ -52,7 +84,7 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.white.opacity(0.12))
 
-            NavigationLink(destination: SensorSettingsView()) {
+            NavigationLink(destination: SensorSettingsView(defaults: appDefaults)) {
                 settingsLabel("Sensors")
             }
             .listRowBackground(Color.white.opacity(0.12))

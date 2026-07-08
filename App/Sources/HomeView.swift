@@ -7,6 +7,8 @@ struct HomeView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(SurveyPresenter.self) private var surveyPresenter
+    @Environment(NotificationScheduler.self) private var scheduler
+    @Environment(\.notificationPrefs) private var notificationPrefs
 
     private var theme: Theme { themeStore.theme }
 
@@ -91,6 +93,7 @@ struct HomeView: View {
                 // cancelled — the state change reflects reality regardless of
                 // whether the user files the optional report about it.
                 let kind = awakeStore.toggle()
+                scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
                 surveyPresenter.request = SurveyRequest(kind: kind, trigger: .manual)
             }
             .font(.headline)

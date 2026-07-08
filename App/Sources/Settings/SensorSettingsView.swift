@@ -2,7 +2,7 @@ import DispatchKit
 import SwiftUI
 
 struct SensorSettingsView: View {
-    @State private var settings = SensorSettings()
+    @State private var settings: SensorSettings
     @State private var temperatureUnit: TemperatureUnit
     @State private var lengthUnit: LengthUnit
     @State private var enabledByKind: [SensorKind: Bool]
@@ -10,8 +10,8 @@ struct SensorSettingsView: View {
 
     private var theme: Theme { themeStore.theme }
 
-    init() {
-        let settings = SensorSettings()
+    init(defaults: UserDefaults) {
+        let settings = SensorSettings(defaults: defaults)
         _settings = State(initialValue: settings)
         _temperatureUnit = State(initialValue: settings.temperatureUnit)
         _lengthUnit = State(initialValue: settings.lengthUnit)
