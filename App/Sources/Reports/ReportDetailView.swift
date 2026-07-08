@@ -32,7 +32,7 @@ struct ReportDetailView: View {
         let rows = sensorRows
         if !rows.isEmpty {
             Section {
-                ForEach(rows, id: \.label) { row in
+                ForEach(rows, id: \.id) { row in
                     sensorRow(icon: row.icon, label: row.label, value: row.value)
                 }
             } header: {
@@ -41,44 +41,49 @@ struct ReportDetailView: View {
         }
     }
 
-    private var sensorRows: [(icon: String, label: String, value: String)] {
-        var rows: [(icon: String, label: String, value: String)] = []
+    private var sensorRows: [(id: String, icon: String, label: String, value: String)] {
+        var rows: [(id: String, icon: String, label: String, value: String)] = []
+        // Row ids default to the label; workout rows get a per-reading suffix
+        // so multiple workouts in one report keep unique ForEach identities.
+        func append(_ icon: String, _ label: String, _ value: String, id: String? = nil) {
+            rows.append((id ?? label, icon, label, value))
+        }
 
         if let place = placeText {
-            rows.append(("mappin.and.ellipse", "Place", place))
+            append("mappin.and.ellipse", "Place", place)
         }
         if let weather = report.weather {
             var parts: [String] = []
             if let condition = weather.condition, !condition.isEmpty { parts.append(condition) }
             if let tempF = weather.tempF { parts.append(String(format: "%.0f°F", tempF)) }
             if !parts.isEmpty {
-                rows.append(("cloud.sun.fill", "Weather", parts.joined(separator: ", ")))
+                append("cloud.sun.fill", "Weather", parts.joined(separator: ", "))
             }
         }
         if let meters = report.altitudeMeters {
             let feet = meters * 3.28084
-            rows.append(("arrow.up.forward", "Altitude", String(format: "%.0f ft", feet)))
+            append("arrow.up.forward", "Altitude", String(format: "%.0f ft", feet))
         }
         if let audio = report.audio {
             let display = AudioLevel.displayValue(fromRaw: audio.avg)
             let label = AudioLevel.label(forDisplay: display)
-            rows.append(("waveform", "Sound", String(format: "%.1f dB · %@", display, label)))
+            append("waveform", "Sound", String(format: "%.1f dB · %@", display, label))
         }
         if let steps = healthValue("steps") {
-            rows.append(("figure.walk", "Steps", String(format: "%.0f", steps)))
+            append("figure.walk", "Steps", String(format: "%.0f", steps))
         }
         if let flights = healthValue("flightsClimbed") {
-            rows.append(("figure.stairs", "Flights climbed", String(format: "%.0f", flights)))
+            append("figure.stairs", "Flights climbed", String(format: "%.0f", flights))
         }
-        for workout in workoutRows {
-            rows.append(("figure.run", "Workout", workout))
+        for (index, workout) in workoutRows.enumerated() {
+            append("figure.run", "Workout", workout.text, id: "Workout-\(workout.type)-\(index)")
         }
         if let battery = report.battery {
-            rows.append(("battery.75percent", "Battery", String(format: "%.0f%%", battery * 100)))
+            append("battery.75percent", "Battery", String(format: "%.0f%%", battery * 100))
         }
         if let focus = report.focus {
             let value = focus.isFocused ? (focus.label ?? "On") : "Off"
-            rows.append(("moon.circle", "Focus", value))
+            append("moon.circle", "Focus", value)
         }
         if let connection = report.connectionType {
             let value: String
@@ -87,7 +92,7 @@ struct ReportDetailView: View {
             case .wifi: value = "Wi-Fi"
             case .none: value = "None"
             }
-            rows.append(("antenna.radiowaves.left.and.right", "Connection", value))
+            append("antenna.radiowaves.left.and.right", "Connection", value)
         }
         return rows
     }
@@ -97,10 +102,11 @@ struct ReportDetailView: View {
     }
 
     /// Renders each `workout.<raw>` health reading as "<Name> — <Xm Ys>".
-    private var workoutRows: [String] {
+    /// Carries the reading's stored type so each row keeps a unique identity.
+    private var workoutRows: [(type: String, text: String)] {
         report.health.compactMap { reading in
             guard let name = WorkoutActivityName.displayName(forHealthType: reading.type) else { return nil }
-            return "\(name) — \(formattedDuration(reading.value))"
+            return (reading.type, "\(name) — \(formattedDuration(reading.value))")
         }
     }
 

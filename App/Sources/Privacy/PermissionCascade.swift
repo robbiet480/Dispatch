@@ -122,16 +122,20 @@ private final class CascadeLocationRequester: NSObject, CLLocationManagerDelegat
         manager.delegate = self
     }
 
-    /// Awaits the authorization status change, bounded by a short timeout in
-    /// case the system never calls back (e.g. authorization already resolved
-    /// before the delegate was attached) so the cascade can never hang here.
+    /// Awaits the authorization status change, bounded by a generous 45s
+    /// hang-guard in case the system never calls back. The bound must be
+    /// long: the permission alert can legitimately stay on screen while the
+    /// user decides, and resuming early would stack the next cascade sheet
+    /// underneath it. The `notDetermined` guard covers the no-dialog case and
+    /// the delegate callback covers the normal case, so this timer never
+    /// fires in practice.
     func requestWhenInUseAuthorization() async {
         guard manager.authorizationStatus == .notDetermined else { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             self.continuation = continuation
             manager.requestWhenInUseAuthorization()
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
                 self?.resumeIfNeeded()
             }
         }
