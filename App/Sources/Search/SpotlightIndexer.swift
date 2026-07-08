@@ -1,7 +1,6 @@
 import CoreSpotlight
 import DispatchKit
 import Foundation
-import MobileCoreServices
 import os
 
 private let spotlightLog = Logger(subsystem: "com.robbiet480.dispatch", category: "spotlight")
@@ -23,10 +22,22 @@ enum SpotlightIndexer {
 
     static func index(report: Report) {
         guard !isTestEnvironment else { return }
+        // Policy: while app lock is enabled, Dispatch does not index report content —
+        // report text must not become searchable system-wide (e.g. from the lock
+        // screen) while the user has explicitly asked for the app to be locked down.
+        guard !AppLockStore.isEnabled() else {
+            spotlightLog.info("skipping index for report \(report.uniqueIdentifier, privacy: .public): app lock enabled")
+            return
+        }
+        // Hoist model reads before the completion closure: `report` is a SwiftData
+        // model and must not be captured/read inside an async completion handler,
+        // which can run after the context that owns it has changed or the object
+        // has been invalidated. Only the plain hoisted `id` value is captured below.
+        let id = report.uniqueIdentifier
         let item = searchableItem(for: report)
         CSSearchableIndex.default().indexSearchableItems([item]) { error in
             if let error {
-                spotlightLog.error("failed to index report \(report.uniqueIdentifier, privacy: .public): \(error, privacy: .public)")
+                spotlightLog.error("failed to index report \(id, privacy: .public): \(error, privacy: .public)")
             }
         }
     }
@@ -40,17 +51,36 @@ enum SpotlightIndexer {
         }
     }
 
+    /// Wipes the entire Spotlight index for this app. Used when app lock is enabled
+    /// (see `AppLockStore.setEnabled`) so no previously-indexed report content
+    /// remains searchable once the user has opted into locking the app down.
+    /// Best-effort: logs and continues on failure, same as every other indexer op.
+    static func deleteAll() {
+        guard !isTestEnvironment else { return }
+        CSSearchableIndex.default().deleteAllSearchableItems { error in
+            if let error {
+                spotlightLog.error("failed to delete all spotlight items: \(error, privacy: .public)")
+            }
+        }
+    }
+
     static func rebuildAll(reports: [Report]) {
         guard !isTestEnvironment else { return }
+        guard !AppLockStore.isEnabled() else {
+            spotlightLog.info("skipping spotlight rebuild: app lock enabled")
+            return
+        }
+        // Hoist model reads before any completion closure, same reasoning as `index(report:)`.
+        let ids = reports.map(\.uniqueIdentifier)
+        let items = reports.map(searchableItem(for:))
         CSSearchableIndex.default().deleteAllSearchableItems { deleteError in
             if let deleteError {
                 spotlightLog.error("failed to clear spotlight index before rebuild: \(deleteError, privacy: .public)")
             }
-            let items = reports.map(searchableItem(for:))
             guard !items.isEmpty else { return }
             CSSearchableIndex.default().indexSearchableItems(items) { error in
                 if let error {
-                    spotlightLog.error("failed to rebuild spotlight index: \(error, privacy: .public)")
+                    spotlightLog.error("failed to rebuild spotlight index for \(ids.count, privacy: .public) reports: \(error, privacy: .public)")
                 }
             }
         }
@@ -68,6 +98,10 @@ enum SpotlightIndexer {
             domainIdentifier: domainIdentifier,
             attributeSet: attributes
         )
+        // Report entries don't expire on their own (CoreSpotlight's default
+        // expiration is ~30 days) — they should remain searchable indefinitely
+        // until explicitly deindexed (delete) or wiped (app lock enabled).
+        item.expirationDate = .distantFuture
         return item
     }
 

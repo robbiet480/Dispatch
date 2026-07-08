@@ -9,6 +9,7 @@ struct ReportsListView: View {
     @Query private var personEntities: [PersonEntity]
     @Environment(ThemeStore.self) private var themeStore
     @Environment(SurveyPresenter.self) private var surveyPresenter
+    @Environment(AppLockStore.self) private var appLockStore
 
     private var theme: Theme { themeStore.theme }
 
@@ -44,7 +45,13 @@ struct ReportsListView: View {
                 .accessibilityIdentifier("backfill-button")
             }
         }
-        .sheet(isPresented: $showingBackfillSheet) {
+        // Gated on the lock, mirroring ContentView's survey-cover pattern: if the
+        // lock engages while this sheet is up, the getter flips to false so the
+        // sheet dismisses and the lock's fullScreenCover in ContentView can present
+        // without this sheet blocking it.
+        .sheet(isPresented: Binding(
+            get: { showingBackfillSheet && !appLockStore.isLocked },
+            set: { showingBackfillSheet = $0 })) {
             backfillSheet
         }
     }
@@ -83,6 +90,10 @@ struct ReportsListView: View {
     private var statsHeader: some View {
         // Stats reflect the same set the list shows (filtered while searching).
         let primary = ReportsOverview.stats(from: filteredReports)
+        // tokenCount/personCount are deliberately global (all-time token/people
+        // vocabulary from the @Query'd entities) rather than derived from
+        // filteredReports — even while searching, this second stats page shows
+        // the full vocabulary size, not a count scoped to the search results.
         let secondary = ReportsOverview.secondaryStats(
             reports: filteredReports,
             tokenCount: tokenEntities.count,

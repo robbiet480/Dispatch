@@ -47,6 +47,14 @@ struct ContentView: View {
         // so a request set while locked — via notification tap, cold-launch drain,
         // or StartReportIntent — presents automatically once isLocked flips false,
         // since isLocked is @Observable state read inside this getter.
+        //
+        // Mid-survey lock engagement (e.g. backgrounding past the grace interval
+        // while a survey is in progress) tears this cover down and any in-progress
+        // answers are lost. That's an accepted v1 security tradeoff (same posture
+        // as most banking apps) — not a bug. Re-presentation after unlock relies on
+        // `surveyPresenter.request` surviving the teardown (only the setter above
+        // clears it), so the request itself is preserved even though the answers
+        // captured so far are not.
         .fullScreenCover(item: Binding(
             get: { appLockStore.isLocked ? nil : surveyPresenter.request },
             set: { surveyPresenter.request = $0 })) { request in
@@ -57,5 +65,17 @@ struct ContentView: View {
             set: { appLockStore.isLocked = $0 })) {
             AppLockView()
         }
+        // NOTE (post-TestFlight follow-up): this same lock-gating pattern had to be
+        // threaded individually into ReportsListView's backfill sheet and HomeView's
+        // visualization filter sheet (each gates its own `isPresented` binding on
+        // `!appLockStore.isLocked`, mirroring the survey cover above) so that any
+        // `.sheet`/`.fullScreenCover` presented from a subview can't block this
+        // lock cover from appearing. That per-call-site fix is fragile — any new
+        // sheet added anywhere in the tree needs the same treatment or it can
+        // reintroduce this bug. The durable fix is a window-level lock overlay
+        // (e.g. driven from the WindowGroup/UIWindowScene) that always wins
+        // regardless of what SwiftUI presentation state exists underneath it.
+        // Deferred until after TestFlight to avoid destabilizing presentation
+        // flow this close to release.
     }
 }

@@ -12,7 +12,7 @@ import Testing
 
     #expect(ReportSearch.matches(report, query: "plaza"))
     #expect(ReportSearch.matches(report, query: "visited"))
-    #expect(ReportSearch.matches(report, query: "plaza"))
+    #expect(ReportSearch.matches(report, query: "I visited the plaza"))
     #expect(!ReportSearch.matches(report, query: "mall"))
 }
 

@@ -23,18 +23,28 @@ public final class AppLockStore: @unchecked Sendable {
 
     public init(defaults: UserDefaults = .standard, isTestEnvironment: Bool? = nil) {
         self.defaults = defaults
-        self._enabled = defaults.bool(forKey: "privacy.appLockEnabled")
+        self._enabled = defaults.bool(forKey: Self.enabledDefaultsKey)
         self.isTestEnvironment = isTestEnvironment ?? {
             let arguments = ProcessInfo.processInfo.arguments
             return arguments.contains("--mock-sensors") || arguments.contains("--ui-testing")
         }()
     }
 
+    /// Shared appDefaults key backing `enabled`. Exposed so `SpotlightIndexer` can check
+    /// the lock policy without needing an `AppLockStore` instance.
+    static let enabledDefaultsKey = "privacy.appLockEnabled"
+
+    /// Static read of the app-lock-enabled flag, for call sites (like `SpotlightIndexer`)
+    /// that need the policy but don't have (and shouldn't need) a full `AppLockStore`.
+    public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: enabledDefaultsKey)
+    }
+
     public var enabled: Bool {
         get { _enabled }
         set {
             _enabled = newValue
-            defaults.set(newValue, forKey: "privacy.appLockEnabled")
+            defaults.set(newValue, forKey: Self.enabledDefaultsKey)
         }
     }
 
@@ -93,6 +103,25 @@ public final class AppLockStore: @unchecked Sendable {
     /// Used by the settings toggle: enabling requires a successful auth
     /// first. Disabling never requires auth. In test mode, both set
     /// instantly with no LAContext call.
+    ///
+    /// Spotlight policy: while app lock is enabled, Dispatch does not index report
+    /// content, so report text can't leak through system-wide Spotlight search when
+    /// the device is locked/shared. Enabling wipes the existing index immediately
+    /// (`SpotlightIndexer.deleteAll()`) since content indexed before lock was turned
+    /// on must not remain searchable afterward.
+    ///
+    /// Disabling does *not* eagerly rebuild the index here: `AppLockStore` has no
+    /// `ModelContext` access (it's a plain `UserDefaults`-backed store constructed
+    /// before the SwiftData stack is wired to views), and reaching across into
+    /// SwiftData from here would mean threading a context into a class that
+    /// otherwise has none of that plumbing, for a one-off. Instead, re-indexing
+    /// happens lazily: `SpotlightIndexer.index(report:)` already runs on every new
+    /// report save, so the index self-heals going forward, and a full rebuild from
+    /// all persisted reports can be triggered by `SpotlightIndexer.rebuildAll(reports:)`
+    /// at next launch (call site TODO once a launch-time model fetch hook exists).
+    /// This is the simpler-and-still-correct option: no report content is ever
+    /// under-protected (worst case, older reports are briefly *not* searchable after
+    /// disabling, which fails safe rather than fails open).
     @MainActor
     public func setEnabled(_ newValue: Bool) async {
         if !newValue {
@@ -109,6 +138,7 @@ public final class AppLockStore: @unchecked Sendable {
             let success = try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)
             if success {
                 enabled = true
+                SpotlightIndexer.deleteAll()
             }
         } catch {
             // Leave disabled on failure/cancel.

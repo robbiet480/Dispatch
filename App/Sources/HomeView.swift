@@ -11,6 +11,7 @@ struct HomeView: View {
     @Environment(SurveyPresenter.self) private var surveyPresenter
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(\.notificationPrefs) private var notificationPrefs
+    @Environment(AppLockStore.self) private var appLockStore
     @State private var isShowingFilter = false
     @State private var visualizations: [String: QuestionVisualization] = [:]
     @State private var selectedQuestionID: String?
@@ -22,14 +23,26 @@ struct HomeView: View {
     }
 
     /// Combines everything that should trigger a visualization rebuild: report count, the
-    /// newest report's date (catches edits/new reports without per-field diffing), and the
-    /// set of currently visible question ids (covers both filter toggles and enable/disable
-    /// changes). Unrelated re-renders (theme, awake toggle) don't change this key, so
-    /// `.task(id:)` won't refire and the cached visualizations stay put.
+    /// newest report's date (catches edits/new reports without per-field diffing), a
+    /// report-identity fingerprint, and the set of currently visible question ids (covers
+    /// both filter toggles and enable/disable changes). Unrelated re-renders (theme, awake
+    /// toggle) don't change this key, so `.task(id:)` won't refire and the cached
+    /// visualizations stay put.
+    ///
+    /// The report-identity fingerprint (XOR of each report's `uniqueIdentifier` hash) exists
+    /// because count + newest-date alone can't distinguish "delete report A, backfill report
+    /// B at the same newest date" from a no-op: count and newest date can both stay identical
+    /// across such a delete+backfill, which would leave the memo stale and skip the rebuild.
+    /// XOR (rather than a sorted/concatenated hash) keeps this order-independent and O(n) with
+    /// no allocation, which is all we need since it's just a change-detection fingerprint, not
+    /// a stable identifier.
     private var visualizationTaskID: String {
         let newestDate = reports.map(\.date).max()?.timeIntervalSinceReferenceDate ?? 0
+        let identityFingerprint = reports.reduce(into: 0) { partial, report in
+            partial ^= report.uniqueIdentifier.hashValue
+        }
         let visibleIDs = visibleQuestions.map(\.uniqueIdentifier).sorted().joined(separator: ",")
-        return "\(reports.count)|\(newestDate)|\(visibleIDs)"
+        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)"
     }
 
     private func rebuildVisualizations() {
@@ -72,7 +85,13 @@ struct HomeView: View {
                 }
             }
             .navigationBarHidden(true)
-            .sheet(isPresented: $isShowingFilter) {
+            // Gated on the lock, mirroring ContentView's survey-cover pattern: if the
+            // lock engages while this sheet is up, the getter flips to false so the
+            // sheet dismisses and the lock's fullScreenCover in ContentView can present
+            // without this sheet blocking it.
+            .sheet(isPresented: Binding(
+                get: { isShowingFilter && !appLockStore.isLocked },
+                set: { isShowingFilter = $0 })) {
                 VisualizationFilterView(
                     questions: questions.filter(\.isEnabled),
                     filterStore: filterStore
