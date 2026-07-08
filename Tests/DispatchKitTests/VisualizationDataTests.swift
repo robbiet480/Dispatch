@@ -266,6 +266,33 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
     #expect(venues == [2, 1])
 }
 
+@Test func placesVenueWithNoTextFallsBackToUnknownPlace() {
+    let question = makeQuestion(id: "q-loc-venue-notext", prompt: "Where?", type: .location)
+
+    var venueOnly = LocationAnswer()
+    venueOnly.text = nil
+    venueOnly.foursquareVenueId = "venue-789"
+
+    var venueEmptyText = LocationAnswer()
+    venueEmptyText.text = ""
+    venueEmptyText.foursquareVenueId = "venue-789"
+
+    let reports = [
+        makeReport(responses: [makeResponse(questionIdentifier: "q-loc-venue-notext", locationResponse: venueOnly)]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-loc-venue-notext", locationResponse: venueEmptyText)]),
+    ]
+
+    let result = VisualizationData.build(for: question, reports: reports)
+
+    guard case .places(let items) = result else {
+        Issue.record("expected .places, got \(result)")
+        return
+    }
+    #expect(items.count == 1)
+    #expect(items[0].name == "Unknown place")
+    #expect(items[0].count == 2)
+}
+
 // MARK: - recentNotes
 
 @Test func recentNotesOrdersNewestFirstAndCaps20() {

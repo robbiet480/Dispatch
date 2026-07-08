@@ -164,7 +164,7 @@ public enum VisualizationData {
 
             if let venue = location.foursquareVenueId {
                 key = "venue:\(venue)"
-                displayText = location.text ?? ""
+                displayText = location.text?.isEmpty == false ? location.text! : "Unknown place"
             } else if let text = location.text, !text.isEmpty {
                 key = "text:\(text)"
                 displayText = text

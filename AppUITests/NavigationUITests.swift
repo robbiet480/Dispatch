@@ -55,4 +55,81 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(awakeToggle.waitForExistence(timeout: 10))
         XCTAssertNotEqual(awakeToggle.label, beforeLabel)
     }
+
+    @MainActor
+    func testVisualizationFilterHidesToggledOffQuestionsPage() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        // Home only shows visualization pages once at least one report exists — reuse the
+        // mock-sensor report-flow pattern from SurveyFlowUITests to create one first.
+        let countLabel = app.staticTexts["report-count"]
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        let before = countLabel.label
+
+        app.buttons["report-button"].tap()
+        XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
+                      || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
+
+        let next = app.buttons["survey-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+        if app.buttons["Yes"].exists { app.buttons["Yes"].tap() }
+        for _ in 0..<12 where next.label == "NEXT" {
+            next.tap()
+        }
+        XCTAssertEqual(next.label, "DONE")
+        next.tap()
+
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        XCTAssertNotEqual(countLabel.label, before)
+
+        // A report now exists, so the visualization pages (and filter pill) should be visible.
+        let filterButton = app.buttons["viz-filter-button"]
+        XCTAssertTrue(filterButton.waitForExistence(timeout: 10))
+
+        // The paged TabView only mounts the current (and maybe adjacent) page, so swipe
+        // through the pages to confirm the default "Are you working?" question's prompt is
+        // present somewhere before we hide it.
+        let questionPrompt = "Are you working?"
+        var foundBeforeHiding = false
+        for _ in 0..<8 {
+            if app.staticTexts[questionPrompt].exists {
+                foundBeforeHiding = true
+                break
+            }
+            app.swipeLeft()
+        }
+        XCTAssertTrue(foundBeforeHiding, "expected to find the \"\(questionPrompt)\" viz page before hiding it")
+
+        filterButton.tap()
+
+        XCTAssertTrue(
+            app.otherElements["viz-filter-list"].waitForExistence(timeout: 10)
+                || app.collectionViews["viz-filter-list"].waitForExistence(timeout: 10)
+                || app.tables["viz-filter-list"].waitForExistence(timeout: 10)
+        )
+
+        // Each row exposes both a row-level Switch (whole-row accessibility container, carries
+        // the label) and a nested inner Switch (the actual small UISwitch control) — tapping
+        // the outer element's center doesn't reliably flip state, so drill into the inner one.
+        let rowToggle = app.switches[questionPrompt]
+        XCTAssertTrue(rowToggle.waitForExistence(timeout: 10))
+        let innerToggle = rowToggle.switches.firstMatch
+        XCTAssertTrue(innerToggle.waitForExistence(timeout: 10))
+        let valueBefore = innerToggle.value as? String
+        innerToggle.tap()
+        let valueAfter = innerToggle.value as? String
+        XCTAssertNotEqual(valueBefore, valueAfter, "toggle value should flip on tap (before=\(String(describing: valueBefore)) after=\(String(describing: valueAfter)))")
+
+        app.navigationBars.buttons["Done"].tap()
+
+        // The toggled-off question's page/prompt must no longer appear anywhere on Home, even
+        // after swiping through every remaining page.
+        XCTAssertFalse(app.staticTexts[questionPrompt].waitForExistence(timeout: 5))
+        for _ in 0..<8 {
+            XCTAssertFalse(app.staticTexts[questionPrompt].exists)
+            app.swipeLeft()
+        }
+    }
 }
