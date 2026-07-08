@@ -4,7 +4,7 @@ final class SurveyFlowUITests: XCTestCase {
     @MainActor
     func testCompleteReportFlowSavesReport() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--mock-sensors", "--skip-onboarding"]
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
         let countLabel = app.staticTexts["report-count"]

@@ -3,8 +3,9 @@ import SwiftUI
 
 struct ReportDetailView: View {
     let report: Report
+    @Environment(ThemeStore.self) private var themeStore
 
-    private var theme: Theme { ThemeStore().theme }
+    private var theme: Theme { themeStore.theme }
 
     var body: some View {
         ZStack {

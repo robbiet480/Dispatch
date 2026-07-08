@@ -4,16 +4,11 @@ import SwiftUI
 
 struct HomeView: View {
     @Query private var reports: [Report]
-    @State private var showingSurvey = false
-    @State private var surveyKind: ReportKind = .regular
-    @State private var awakeStore = AwakeStore()
-    @State private var isAwake: Bool
+    @Environment(ThemeStore.self) private var themeStore
+    @Environment(AwakeStore.self) private var awakeStore
+    @Environment(SurveyPresenter.self) private var surveyPresenter
 
-    init() {
-        _isAwake = State(initialValue: AwakeStore().isAwake)
-    }
-
-    private var theme: Theme { ThemeStore().theme }
+    private var theme: Theme { themeStore.theme }
 
     var body: some View {
         NavigationStack {
@@ -34,9 +29,6 @@ struct HomeView: View {
                 }
             }
             .navigationBarHidden(true)
-        }
-        .fullScreenCover(isPresented: $showingSurvey) {
-            SurveyFlowView(kind: surveyKind, trigger: .manual)
         }
     }
 
@@ -86,8 +78,7 @@ struct HomeView: View {
     private var bottomBar: some View {
         HStack {
             Button("REPORT") {
-                surveyKind = .regular
-                showingSurvey = true
+                surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .manual)
             }
             .font(.headline)
             .foregroundStyle(.white)
@@ -95,14 +86,12 @@ struct HomeView: View {
 
             Spacer()
 
-            Button(isAwake ? "AWAKE" : "ASLEEP") {
+            Button(awakeStore.isAwake ? "AWAKE" : "ASLEEP") {
                 // Toggling is authoritative even if the survey that follows is
                 // cancelled — the state change reflects reality regardless of
                 // whether the user files the optional report about it.
                 let kind = awakeStore.toggle()
-                isAwake = awakeStore.isAwake
-                surveyKind = kind
-                showingSurvey = true
+                surveyPresenter.request = SurveyRequest(kind: kind, trigger: .manual)
             }
             .font(.headline)
             .foregroundStyle(.white)

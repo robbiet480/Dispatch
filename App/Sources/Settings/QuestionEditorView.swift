@@ -7,6 +7,7 @@ struct QuestionEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query private var responses: [Response]
+    @Environment(ThemeStore.self) private var themeStore
 
     /// nil ⇒ creating a new question.
     let question: Question?
@@ -17,7 +18,7 @@ struct QuestionEditorView: View {
     @State private var placeholder: String
     @State private var kinds: Set<ReportKind>
 
-    private var theme: Theme { ThemeStore().theme }
+    private var theme: Theme { themeStore.theme }
 
     init(question: Question?) {
         self.question = question
@@ -33,8 +34,11 @@ struct QuestionEditorView: View {
     private var isTypeLocked: Bool {
         guard let question else { return false }
         return responses.contains { response in
-            response.questionIdentifier == question.uniqueIdentifier
-                || response.questionPrompt == question.prompt
+            if let responseQuestionIdentifier = response.questionIdentifier {
+                return responseQuestionIdentifier == question.uniqueIdentifier
+            }
+            // Legacy imports have no questionIdentifier — fall back to prompt equality.
+            return response.questionPrompt == question.prompt
         }
     }
 

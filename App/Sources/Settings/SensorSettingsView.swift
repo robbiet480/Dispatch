@@ -6,8 +6,9 @@ struct SensorSettingsView: View {
     @State private var temperatureUnit: TemperatureUnit
     @State private var lengthUnit: LengthUnit
     @State private var enabledByKind: [SensorKind: Bool]
+    @Environment(ThemeStore.self) private var themeStore
 
-    private var theme: Theme { ThemeStore().theme }
+    private var theme: Theme { themeStore.theme }
 
     init() {
         let settings = SensorSettings()

@@ -8,18 +8,39 @@ private let seedLog = Logger(subsystem: "com.robbiet480.dispatch", category: "se
 @main
 struct DispatchApp: App {
     let container: ModelContainer
+    let themeStore: ThemeStore
+    let awakeStore: AwakeStore
+    let surveyPresenter = SurveyPresenter()
+    private let appDefaults: UserDefaults
 
     init() {
         container = try! ModelContainer(for: Schema(DispatchStore.allModels))
+
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--mock-sensors") || arguments.contains("--ui-testing"),
+           let uiTestingDefaults = UserDefaults(suiteName: "ui-testing") {
+            uiTestingDefaults.removePersistentDomain(forName: "ui-testing")
+            appDefaults = uiTestingDefaults
+        } else {
+            appDefaults = .standard
+        }
+
+        themeStore = ThemeStore(defaults: appDefaults)
+        awakeStore = AwakeStore(defaults: appDefaults)
+
         seedDefaultQuestionsIfNeeded()
-        if ProcessInfo.processInfo.arguments.contains("--skip-onboarding") {
-            UserDefaults.standard.set(true, forKey: "onboarding.completed")
+        if arguments.contains("--skip-onboarding") {
+            appDefaults.set(true, forKey: OnboardingFlag.key)
         }
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(themeStore)
+                .environment(awakeStore)
+                .environment(surveyPresenter)
+                .environment(\.appDefaults, appDefaults)
         }
         .modelContainer(container)
     }

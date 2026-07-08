@@ -6,6 +6,7 @@ struct SurveyFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var questions: [Question]
+    @Environment(ThemeStore.self) private var themeStore
     @State private var controller: SurveyController?
     let kind: ReportKind
     let trigger: ReportTrigger
@@ -74,6 +75,6 @@ struct SurveyFlowView: View {
             .font(.subheadline.weight(.semibold))
             .padding()
         }
-        .background(Color.themeBackground(ThemeStore().theme).opacity(0.9))
+        .background(Color.themeBackground(themeStore.theme).opacity(0.9))
     }
 }

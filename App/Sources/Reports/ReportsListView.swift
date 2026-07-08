@@ -7,8 +7,9 @@ struct ReportsListView: View {
     @Query private var reports: [Report]
     @Query private var tokenEntities: [TokenEntity]
     @Query private var personEntities: [PersonEntity]
+    @Environment(ThemeStore.self) private var themeStore
 
-    private var theme: Theme { ThemeStore().theme }
+    private var theme: Theme { themeStore.theme }
 
     private var sections: [DaySection] { ReportsOverview.sections(from: reports) }
 

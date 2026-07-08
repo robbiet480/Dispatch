@@ -2,7 +2,9 @@ import DispatchKit
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var theme: Theme = ThemeStore().theme
+    @Environment(ThemeStore.self) private var themeStore
+
+    private var theme: Theme { themeStore.theme }
 
     var body: some View {
         ZStack {
@@ -43,6 +45,7 @@ struct SettingsView: View {
                 settingsLabel("Questions")
             }
             .listRowBackground(Color.white.opacity(0.12))
+            .accessibilityIdentifier("questions-settings-link")
 
             NavigationLink(destination: CustomTokensView()) {
                 settingsLabel("Custom Tokens")
@@ -90,9 +93,7 @@ struct SettingsView: View {
 
     private func themeSwatch(_ candidate: Theme) -> some View {
         Button {
-            let store = ThemeStore()
-            store.theme = candidate
-            theme = candidate
+            themeStore.theme = candidate
         } label: {
             Capsule()
                 .fill(ThemeColor.color(candidate))

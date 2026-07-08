@@ -6,8 +6,9 @@ struct QuestionSettingsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query private var responses: [Response]
+    @Environment(ThemeStore.self) private var themeStore
 
-    private var theme: Theme { ThemeStore().theme }
+    private var theme: Theme { themeStore.theme }
 
     var body: some View {
         ZStack {
@@ -48,8 +49,11 @@ struct QuestionSettingsView: View {
 
     private func responseCount(for question: Question) -> Int {
         responses.count { response in
-            response.questionIdentifier == question.uniqueIdentifier
-                || response.questionPrompt == question.prompt
+            if let responseQuestionIdentifier = response.questionIdentifier {
+                return responseQuestionIdentifier == question.uniqueIdentifier
+            }
+            // Legacy imports have no questionIdentifier — fall back to prompt equality.
+            return response.questionPrompt == question.prompt
         }
     }
 

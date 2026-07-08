@@ -4,7 +4,7 @@ final class NavigationUITests: XCTestCase {
     @MainActor
     func testNavigationAndAwakeToggle() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--mock-sensors", "--skip-onboarding"]
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
         // Reports list: open, assert, and navigate back.
@@ -24,7 +24,7 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
         settingsButton.tap()
 
-        let questionsLink = app.staticTexts["Questions"]
+        let questionsLink = app.buttons["questions-settings-link"]
         XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
         questionsLink.tap()
 

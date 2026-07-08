@@ -5,8 +5,9 @@ import SwiftUI
 struct CustomTokensView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \TokenEntity.text) private var tokens: [TokenEntity]
+    @Environment(ThemeStore.self) private var themeStore
 
-    private var theme: Theme { ThemeStore().theme }
+    private var theme: Theme { themeStore.theme }
 
     var body: some View {
         ZStack {

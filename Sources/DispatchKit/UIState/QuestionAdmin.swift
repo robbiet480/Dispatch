@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 public enum QuestionAdmin {
     /// Rewrites sortOrder to 0..n-1 following the given array order.
@@ -9,19 +10,9 @@ public enum QuestionAdmin {
     }
 
     public static func move(_ questions: inout [Question], fromOffsets: IndexSet, toOffset: Int) {
-        // Extract the elements to move (in reverse order to maintain correct indices)
-        let movedElements = fromOffsets
-            .sorted(by: >)
-            .map { questions.remove(at: $0) }
-            .reversed()
-
-        // Insert at the destination, adjusted for removals
-        var insertIndex = toOffset
-        for element in movedElements {
-            questions.insert(element, at: insertIndex)
-            insertIndex += 1
-        }
-
+        // MutableCollection.move(fromOffsets:toOffset:) uses pre-removal semantics
+        // for toOffset, matching SwiftUI's List onMove contract exactly.
+        questions.move(fromOffsets: fromOffsets, toOffset: toOffset)
         normalizeOrder(questions)
     }
 

@@ -11,6 +11,7 @@ struct OnboardingPage: Identifiable {
 struct OnboardingView: View {
     let onDone: () -> Void
 
+    @Environment(\.appDefaults) private var appDefaults
     @State private var selection = 0
 
     private let pages: [OnboardingPage] = [
@@ -48,7 +49,7 @@ struct OnboardingView: View {
 
             if selection == pages.count - 1 {
                 Button("DONE") {
-                    UserDefaults.standard.set(true, forKey: "onboarding.completed")
+                    appDefaults.set(true, forKey: OnboardingFlag.key)
                     onDone()
                 }
                 .font(.headline)
