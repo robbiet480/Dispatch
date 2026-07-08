@@ -49,6 +49,11 @@ struct ReportDetailView: View {
             rows.append((id ?? label, icon, label, value))
         }
 
+        // Workout-end reports: the triggering workout's summary leads the
+        // sensor rows (plan 12 amendment).
+        if let triggered = TriggeredWorkoutSummary.line(from: report.health) {
+            append("figure.run.circle.fill", "Triggered by", triggered)
+        }
         if let place = placeText {
             append("mappin.and.ellipse", "Place", place)
         }
@@ -77,6 +82,9 @@ struct ReportDetailView: View {
         }
         for (index, workout) in workoutRows.enumerated() {
             append("figure.run", "Workout", workout.text, id: "Workout-\(workout.type)-\(index)")
+        }
+        if let activity = ActivityRingsFormatter.summary(from: report.health) {
+            append("circle.circle", "Activity", activity)
         }
         if let battery = report.battery {
             append("battery.75percent", "Battery", String(format: "%.0f%%", battery * 100))

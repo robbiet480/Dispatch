@@ -14,7 +14,8 @@ public enum SensorFailureHint {
     public static func hint(for kind: SensorKind, reason: String?) -> String {
         switch kind {
         case .healthSteps, .healthFlights, .healthHeart, .healthHRV, .healthRestingHeart,
-             .healthSleep, .healthWorkouts, .healthCaffeine, .healthMedications:
+             .healthSleep, .healthWorkouts, .healthCaffeine, .healthMedications,
+             .healthActivityRings:
             return "Check Health → Data Access & Devices → Dispatch."
         case .location:
             return "Allow location access for Dispatch in Settings."
@@ -53,6 +54,7 @@ public enum SensorFailureHint {
         case .healthWorkouts: "Workouts"
         case .healthCaffeine: "Caffeine"
         case .healthMedications: "Medications"
+        case .healthActivityRings: "Activity Rings"
         }
     }
 }

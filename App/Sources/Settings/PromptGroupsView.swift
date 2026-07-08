@@ -11,6 +11,7 @@ struct PromptGroupsView: View {
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(WorkoutEndObserver.self) private var workoutEndObserver
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
     private var theme: Theme { themeStore.theme }
@@ -82,6 +83,7 @@ struct PromptGroupsView: View {
 
     private func replan() {
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+        workoutEndObserver.refresh()
     }
 }
 
@@ -175,6 +177,7 @@ struct PromptGroupEditorView: View {
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(WorkoutEndObserver.self) private var workoutEndObserver
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
@@ -398,6 +401,7 @@ struct PromptGroupEditorView: View {
         target.isEnabled = isEnabled
         try? context.save()
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+        workoutEndObserver.refresh()
         dismiss()
     }
 

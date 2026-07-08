@@ -16,6 +16,9 @@ struct SurveyRequest: Identifiable, Equatable {
     /// When set, the survey is scoped to this PromptGroup's questions and
     /// the saved report records the group (plan 12).
     var promptGroupID: String?
+    /// When set (workout-end prompts), the HKWorkout UUID that fired the
+    /// trigger — capture attaches that workout's details to the report.
+    var triggeringWorkoutID: String?
 }
 
 @MainActor

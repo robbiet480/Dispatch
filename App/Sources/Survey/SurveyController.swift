@@ -17,6 +17,9 @@ final class SurveyController {
     let overrideDate: Date?
     /// Group-scoped survey (plan 12): recorded on the saved report.
     private let promptGroupID: String?
+    /// The HKWorkout UUID that fired a workout-end prompt (plan 12
+    /// amendment); when set, capture attaches that workout's details.
+    private let triggeringWorkoutID: String?
 
     var isBackdated: Bool { overrideDate != nil }
 
@@ -27,6 +30,7 @@ final class SurveyController {
 
     init(questions: [Question], kind: ReportKind, trigger: ReportTrigger, overrideDate: Date? = nil,
          promptGroupID: String? = nil, groupQuestionIDs: [String]? = nil,
+         triggeringWorkoutID: String? = nil,
          appDefaults: UserDefaults = .standard) {
         self.survey = SurveyViewModel(questions: questions, kind: kind, groupQuestionIDs: groupQuestionIDs)
         self.kind = kind
@@ -35,6 +39,7 @@ final class SurveyController {
         self.questions = questions
         self.overrideDate = overrideDate
         self.promptGroupID = promptGroupID
+        self.triggeringWorkoutID = triggeringWorkoutID
     }
 
     static func providers(since: Date?) -> [any SensorProvider] {
@@ -58,6 +63,7 @@ final class SurveyController {
             HealthMetricProvider(kind: .healthSleep, reader: health, since: since),
             HealthMetricProvider(kind: .healthWorkouts, reader: health, since: since),
             HealthMetricProvider(kind: .healthCaffeine, reader: health, since: since),
+            HealthMetricProvider(kind: .healthActivityRings, reader: health, since: since),
             // .healthMedications intentionally not composed: its read type is
             // rejected by bulk requestAuthorization (device crash) — see
             // HealthKitReader.readTypes.
@@ -71,6 +77,22 @@ final class SurveyController {
                                                 settings: settings)
         for await event in stream {
             outcomes[event.kind] = event.outcome
+        }
+        await attachTriggeringWorkoutIfNeeded()
+    }
+
+    /// Workout-end prompts (plan 12 amendment): re-fetch the triggering
+    /// workout and fold its `workout.trigger.*` readings into the workouts
+    /// outcome. Empty readings (workout deleted, permissions revoked) or
+    /// test mode degrade to the plain workoutEnd trigger — no extra rows.
+    private func attachTriggeringWorkoutIfNeeded() async {
+        guard let triggeringWorkoutID, !isTestEnvironment else { return }
+        let readings = await HealthKitReader().triggeredWorkoutReadings(workoutID: triggeringWorkoutID)
+        guard !readings.isEmpty else { return }
+        if case .captured(.health(let existing)) = outcomes[.healthWorkouts] {
+            outcomes[.healthWorkouts] = .captured(.health(existing + readings))
+        } else {
+            outcomes[.healthWorkouts] = .captured(.health(readings))
         }
     }
 

@@ -24,6 +24,9 @@ enum NotificationIdentifiers {
     static let groupPromptPrefix = "gprompt-"
     /// userInfo key carrying the PromptGroup uniqueIdentifier.
     static let promptGroupIDKey = "promptGroupID"
+    /// userInfo key carrying the UUID of the HKWorkout that fired a
+    /// workout-end prompt (plan 12 amendment).
+    static let triggeringWorkoutIDKey = "triggeringWorkoutID"
 }
 
 /// Owns UNUserNotificationCenter: permission, request building/re-planning,
@@ -527,6 +530,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         let requestIdentifier = response.notification.request.identifier
         let promptGroupID = response.notification.request.content
             .userInfo[NotificationIdentifiers.promptGroupIDKey] as? String
+        let triggeringWorkoutID = response.notification.request.content
+            .userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] as? String
         Task { @MainActor in
             // ANY action on a prompt or one of its nags counts as "acting on
             // it" — persist the `lastActedAt` marker FIRST (so a replan
@@ -548,9 +553,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             default:
                 // Default tap (including UNNotificationDefaultActionIdentifier)
                 // opens the app into a new regular survey — scoped to the
-                // prompt's group when the notification carries one.
-                pendingSurveyRequest = SurveyRequest(kind: .regular, trigger: .notification,
-                                                     promptGroupID: promptGroupID)
+                // prompt's group when the notification carries one, and
+                // recorded as workout-triggered when a workout fired it.
+                pendingSurveyRequest = SurveyRequest(
+                    kind: .regular,
+                    trigger: triggeringWorkoutID == nil ? .notification : .workoutEnd,
+                    promptGroupID: promptGroupID,
+                    triggeringWorkoutID: triggeringWorkoutID)
             }
             completionHandler()
         }

@@ -5,6 +5,7 @@ public enum SensorKind: String, Codable, CaseIterable, Sendable {
     case location, weather, altitude, photos, audio, battery, connection, focus
     case healthSteps, healthFlights, healthHeart, healthHRV, healthRestingHeart
     case healthSleep, healthWorkouts, healthCaffeine, healthMedications
+    case healthActivityRings
 }
 
 public enum TemperatureUnit: String, Codable, Sendable { case fahrenheit, celsius }

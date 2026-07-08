@@ -16,6 +16,7 @@ final class HealthKitReader: Sendable {
         HKQuantityType(.heartRate), HKQuantityType(.heartRateVariabilitySDNN),
         HKQuantityType(.restingHeartRate), HKQuantityType(.dietaryCaffeine),
         HKCategoryType(.sleepAnalysis), HKObjectType.workoutType(),
+        HKObjectType.activitySummaryType(),
     ]
 
     func authorize() async throws {
@@ -139,6 +140,95 @@ final class HealthKitReader: Sendable {
         }
     }
 
+    /// The Activity Ring summary for `now`'s calendar day as six numeric
+    /// readings (move/exercise/stand actual + goal). Throws when no summary
+    /// exists (e.g. no Apple Watch) — the provider surfaces that as
+    /// `unavailable`, not a failure.
+    func activityRings(now: Date, calendar: Calendar = .current) async throws -> [HealthReading] {
+        var components = calendar.dateComponents([.era, .year, .month, .day], from: now)
+        components.calendar = calendar
+        let predicate = HKQuery.predicateForActivitySummary(with: components)
+        let summary: HKActivitySummary? = try await withCheckedThrowingContinuation { continuation in
+            let query = HKActivitySummaryQuery(predicate: predicate) { _, summaries, error in
+                if let error {
+                    // Same errorNoData semantics as sum(): no summary for the
+                    // day is "unavailable", not an error to propagate.
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: nil)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+                continuation.resume(returning: summaries?.first)
+            }
+            store.execute(query)
+        }
+        guard let summary else { throw ProviderError("no activity summary for today") }
+
+        let kcal = HKUnit.kilocalorie()
+        let minute = HKUnit.minute()
+        let count = HKUnit.count()
+        let start = calendar.startOfDay(for: now)
+        func reading(_ type: String, _ value: Double, _ unit: String) -> HealthReading {
+            HealthReading(type: type, value: value, unit: unit, startDate: start, endDate: now)
+        }
+        return [
+            reading("activity.move", summary.activeEnergyBurned.doubleValue(for: kcal), "kcal"),
+            reading("activity.moveGoal", summary.activeEnergyBurnedGoal.doubleValue(for: kcal), "kcal"),
+            reading("activity.exercise", summary.appleExerciseTime.doubleValue(for: minute), "min"),
+            reading("activity.exerciseGoal", summary.appleExerciseTimeGoal.doubleValue(for: minute), "min"),
+            reading("activity.stand", summary.appleStandHours.doubleValue(for: count), "hours"),
+            reading("activity.standGoal", summary.appleStandHoursGoal.doubleValue(for: count), "hours"),
+        ]
+    }
+
+    /// Re-fetches the workout that fired a workout-end trigger and maps it to
+    /// the `workout.trigger.*` readings (plan 12 amendment). Returns [] when
+    /// the workout can't be re-fetched (deleted, permissions) — the report
+    /// degrades to the plain workoutEnd trigger.
+    func triggeredWorkoutReadings(workoutID: String) async -> [HealthReading] {
+        guard let uuid = UUID(uuidString: workoutID) else { return [] }
+        let workout: HKWorkout? = await withCheckedContinuation { continuation in
+            let predicate = HKQuery.predicateForObject(with: uuid)
+            let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: 1,
+                                      sortDescriptors: nil) { _, samples, _ in
+                continuation.resume(returning: samples?.first as? HKWorkout)
+            }
+            store.execute(query)
+        }
+        guard let workout else { return [] }
+
+        func reading(_ type: String, _ value: Double, _ unit: String) -> HealthReading {
+            HealthReading(type: type, value: value, unit: unit,
+                          startDate: workout.startDate, endDate: workout.endDate)
+        }
+        var readings = [
+            reading(TriggeredWorkoutSummary.typeReading,
+                    Double(workout.workoutActivityType.rawValue), "raw"),
+            reading(TriggeredWorkoutSummary.durationReading, workout.duration, "s"),
+        ]
+        if let energy = workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
+            .sumQuantity()?.doubleValue(for: .kilocalorie()) {
+            readings.append(reading(TriggeredWorkoutSummary.energyReading, energy, "kcal"))
+        }
+        let distanceTypes: [HKQuantityTypeIdentifier] = [
+            .distanceWalkingRunning, .distanceCycling, .distanceSwimming, .distanceWheelchair,
+        ]
+        for identifier in distanceTypes {
+            if let meters = workout.statistics(for: HKQuantityType(identifier))?
+                .sumQuantity()?.doubleValue(for: .meter()) {
+                readings.append(reading(TriggeredWorkoutSummary.distanceReading, meters, "m"))
+                break
+            }
+        }
+        if let bpm = workout.statistics(for: HKQuantityType(.heartRate))?
+            .averageQuantity()?.doubleValue(for: .count().unitDivided(by: .minute())) {
+            readings.append(reading(TriggeredWorkoutSummary.avgHeartRateReading, bpm, "bpm"))
+        }
+        return readings
+    }
+
     func workoutsToday(now: Date) async throws -> [HealthReading] {
         let start = Calendar.current.startOfDay(for: now)
         return try await withCheckedThrowingContinuation { continuation in
@@ -221,6 +311,9 @@ struct HealthMetricProvider: SensorProvider {
         case .healthWorkouts:
             let workouts = try await reader.workoutsToday(now: now)
             return .health(workouts)
+        case .healthActivityRings:
+            let rings = try await reader.activityRings(now: now)
+            return .health(rings)
         case .healthMedications:
             // Reading dose events requires an authorization flow beyond the
             // bulk requestAuthorization (which rejects the type outright);

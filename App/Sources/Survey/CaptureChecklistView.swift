@@ -14,6 +14,7 @@ struct CaptureChecklistView: View {
         (.audio, "mic.fill", "AUDIO"),
         (.healthSteps, "figure.walk", "STEPS"),
         (.healthFlights, "stairs", "STAIRS"),
+        (.healthActivityRings, "circle.circle", "ACTIVITY RINGS"),
     ]
 
     var body: some View {
@@ -98,6 +99,9 @@ struct CaptureChecklistView: View {
             }
             if let flights = readings.first(where: { $0.type == "flightsClimbed" }) {
                 return "\(Int(flights.value)) STAIRCASES"
+            }
+            if let rings = ActivityRingsFormatter.checklistLine(from: readings) {
+                return rings
             }
             return "\(label) CAPTURED"
         case .battery, .connection, .focus:

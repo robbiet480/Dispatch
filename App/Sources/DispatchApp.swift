@@ -20,6 +20,7 @@ struct DispatchApp: App {
     let appLockStore: AppLockStore
     let privacyCoverWindow: PrivacyCoverWindow
     let permissionCascade: PermissionCascade
+    let workoutEndObserver: WorkoutEndObserver
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
     @State private var backgroundedAt: Date?
@@ -62,6 +63,11 @@ struct DispatchApp: App {
             isTestEnvironment: isTestEnvironment
         )
 
+        workoutEndObserver = WorkoutEndObserver(
+            container: container, awakeStore: awakeStore, defaults: appDefaults,
+            isTestEnvironment: isTestEnvironment
+        )
+
         seedDefaultQuestionsIfNeeded()
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
@@ -87,12 +93,16 @@ struct DispatchApp: App {
                 .environment(notificationScheduler)
                 .environment(appLockStore)
                 .environment(permissionCascade)
+                .environment(workoutEndObserver)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onAppear {
                     if appDefaults.bool(forKey: OnboardingFlag.key) {
                         notificationScheduler.requestPermissionIfNeeded(prefs: notificationPrefs, awakeStore: awakeStore)
                     }
+                    // Start (or stop) the workout-end observer according to
+                    // the current groups; test-gated internally.
+                    workoutEndObserver.refresh()
                     // Cold launch with lock enabled (or the --enable-app-lock
                     // forced-lock UI-test path): the window scene is connected
                     // by now, so raise the lock window before content is seen.

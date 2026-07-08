@@ -22,6 +22,9 @@ struct SurveyFlowView: View {
     var overrideDate: Date? = nil
     /// Scopes the survey to this PromptGroup's questions (plan 12).
     var promptGroupID: String? = nil
+    /// The HKWorkout UUID that fired a workout-end prompt; capture attaches
+    /// that workout's details to the report (plan 12 amendment).
+    var triggeringWorkoutID: String? = nil
 
     var body: some View {
         Group {
@@ -47,6 +50,7 @@ struct SurveyFlowView: View {
                                                  overrideDate: overrideDate,
                                                  promptGroupID: groupQuestionIDs == nil ? nil : promptGroupID,
                                                  groupQuestionIDs: groupQuestionIDs,
+                                                 triggeringWorkoutID: triggeringWorkoutID,
                                                  appDefaults: appDefaults)
             controller = newController
             await newController.startCapture(since: DispatchStore.lastReportDate(in: modelContext))
