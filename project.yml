@@ -29,3 +29,23 @@ targets:
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Dispatch records where you are when you file a report."
         INFOPLIST_KEY_NSHealthShareUsageDescription: "Dispatch reads steps, flights, heart rate, HRV, sleep, workouts, and caffeine to add context to your reports."
         INFOPLIST_KEY_NSFocusStatusUsageDescription: "Dispatch records whether a Focus is on when you file a report."
+  DispatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [AppUITests]
+    dependencies:
+      - target: DispatchApp
+    settings:
+      base:
+        TEST_TARGET_NAME: DispatchApp
+        PRODUCT_BUNDLE_IDENTIFIER: com.robbiet480.dispatch.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+schemes:
+  DispatchApp:
+    build:
+      targets:
+        DispatchApp: all
+        DispatchUITests: [test]
+    test:
+      targets: [DispatchUITests]
