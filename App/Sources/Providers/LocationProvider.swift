@@ -14,6 +14,7 @@ final class LocationProvider: NSObject, SensorProvider, CLLocationManagerDelegat
     let kind = SensorKind.location
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocation, Error>?
+    private var didRequestLocation = false
 
     func capture() async throws -> SensorPayload {
         let fix = try await requestFix()
@@ -45,25 +46,60 @@ final class LocationProvider: NSObject, SensorProvider, CLLocationManagerDelegat
     private func requestFix() async throws -> CLLocation {
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        if manager.authorizationStatus == .notDetermined {
-            manager.requestWhenInUseAuthorization()
+
+        let status = manager.authorizationStatus
+        switch status {
+        case .authorizedWhenInUse, .authorizedAlways:
+            return try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                self.didRequestLocation = true
+                manager.requestLocation()
+            }
+        case .denied, .restricted:
+            throw ProviderError("location permission denied")
+        case .notDetermined:
+            fallthrough
+        @unknown default:
+            return try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                self.didRequestLocation = false
+                manager.requestWhenInUseAuthorization()
+            }
         }
-        return try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        guard continuation != nil else { return }
+        switch status {
+        case .notDetermined:
+            // Delegate-set-time transition (or still awaiting the user); ignore.
+            return
+        case .authorizedWhenInUse, .authorizedAlways:
+            guard !didRequestLocation else { return }
+            didRequestLocation = true
             manager.requestLocation()
+        case .denied, .restricted:
+            let pending = continuation
+            continuation = nil
+            pending?.resume(throwing: ProviderError("location permission denied"))
+        @unknown default:
+            break
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let fix = locations.last {
-            continuation?.resume(returning: fix)
+            let pending = continuation
             continuation = nil
+            pending?.resume(returning: fix)
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        continuation?.resume(throwing: error)
+        let pending = continuation
         continuation = nil
+        pending?.resume(throwing: error)
     }
 }
 
