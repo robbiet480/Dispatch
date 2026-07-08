@@ -24,13 +24,35 @@ public enum PromptPlanner {
         seed: UInt64,
         calendar: Calendar = .current
     ) -> [Date] {
+        plan(alertsPerDay: prefs.alertsPerDay,
+             distribution: prefs.distribution,
+             scheduledTimes: prefs.scheduledTimes,
+             awakeStart: awakeStart, awakeEnd: awakeEnd,
+             seed: seed, calendar: calendar)
+    }
+
+    /// Parameterized core (plan 12): prompt groups reuse the same
+    /// distribution machinery without a UserDefaults-backed prefs object.
+    /// `alertsPerDay: 0` skips distribution planning entirely and only
+    /// materializes `scheduledTimes` (the dailyAt group schedule).
+    public static func plan(
+        alertsPerDay: Int,
+        distribution: PromptDistribution,
+        scheduledTimes: [DateComponents],
+        awakeStart: Date,
+        awakeEnd: Date,
+        seed: UInt64,
+        calendar: Calendar = .current
+    ) -> [Date] {
         var generator = SeededGenerator(seed: seed)
         let windowDuration = awakeEnd.timeIntervalSince(awakeStart)
-        let alertCount = prefs.alertsPerDay
+        let alertCount = alertsPerDay
         var dates: [Date] = []
 
         // Generate times based on distribution
-        switch prefs.distribution {
+        switch alertCount > 0 ? distribution : nil {
+        case nil:
+            break
         case .random:
             // Generate random times uniformly within the window
             for _ in 0..<alertCount {
@@ -70,7 +92,7 @@ public enum PromptPlanner {
         // next calendar day before giving up, since the intended occurrence may fall
         // on the following day within the window.
         let startDay = calendar.startOfDay(for: awakeStart)
-        for timeComponent in prefs.scheduledTimes {
+        for timeComponent in scheduledTimes {
             var dateComponent = DateComponents()
             dateComponent.hour = timeComponent.hour
             dateComponent.minute = timeComponent.minute
