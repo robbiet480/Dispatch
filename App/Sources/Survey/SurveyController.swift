@@ -10,12 +10,20 @@ final class SurveyController {
     private(set) var outcomes: [SensorKind: SensorOutcome] = [:]
     private let kind: ReportKind
     private let trigger: ReportTrigger
-    private let settings = SensorSettings()
+    private let settings: SensorSettings
+    private let questions: [Question]
 
-    init(questions: [Question], kind: ReportKind, trigger: ReportTrigger) {
+    /// --mock-sensors/--ui-testing gate the State of Mind write so UI tests
+    /// never trigger a HealthKit share-authorization dialog.
+    private let isTestEnvironment = ProcessInfo.processInfo.arguments.contains("--mock-sensors")
+        || ProcessInfo.processInfo.arguments.contains("--ui-testing")
+
+    init(questions: [Question], kind: ReportKind, trigger: ReportTrigger, appDefaults: UserDefaults = .standard) {
         self.survey = SurveyViewModel(questions: questions, kind: kind)
         self.kind = kind
         self.trigger = trigger
+        self.settings = SensorSettings(defaults: appDefaults)
+        self.questions = questions
     }
 
     static func providers(since: Date?) -> [any SensorProvider] {
@@ -52,9 +60,15 @@ final class SurveyController {
     }
 
     func save(in context: ModelContext) throws {
-        try ReportBuilder.save(kind: kind, trigger: trigger, date: Date(),
-                               timeZone: TimeZone.current, outcomes: outcomes,
-                               answers: survey.drafts(), in: context)
+        let report = try ReportBuilder.save(kind: kind, trigger: trigger, date: Date(),
+                                            timeZone: TimeZone.current, outcomes: outcomes,
+                                            answers: survey.drafts(), in: context)
+
+        guard !isTestEnvironment else { return }
+        let savedQuestions = questions
+        Task {
+            await StateOfMindWriter.write(for: report, in: savedQuestions, context: context)
+        }
     }
 }
 

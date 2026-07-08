@@ -17,6 +17,7 @@ struct QuestionEditorView: View {
     @State private var choices: [String]
     @State private var placeholder: String
     @State private var kinds: Set<ReportKind>
+    @State private var logAsStateOfMind: Bool
 
     private var theme: Theme { themeStore.theme }
 
@@ -27,6 +28,11 @@ struct QuestionEditorView: View {
         _choices = State(initialValue: question?.choices ?? [])
         _placeholder = State(initialValue: question?.placeholderString ?? "")
         _kinds = State(initialValue: Set(question?.reportKinds ?? [.regular]))
+        _logAsStateOfMind = State(initialValue: question?.stateOfMindKind != nil)
+    }
+
+    private var supportsStateOfMind: Bool {
+        type == .multipleChoice || type == .yesNo
     }
 
     /// Existing questions cannot change type once responses reference them —
@@ -107,6 +113,19 @@ struct QuestionEditorView: View {
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 
+                if supportsStateOfMind {
+                    Section {
+                        Toggle("Log as State of Mind", isOn: $logAsStateOfMind)
+                            .tint(.white)
+                    } header: {
+                        sectionHeader("APPLE HEALTH")
+                    } footer: {
+                        Text("When on, each answer to this question also logs a State of Mind entry to Apple Health.")
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+                }
+
                 Section {
                     ForEach(ReportKind.allCases, id: \.self) { kind in
                         Button {
@@ -166,6 +185,8 @@ struct QuestionEditorView: View {
             .filter { !$0.isEmpty }
         let orderedKinds = ReportKind.allCases.filter { kinds.contains($0) }
 
+        let stateOfMindKind = (supportsStateOfMind && logAsStateOfMind) ? "momentaryEmotion" : nil
+
         if let question {
             question.prompt = trimmedPrompt
             if !isTypeLocked {
@@ -174,6 +195,7 @@ struct QuestionEditorView: View {
             question.choices = question.type == .multipleChoice ? cleanedChoices : []
             question.placeholderString = trimmedPlaceholder.isEmpty ? nil : trimmedPlaceholder
             question.reportKinds = orderedKinds
+            question.stateOfMindKind = stateOfMindKind
         } else {
             let newQuestion = QuestionAdmin.makeQuestion(
                 prompt: trimmedPrompt,
@@ -183,6 +205,7 @@ struct QuestionEditorView: View {
                 kinds: orderedKinds,
                 after: questions
             )
+            newQuestion.stateOfMindKind = stateOfMindKind
             context.insert(newQuestion)
         }
 

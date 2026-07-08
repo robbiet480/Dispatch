@@ -5,6 +5,7 @@ import SwiftUI
 struct SurveyFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appDefaults) private var appDefaults
     @Query private var questions: [Question]
     @Environment(ThemeStore.self) private var themeStore
     @State private var controller: SurveyController?
@@ -21,7 +22,8 @@ struct SurveyFlowView: View {
         }
         .task {
             guard controller == nil else { return }
-            let newController = SurveyController(questions: questions, kind: kind, trigger: trigger)
+            let newController = SurveyController(questions: questions, kind: kind, trigger: trigger,
+                                                 appDefaults: appDefaults)
             controller = newController
             await newController.startCapture(since: DispatchStore.lastReportDate(in: modelContext))
         }
