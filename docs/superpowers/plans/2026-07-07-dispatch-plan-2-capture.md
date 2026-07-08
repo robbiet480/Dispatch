@@ -2207,3 +2207,4 @@ git commit -m "test: XCUITest smoke for the full report flow" && git push origin
 - Plan 6: widgets + Control Center + weekly digest
 - Plan 7: search + Spotlight, app lock, backfill
 - Plan 8: iCloud sync config, auto-backup, export/import UI (incl. lenient per-record v1 decode), privacy manifest, accessibility pass, README, release
+- Plan 9: tester experience — onboarding permission cascade, human-readable workout names, async import with progress, sensor failure hints

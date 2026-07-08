@@ -4,6 +4,8 @@ import SwiftUI
 struct CaptureChecklistView: View {
     let outcomes: [SensorKind: SensorOutcome]
 
+    @State private var expandedKind: SensorKind?
+
     private static let rows: [(SensorKind, String, String)] = [
         (.location, "mappin", "LOCATION"),
         (.weather, "cloud.fill", "WEATHER CONDITIONS"),
@@ -17,17 +19,53 @@ struct CaptureChecklistView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ForEach(Self.rows, id: \.0) { kind, icon, label in
-                HStack(spacing: 12) {
-                    Image(systemName: icon).frame(width: 24)
-                    Text(text(for: kind, label: label))
-                        .font(.subheadline.weight(.semibold))
-                        .kerning(1.2)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 12) {
+                        Image(systemName: icon).frame(width: 24)
+                        Text(text(for: kind, label: label))
+                            .font(.subheadline.weight(.semibold))
+                            .kerning(1.2)
+                    }
+                    .opacity(outcomes[kind] == nil ? 0.55 : 1)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard isTappable(kind) else { return }
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            expandedKind = (expandedKind == kind) ? nil : kind
+                        }
+                    }
+                    .accessibilityIdentifier("sensor-row-\(kind.rawValue)")
+
+                    if expandedKind == kind, let hint = hint(for: kind) {
+                        Text(hint)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 36)
+                            .accessibilityIdentifier("sensor-hint-\(kind.rawValue)")
+                    }
                 }
-                .opacity(outcomes[kind] == nil ? 0.55 : 1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
+    }
+
+    private func isTappable(_ kind: SensorKind) -> Bool {
+        switch outcomes[kind] {
+        case .unavailable, .disabled: true
+        default: false
+        }
+    }
+
+    private func hint(for kind: SensorKind) -> String? {
+        switch outcomes[kind] {
+        case .unavailable(let reason):
+            SensorFailureHint.hint(for: kind, reason: reason)
+        case .disabled:
+            SensorFailureHint.disabledHint(for: kind)
+        default:
+            nil
+        }
     }
 
     private func text(for kind: SensorKind, label: String) -> String {

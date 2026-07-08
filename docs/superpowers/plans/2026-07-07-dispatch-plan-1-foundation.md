@@ -2131,3 +2131,4 @@ git commit -m "feat: Dispatch app shell (XcodeGen) and CI"
 6. Plan 6 — widgets + Control Center + weekly digest (Foundation Models)
 7. Plan 7 — search + Spotlight, app lock, backfill
 8. Plan 8 — iCloud sync config, auto-backup, export UI, privacy manifest, accessibility pass, README, release
+9. Plan 9 — tester experience: onboarding permission cascade, human-readable workout names, async import with progress, sensor failure hints
