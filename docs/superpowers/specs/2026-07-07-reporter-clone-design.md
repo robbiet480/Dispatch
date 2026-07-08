@@ -53,6 +53,7 @@ the v1 format (Robbie's real export) one-way.
 | `sortOrder`, `isEnabled` | v2 fields |
 | `stateOfMindKind` | v2, optional: maps a multi-choice question's options onto an HKStateOfMind valence scale (e.g. anxiety None→Extreme). Present ⇒ answers write State of Mind samples |
 | `notificationAnswerable` | v2, derived: yes/no & multi-choice ⇒ answerable from the notification |
+| `reportKinds` | v2: which report kinds show this question — subset of `{regular, wake, sleep}`, default `{regular}` (e.g. "How did you sleep?" → `{wake}`) |
 
 Question types (verified against v1 export): 0=Tokens, 1=Multi-Choice,
 2=Yes/No, 3=Location, 4=People, 5=Number, 6=Note.
@@ -79,6 +80,15 @@ v2 changes:
   answers (for dedupe/undo).
 - `focus`: optional `{label?, isFocused}` — active Focus at report time
   (label when a Focus Filter is configured, boolean otherwise).
+- `kind`: `regular | wake | sleep`. The original's AWAKE/ASLEEP toggle
+  filed wake and sleep reports; Dispatch files them automatically from the
+  sleep-derived window (manual toggle still works) and shows only the
+  questions targeted at that kind.
+- `timeZone`: IANA identifier captured per report — the v1 export spans
+  Oakland and NYC, and day-grouping/stats are wrong without it. v1 imports
+  derive it from the date's UTC offset + location where possible.
+- `isBackdated`: bool — report filed after the fact (see backfill, §3);
+  excluded from response-latency stats but included everywhere else.
 
 ### Response
 
@@ -103,11 +113,16 @@ Same surface as the original, plus modern rows:
   "27,851 STEPS TAKEN", "UNABLE TO DETECT X" on failure) with first
   question below; then one question per page; progress bar; CANCEL/dots/NEXT.
 - **Reports list** — swipeable stats header (reports/days/avg;
-  tokens/locations/people), day-grouped rows (time + place), detail view
-  now including health readings and trigger type.
+  tokens/locations/people), day-grouped rows (time + place, wake/sleep
+  glyphs), detail view now including health readings, Focus, and trigger
+  type. **Search bar**: full-text over note text, tokens, people, and place
+  names. **Backfill**: a "+" entry point files a report for an earlier
+  time (date picker, `isBackdated`, sensors skipped except what HealthKit
+  can answer historically).
 - **Settings** — SCHEDULE (Notifications, Triggers), SURVEY (Questions,
-  Sensors), DATA (Export, Import, iCloud), INTERFACE (5 theme swatches),
-  ABOUT.
+  Sensors), DATA (Export, Import, iCloud, nightly auto-backup toggle),
+  PRIVACY (App lock via Face ID/LocalAuthentication), INTERFACE (5 theme
+  swatches), ABOUT.
 - **Notification settings** — alerts/day, distribution (Random /
   Semi-random / Regular), fixed times, next-alert readout.
 - **Trigger settings** (new) — toggles: prompt on arrival, on departure,
@@ -162,7 +177,12 @@ Regular distributions + fixed scheduled times; seeded RNG for tests.
 **Interactive notifications** — yes/no and multi-choice prompts carry
 UNNotificationActions; answering from the notification creates a minimal
 report (`trigger: notification`, sensors captured in a background task,
-remaining questions skipped). Time-sensitive interruption level.
+remaining questions skipped). Every prompt also carries a **Snooze 15m**
+action. Time-sensitive interruption level.
+
+**Wake/sleep reports** — the sleep-derived window (or manual toggle) files
+`wake` and `sleep` kind reports showing only questions targeted at those
+kinds, matching the original's behavior.
 
 Re-plans on: settings change, awake window change, foreground, daily
 background refresh.
@@ -175,6 +195,12 @@ background refresh.
 - **Export**: v2 JSON (`schemaVersion: 2`); CSV one row per report
   (health readings as columns, tokens `|`-joined); share sheet.
 - **Backups**: full v2 JSON incl. settings; listable/restorable/shareable.
+  Optional **nightly auto-backup** (BGTaskScheduler) writing to an iCloud
+  Drive folder so a plaintext copy always exists outside the SwiftData
+  store.
+- **Spotlight**: reports indexed via CoreSpotlight (date, place, note
+  snippets, tokens) so they surface in system search; index rebuilt on
+  import/restore.
 - **iCloud**: SwiftData CloudKit mirroring, toggleable; app fully functional
   without the entitlement (forkers without paid accounts — WeatherKit,
   iCloud, and even HealthKit degrade to off).
@@ -226,14 +252,29 @@ next-prompt countdown; tap → new report) and a Control Center control
   Reporter app and its creators as inspiration.
 - No personal data committed (screenshots + export gitignored).
 
-## 12. v2 backlog (documented, not built)
+## 12. Platform requirements
+
+- **Privacy manifest** (`PrivacyInfo.xcprivacy`) covering all data types
+  collected, plus complete purpose strings for location, HealthKit,
+  microphone, photos, contacts, Focus status, and notifications.
+- **App lock**: optional Face ID/passcode gate (LocalAuthentication) on
+  launch and on returning from background after a grace period.
+- **Accessibility**: Dynamic Type throughout, VoiceOver labels/values on
+  custom charts and the hexagon/report controls, sufficient contrast in
+  all five themes.
+- **Background budget**: BGTaskScheduler tasks (daily re-plan, nightly
+  auto-backup, weekly digest) coalesced and tolerant of iOS deferrals.
+
+## 13. v2 backlog (documented, not built)
 
 Apple Watch app; Live Activities (pending-report countdown); Journaling
 Suggestions API integration; calendar (EventKit) and now-playing context
 sensors; motion-activity context; voice dictation for note answers;
-Dropbox export.
+Dropbox export; **conditional questions** (branch on a prior answer);
+**correlation explorer** (pivot any question against another /
+location / health metric).
 
-## 13. Build order (summary; detailed plan follows in writing-plans)
+## 14. Build order (summary; detailed plan follows in writing-plans)
 
 1. Scaffold, themes, SwiftData models, v1/v2 codecs + round-trip tests.
 2. Report flow with mocked context → real capture pipeline (HealthKit hub).
@@ -242,4 +283,6 @@ Dropbox export.
    App Intents.
 5. Visualizations; State of Mind write-through.
 6. Widgets + Control Center; weekly digest.
-7. Export/backup/iCloud, onboarding, About, CI, README, polish.
+7. Search + Spotlight, app lock, backfill.
+8. Export/backup/iCloud + auto-backup, onboarding, About, CI, README,
+   privacy manifest, accessibility pass, polish.
