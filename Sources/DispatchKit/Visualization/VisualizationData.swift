@@ -47,6 +47,19 @@ public enum VisualizationData {
     public static func build(for question: Question, reports: [Report]) -> QuestionVisualization {
         let responses = matchingResponses(for: question, reports: reports)
 
+        // Per-question style override, honored only when compatible with the
+        // question type; incompatible or nil falls through to the type default.
+        if let style = question.visualization, style.isCompatible(with: question.type) {
+            switch style {
+            case .proportion:
+                return buildOptionShares(question: question, responses: responses)
+            case .graph:
+                return buildNumericSeries(responses: responses, reports: reports)
+            case .frequency:
+                return buildFrequency(responses: responses)
+            }
+        }
+
         switch question.type {
         case .yesNo, .multipleChoice:
             return buildOptionShares(question: question, responses: responses)

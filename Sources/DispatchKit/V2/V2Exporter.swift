@@ -12,7 +12,10 @@ public enum V2Exporter {
                        questionType: q.typeRaw, placeholderString: q.placeholderString,
                        choices: q.choices.isEmpty ? nil : q.choices,
                        sortOrder: q.sortOrder, isEnabled: q.isEnabled,
-                       stateOfMindKind: q.stateOfMindKind, reportKinds: q.reportKinds)
+                       stateOfMindKind: q.stateOfMindKind, reportKinds: q.reportKinds,
+                       visualization: q.visualizationRaw,
+                       defaultAnswerString: q.defaultAnswerString,
+                       allowsMultipleSelection: q.allowsMultipleSelectionRaw)
         }
 
         let reports = try context.fetch(

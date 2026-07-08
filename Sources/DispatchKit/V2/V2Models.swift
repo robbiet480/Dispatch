@@ -19,10 +19,17 @@ public struct V2Question: Codable {
     public var isEnabled: Bool
     public var stateOfMindKind: String?
     public var reportKinds: [ReportKind]
+    /// Optional additions (plan 11). Omitted from JSON when nil so older
+    /// exports/import flows are byte-for-byte unaffected.
+    public var visualization: String?
+    public var defaultAnswerString: String?
+    public var allowsMultipleSelection: Bool?
 
     public init(uniqueIdentifier: String, prompt: String, questionType: Int,
                 placeholderString: String?, choices: [String]?, sortOrder: Int,
-                isEnabled: Bool, stateOfMindKind: String?, reportKinds: [ReportKind]) {
+                isEnabled: Bool, stateOfMindKind: String?, reportKinds: [ReportKind],
+                visualization: String? = nil, defaultAnswerString: String? = nil,
+                allowsMultipleSelection: Bool? = nil) {
         self.uniqueIdentifier = uniqueIdentifier
         self.prompt = prompt
         self.questionType = questionType
@@ -32,6 +39,9 @@ public struct V2Question: Codable {
         self.isEnabled = isEnabled
         self.stateOfMindKind = stateOfMindKind
         self.reportKinds = reportKinds
+        self.visualization = visualization
+        self.defaultAnswerString = defaultAnswerString
+        self.allowsMultipleSelection = allowsMultipleSelection
     }
 }
 

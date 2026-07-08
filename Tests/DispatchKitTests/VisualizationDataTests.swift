@@ -340,6 +340,45 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
     }
 }
 
+// MARK: - Visualization style override
+
+@Test func compatibleOverrideSelectsThatBuilder() {
+    // A number question with a compatible .graph override renders the numeric series.
+    let question = makeQuestion(id: "q-num", prompt: "Coffees?", type: .number)
+    question.visualization = .graph
+    let reports = [
+        makeReport(date: Date(timeIntervalSince1970: 100), responses: [makeResponse(questionIdentifier: "q-num", numericResponse: "2")]),
+        makeReport(date: Date(timeIntervalSince1970: 200), responses: [makeResponse(questionIdentifier: "q-num", numericResponse: "4")]),
+    ]
+
+    let result = VisualizationData.build(for: question, reports: reports)
+
+    guard case .numericSeries(let points, let average) = result else {
+        Issue.record("expected .numericSeries, got \(result)")
+        return
+    }
+    #expect(points.count == 2)
+    #expect(abs(average - 3.0) < 0.0001)
+}
+
+@Test func incompatibleOverrideFallsBackToTypeDefault() {
+    // A yesNo question with an incompatible .frequency override still renders option shares.
+    let question = makeQuestion(id: "q-yn", prompt: "Working?", type: .yesNo, choices: ["Yes", "No"])
+    question.visualization = .frequency
+    let reports = [
+        makeReport(responses: [makeResponse(questionIdentifier: "q-yn", answeredOptions: ["Yes"])]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-yn", answeredOptions: ["No"])]),
+    ]
+
+    let result = VisualizationData.build(for: question, reports: reports)
+
+    guard case .optionShares(let shares) = result else {
+        Issue.record("expected .optionShares fallback, got \(result)")
+        return
+    }
+    #expect(shares.count == 2)
+}
+
 // MARK: - VisualizationFilterStore
 
 @Test func filterStoreDefaultsToVisible() {

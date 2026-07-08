@@ -47,6 +47,47 @@ import Testing
     #expect(questions.first?.reportKinds == [.regular, .wake])
 }
 
+@Test func allowsMultipleSelectionDefaultsPreserveTodaysBehavior() {
+    let multi = Question()
+    multi.type = .multipleChoice
+    #expect(multi.allowsMultipleSelectionRaw == nil)
+    #expect(multi.allowsMultipleSelection == true)
+
+    let yesNo = Question()
+    yesNo.type = .yesNo
+    #expect(yesNo.allowsMultipleSelection == false)
+
+    multi.allowsMultipleSelection = false
+    #expect(multi.allowsMultipleSelectionRaw == false)
+    #expect(multi.allowsMultipleSelection == false)
+}
+
+@Test func visualizationAccessorRoundTripsAndIgnoresUnknownRaw() {
+    let question = Question()
+    question.type = .number
+    #expect(question.visualization == nil)
+
+    question.visualization = .graph
+    #expect(question.visualizationRaw == "graph")
+    #expect(question.visualization == .graph)
+
+    question.visualizationRaw = "sparkline-3d"
+    #expect(question.visualization == nil)
+
+    question.visualization = nil
+    #expect(question.visualizationRaw == nil)
+}
+
+@Test func visualizationStyleCompatibility() {
+    #expect(VisualizationStyle.compatibleStyles(for: .yesNo) == [.proportion])
+    #expect(VisualizationStyle.compatibleStyles(for: .multipleChoice) == [.proportion])
+    #expect(VisualizationStyle.compatibleStyles(for: .number) == [.graph])
+    #expect(VisualizationStyle.compatibleStyles(for: .tokens) == [.frequency])
+    #expect(VisualizationStyle.compatibleStyles(for: .people) == [.frequency])
+    #expect(VisualizationStyle.compatibleStyles(for: .location).isEmpty)
+    #expect(VisualizationStyle.compatibleStyles(for: .note).isEmpty)
+}
+
 @Test func cascadeDeletesResponses() throws {
     let container = try DispatchStore.inMemoryContainer()
     let context = ModelContext(container)

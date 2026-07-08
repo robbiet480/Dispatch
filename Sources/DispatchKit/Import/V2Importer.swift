@@ -31,6 +31,9 @@ public enum V2Importer {
             question.isEnabled = dto.isEnabled
             question.stateOfMindKind = dto.stateOfMindKind
             question.reportKinds = dto.reportKinds
+            question.visualizationRaw = dto.visualization
+            question.defaultAnswerString = dto.defaultAnswerString
+            question.allowsMultipleSelectionRaw = dto.allowsMultipleSelection
             summary.questionsImported += 1
         }
 
