@@ -1,33 +1,45 @@
-# Dispatch — an open-source Reporter clone (design spec)
+# Dispatch — a modernized, open-source Reporter clone (design spec)
 
 **Date:** 2026-07-07
 **Status:** Approved by Robbie (pending spec review)
 
 ## 1. Product
 
-Dispatch is a native SwiftUI iPhone app (iOS 17+) that replicates the
-self-tracking loop of Nicholas Felton's discontinued Reporter app:
+Dispatch is a native SwiftUI iPhone app that recreates — and modernizes —
+the self-tracking loop of Nicholas Felton's discontinued Reporter app:
 
-1. Randomly timed local notifications prompt you to file a report.
-2. Starting a report auto-captures sensor context (location, weather,
-   altitude, photo count, ambient audio level, steps, stairs, battery).
-3. You answer a personalized, ordered list of questions (7 types).
-4. Reports are stored locally, synced via iCloud, visualized in-app, and
-   exportable as JSON/CSV.
+1. Prompts arrive via randomly timed notifications **and modern triggers**
+   (arriving/leaving places, waking up, finishing a workout).
+2. Starting a report auto-captures context: location, weather, altitude,
+   ambient audio level, photo count, battery, connection, and a
+   **HealthKit sensor hub** (steps, flights, heart rate, HRV, sleep,
+   workouts, medications, caffeine — each toggleable).
+3. You answer a personalized, ordered list of questions (7 types). Yes/No
+   and multi-choice questions are answerable **directly from the
+   notification**. Mood-type questions write **State of Mind** samples to
+   Apple Health.
+4. Reports are stored locally (SwiftData), synced via iCloud, visualized
+   in-app, summarized weekly by the **on-device LLM**, and exportable as
+   JSON/CSV.
 
-Open source on GitHub under MIT, with an original name ("Dispatch") and an
-original icon. The interaction model and flat color-themed aesthetic follow
-the original; no assets, artwork, icon, or the "Reporter" name are copied.
+**Minimum deployment target: iOS 26** (needed for Foundation Models; also
+simplifies everything else — no availability branching). Open source on
+GitHub under MIT with an original name ("Dispatch") and icon. The
+interaction model and flat color-themed aesthetic follow the original; no
+assets, artwork, or the "Reporter" name are copied.
 
 Reference material (not committed): 21 UI screenshots and
 `reporter-export.json` (94 snapshots, 38 questions) from Robbie's original
-install. The export defines the interchange schema.
+install.
 
 ## 2. Data model
 
-SwiftData models, CloudKit-mirrored (all properties optional or defaulted, no
-unique constraints; dedupe by `uniqueIdentifier` in code). The JSON export
-schema is the source of truth so import/export round-trips.
+SwiftData models, CloudKit-mirrored (all properties optional or defaulted,
+no unique constraints; dedupe by `uniqueIdentifier` in code).
+
+**Schema is v2** — a deliberate superset/break of the original export
+format. `"schemaVersion": 2` at the export root; a legacy importer ingests
+the v1 format (Robbie's real export) one-way.
 
 ### Question
 
@@ -35,208 +47,196 @@ schema is the source of truth so import/export round-trips.
 |---|---|
 | `uniqueIdentifier` | string (UUID or `default-question-N`) |
 | `prompt` | display text |
-| `questionType` | int enum, below |
+| `questionType` | int enum, below (kept v1-compatible) |
 | `placeholderString` | optional (e.g. "No one", "50.00") |
-| `choices` | `[String]` — **not present in export** (`answers: null`); local-only field, seeded per below |
-| `sortOrder` | local-only; export order otherwise |
-| `isEnabled` | local-only; screenshots show ON/OFF toggles |
-| `selectedVisualizations` | pass-through for round-trip fidelity |
+| `choices` | `[String]` — v2 field; v1 export lacked it (`answers: null`), so v1 imports seed empty and options are re-entered in Question Settings |
+| `sortOrder`, `isEnabled` | v2 fields |
+| `stateOfMindKind` | v2, optional: maps a multi-choice question's options onto an HKStateOfMind valence scale (e.g. anxiety None→Extreme). Present ⇒ answers write State of Mind samples |
+| `notificationAnswerable` | v2, derived: yes/no & multi-choice ⇒ answerable from the notification |
 
-Question types (verified against export):
+Question types (verified against v1 export): 0=Tokens, 1=Multi-Choice,
+2=Yes/No, 3=Location, 4=People, 5=Number, 6=Note.
 
-| Int | Type | Answer UI |
-|---|---|---|
-| 0 | Tokens | free-text chips with autocomplete from token vocabulary |
-| 1 | Multi-Choice | option list, one or many selectable (checkmark) |
-| 2 | Yes/No | two-row list |
-| 3 | Location | current place name + Foursquare-style venue text field |
-| 4 | People | like tokens, backed by people vocabulary + contacts autocomplete |
-| 5 | Number | numeric keypad |
-| 6 | Note | free multiline text |
+### Report (snapshot)
 
-Multi-choice caveat: the export does not carry option lists, so imported
-multi-choice questions get their options seeded empty and editable in
-Question Settings. Newly created questions store options locally and export
-them (schema superset; the original app ignores unknown keys).
+v1 fields kept: `uniqueIdentifier`, `date`, `sectionIdentifier`, `battery`,
+`altitude`, `background`, `draft`, `reportImpetus`, `connection`,
+`audio {avg, peak}`, `location {lat/lon/speed/course/accuracy, placemark}`,
+`weather` (WeatherKit-populated subset of the v1 blob), `photoSet`.
 
-### Report (a.k.a. snapshot)
-
-Fields mirror the export exactly: `uniqueIdentifier`, `date`,
-`sectionIdentifier` (`{background}-{yyyy}-{M}-{d}`), `battery` (0–1),
-`steps` (int), `altitude` (m), `background` (0/1), `draft` (0/1),
-`reportImpetus` (int: how the report was started), `connection` (int),
-`audio` (`avg`/`peak` dB floats), `location` (lat/lon, speed, course,
-accuracy + nested `placemark` with locality/thoroughfare/etc.),
-`weather` (full observation blob: tempF/tempC, feelslike, wind, pressure,
-humidity, visibility, uv, precip, stationID, `weather` condition string),
-`photoSet` (array of photo metadata: assetUrl, dimensions, dateTime,
-lat/lon/altitude, depth).
-
-WeatherKit populates a subset of the weather blob (temp, feels-like, wind,
-pressure, humidity, visibility, uv, condition); remaining keys are omitted.
+v2 changes:
+- `steps` moves into `health` (below); v1 importer maps it.
+- `health`: array of typed readings captured at report time —
+  `{type, value, unit, startDate?, endDate?}` — covering steps and flights
+  since last report, latest/avg heart rate, HRV, resting HR, last night's
+  sleep duration & stages summary, workouts today (type/duration/energy),
+  medications logged today, caffeine total. Array-of-readings keeps the
+  schema open for new HealthKit types without migration.
+- `trigger` replaces the overloaded `reportImpetus` semantics (v1 value
+  preserved on import): `manual | notification | visitArrival |
+  visitDeparture | wake | workoutEnd | widget | control | intent`.
+- `stateOfMindSampleIDs`: HealthKit UUIDs written from this report's
+  answers (for dedupe/undo).
 
 ### Response
 
-One per answered question per report: `uniqueIdentifier`, `questionPrompt`
-(string join key — matches original behavior), plus exactly one payload:
-
-| Payload | For type | Shape |
-|---|---|---|
-| `tokens` | 0, 4 | `[{uniqueIdentifier, text}]` |
-| `answeredOptions` | 1, 2 | `[String]` |
-| `locationResponse` | 3 | `{text, foursquareVenueId?, location{...}, uniqueIdentifier}` |
-| `numericResponse` | 5 | string-encoded number |
-| `textResponses` | 6 | `[{uniqueIdentifier, text}]` |
-| *(none)* | any | question shown but skipped |
+Unchanged from v1 (join key `questionPrompt`, one payload):
+`tokens` (types 0,4), `answeredOptions` (1,2), `locationResponse` (3),
+`numericResponse` (5), `textResponses` (6), or none = skipped.
 
 ### Vocabularies
 
-`Token` and `Person` entities (`text`, usage count derived by query) power
-autocomplete and the Custom Tokens screen ("41 TOKENS — Used N times in M
-questions").
+`Token` and `Person` entities with usage counts (Custom Tokens screen).
 
 ## 3. Screens
 
-- **Onboarding** — 4-page carousel (teal/pink/chartreuse/gray): value prop,
-  data privacy, sensor permission priming, customization. Geometric
-  triangle-grid illustrations drawn in SwiftUI/Canvas (original-but-similar).
-  Ends with DONE.
-- **Home** — full-bleed theme color; centered hexagon button ("Edit your
-  questions" when empty → question settings; otherwise decorative status);
-  bottom bar: REPORT (new report) + AWAKE/ASLEEP toggle; top bar: reports
-  list (hamburger) + settings (gear). When reports exist: swipeable
-  per-question visualization pages with a "Filter Visualizations…" bar and
-  page dots.
-- **Report flow** — full-screen cover. Page 1: sensor capture checklist
-  ticking through "GETTING WEATHER CONDITIONS…" → results ("207 FEET",
-  "EXTREMELY QUIET 24.40 DB", "27,851 STEPS TAKEN", "7 STAIRCASES UP 2
-  DOWN", "UNABLE TO DETECT WEATHER" on failure), with the first question
-  visible below. Subsequent pages: one question each. Progress bar top,
-  CANCEL / page-dots / NEXT (→ DONE) bottom. Answers save on DONE; CANCEL
-  discards (draft flag reserved for future).
-- **Reports list** — swipeable stats header (page 1: N REPORTS / N DAYS /
-  AVG PER DAY; page 2: N TOKENS / N LOCATIONS / N PEOPLE), then reports
-  grouped by day ("THURSDAY — DEC 13, 2018"), each row time + place. Tap →
-  report detail (sensor summary + responses, editable).
-- **Settings** — sections: SCHEDULE (Notifications → next alert time),
-  SURVEY (Questions, Sensors), DATA (Export, iCloud sync toggle with last-
-  synced caption), INTERFACE (5 theme swatches: tomato, teal, gray, pink,
-  chartreuse), REPORTER→DISPATCH (About).
-- **Notification settings** — next-notification readout, alerts/day stepper,
-  distribution picker (Random: N random in 24h; Semi-random: 1 random per
-  24/N-hour window; Regular: every 24/N hours), plus fixed scheduled times.
-- **Question settings** — reorderable list, each row prompt + "Type — N
-  responses" + ON/OFF toggle; ADD A QUESTION… → editor (prompt, type,
-  choices for multi-choice, placeholder).
-- **Custom tokens** — vocabulary list with usage counts; rename/delete.
-- **Sensor settings** — per-sensor toggles (Location, Weather, Elevation,
-  Photos, Audio, Steps, Stairs) + units (temperature F/C, length ft/m).
-- **Export settings** — Export as CSV, Export as JSON, Create Backup +
-  backup list (restore/delete/share), same explanatory copy structure.
+Same surface as the original, plus modern rows:
 
-## 4. Sensor capture
+- **Onboarding** — 4-page carousel; original-but-similar geometric
+  triangle-grid illustrations in SwiftUI Canvas; permission priming.
+- **Home** — theme-colored; hexagon; REPORT button; AWAKE/ASLEEP indicator
+  (now auto-driven, see §5, tap to override); swipeable per-question
+  visualization pages + filter bar; **weekly digest card** (see §7).
+- **Report flow** — sensor-capture checklist page ("GETTING WEATHER…",
+  "27,851 STEPS TAKEN", "UNABLE TO DETECT X" on failure) with first
+  question below; then one question per page; progress bar; CANCEL/dots/NEXT.
+- **Reports list** — swipeable stats header (reports/days/avg;
+  tokens/locations/people), day-grouped rows (time + place), detail view
+  now including health readings and trigger type.
+- **Settings** — SCHEDULE (Notifications, Triggers), SURVEY (Questions,
+  Sensors), DATA (Export, Import, iCloud), INTERFACE (5 theme swatches),
+  ABOUT.
+- **Notification settings** — alerts/day, distribution (Random /
+  Semi-random / Regular), fixed times, next-alert readout.
+- **Trigger settings** (new) — toggles: prompt on arrival, on departure,
+  on wake, after workouts; per-trigger cooldown.
+- **Question settings** — reorder, toggle, add/edit (prompt, type, choices,
+  placeholder, State of Mind mapping for multi-choice).
+- **Custom tokens** — vocabulary with usage counts.
+- **Sensor settings** — toggles: Location, Weather, Elevation, Photos,
+  Audio, Battery + a HealthKit section (Steps, Flights, Heart, HRV, Sleep,
+  Workouts, Medications, Caffeine); units (°F/°C, ft/m).
+- **Export settings** — Export CSV / Export JSON (v2) / Import (v1 or v2) /
+  backups list.
 
-Each sensor is an independent structured-concurrency task with a per-sensor
-timeout (~10s); failure or disabled toggle → "UNABLE TO DETECT X" /
-omitted from the saved report. Sources:
+## 4. Context capture
 
-| Sensor | API |
+Independent structured-concurrency tasks, per-sensor ~10s timeout; failure
+or disabled toggle degrades to "UNABLE TO DETECT X" / omission.
+
+| Source | API |
 |---|---|
-| Location + placemark | CoreLocation (when-in-use) + CLGeocoder |
-| Weather | WeatherKit (needs entitlement; degrades gracefully without) |
+| Location + placemark | CoreLocation (when-in-use + always for visits) + CLGeocoder |
+| Weather | WeatherKit (entitlement; degrades gracefully) |
 | Altitude | CLLocation.altitude |
-| Steps / stairs | CMPedometer since last report (falls back to midnight) |
-| Audio dB | AVAudioRecorder metering, ~2s sample → avg/peak; label scale ("EXTREMELY QUIET" → "EXTREMELY LOUD") |
-| Photos since last report | PhotoKit fetch with `creationDate > lastReportDate` (limited-access OK) |
-| Battery | UIDevice.batteryLevel |
-| Connection | NWPathMonitor (wifi/cellular/none → int) |
+| Audio dB | AVAudioRecorder metering ~2s → avg/peak + label scale |
+| Photos since last report | PhotoKit `creationDate > lastReportDate` |
+| Battery / connection | UIDevice / NWPathMonitor |
+| **All health metrics** | HealthKit statistics + sample queries (steps, flights, HR, HRV, resting HR, sleep, workouts, medications, caffeine). No CoreMotion anywhere. |
+| **State of Mind** | HKStateOfMind: written from mapped questions; latest sample also read as context |
 
-Permissions are requested just-in-time mid-flow (as the original does), with
-onboarding page 3 priming the ask.
+Permissions requested just-in-time mid-flow; onboarding primes them.
 
-## 5. Notification engine
+## 5. Prompting engine
 
-`UNUserNotificationCenter` local notifications. Scheduler is a pure function
-`plan(settings, awakeWindow, seed, day) -> [Date]` (seeded RNG → unit
-testable):
+Two layers, both funnel into one `PromptScheduler`:
 
-- **Random** — N uniformly random times in the awake window.
-- **Semi-random** — awake window split into N equal slots, one random time
-  per slot.
-- **Regular** — every windowLength/N from window start.
-- **Scheduled** — fixed times, appended regardless of distribution.
-- **Awake/Asleep** — ASLEEP suppresses pending prompts until toggled AWAKE;
-  toggling also brackets the awake window used by the planner (like the
-  original's wake/sleep reports).
+**Timed (v1 parity)** — pure function
+`plan(settings, awakeWindow, seed, day) -> [Date]`; Random / Semi-random /
+Regular distributions + fixed scheduled times; seeded RNG for tests.
 
-Re-plans on: settings change, awake/asleep toggle, app foreground, and a
-daily background refresh. Notifications deep-link into a new report
-(`reportImpetus` distinguishes notification vs. manual starts).
+**Event triggers (v2)** —
+- **Visits**: CLMonitor/CLVisit arrival & departure → prompt (per-trigger
+  cooldown, quiet during asleep window).
+- **Wake/sleep**: awake window derived from last night's HealthKit sleep
+  samples (fallback: manual toggle, which also records wake/sleep like the
+  original). Waking triggers an optional morning prompt.
+- **Workout end**: HKObserverQuery on workouts → prompt.
+- **App Intents**: `StartReportIntent`, `AnswerQuestionIntent`,
+  `ToggleAwakeIntent` exposed to Shortcuts/Siri so arbitrary user
+  automations (charging, Focus change, CarPlay) can trigger reports.
+
+**Interactive notifications** — yes/no and multi-choice prompts carry
+UNNotificationActions; answering from the notification creates a minimal
+report (`trigger: notification`, sensors captured in a background task,
+remaining questions skipped). Time-sensitive interruption level.
+
+Re-plans on: settings change, awake window change, foreground, daily
+background refresh.
 
 ## 6. Import / export / sync
 
-- **Import** — Settings → Data. Reads `reporter-export.json` via file
-  picker; upserts by `uniqueIdentifier` (idempotent, re-runnable). Token and
-  people vocabularies rebuilt from responses. 94 snapshots + 38 questions
-  from Robbie's export must import cleanly.
-- **Export JSON** — `{"questions": [...], "snapshots": [...]}` byte-
-  compatible in structure with the original (superset allowed); share sheet.
-- **Export CSV** — one row per report: date, sensor columns, one column per
-  question prompt (tokens joined with `|`).
-- **Backups** — full JSON (questions + snapshots + vocabularies + settings)
-  stored in the app container, listable/restorable/shareable.
-- **iCloud sync** — SwiftData CloudKit mirroring, toggleable in settings.
-  App is fully functional with sync off or when built without the iCloud
-  entitlement (forkers without paid dev accounts).
+- **Import**: file picker; v1 (original Reporter export — Robbie's 94
+  snapshots + 38 questions must import cleanly) and v2; upsert by
+  `uniqueIdentifier`, idempotent; vocabularies rebuilt from responses.
+- **Export**: v2 JSON (`schemaVersion: 2`); CSV one row per report
+  (health readings as columns, tokens `|`-joined); share sheet.
+- **Backups**: full v2 JSON incl. settings; listable/restorable/shareable.
+- **iCloud**: SwiftData CloudKit mirroring, toggleable; app fully functional
+  without the entitlement (forkers without paid accounts — WeatherKit,
+  iCloud, and even HealthKit degrade to off).
 
-## 7. Visualizations
+## 7. Visualizations & intelligence
 
-Swift Charts, one swipeable page per enabled question on Home, filter bar to
-narrow which questions show:
+**Swift Charts** per-question pages with filter bar: Yes/No → full-height
+stacked % bars; Multi-Choice → option distribution; Number → average +
+line; Tokens/People → ranked frequency; Location → top places; Note →
+recents. Health readings get sparkline rows on the report detail.
 
-| Type | Visualization |
-|---|---|
-| Yes/No | full-height stacked proportional bars with % labels (per screenshot) |
-| Multi-Choice | horizontal bar distribution of options |
-| Number | average + line chart over time |
-| Tokens / People | ranked frequency list (top N) |
-| Location | ranked top places |
-| Note | most recent entries list |
+**Weekly digest (Foundation Models, on-device)**: a scheduled Friday job
+feeds the week's reports into the on-device LLM → 3–5 sentence natural-
+language summary + notable correlations ("anxiety was Low in 80% of
+reports where you'd worked out"), rendered as a Home card and a
+notification. Also: token auto-suggestion for note answers. Zero cloud;
+feature hides gracefully if the model is unavailable (low storage, etc.).
 
-## 8. Error handling
+## 8. Widgets & Control Center
 
-- Sensor failures never block a report; they degrade to "unable to detect".
-- Import validates JSON shape and reports per-record failures (skip + count)
-  rather than aborting.
-- Notification permission denied → banner in notification settings linking
-  to system Settings.
-- WeatherKit/iCloud entitlement absence detected at runtime → features
-  quietly disabled with an explanatory row.
+WidgetKit: home-screen + lock-screen widgets (streak, reports today,
+next-prompt countdown; tap → new report) and a Control Center control
+(one-tap Start Report). All deep-link via App Intents from §5.
 
-## 9. Testing
+## 9. Error handling
 
-- **Unit:** codec round-trip (import Robbie's real export → export →
-  semantically equal JSON; real file stays local, CI uses a synthetic
-  fixture); scheduler determinism and window math (DST edges); upsert
-  idempotency; CSV shape.
-- **UI:** XCUITest smoke — complete a report end-to-end with mocked sensors.
-- **CI:** GitHub Actions, `xcodebuild test` on iOS simulator.
+- Sensor/HealthKit failures never block a report (degrade + omit).
+- Import validates shape; per-record skip + error count, never aborts.
+- Notification permission denied → settings banner linking to Settings.
+- Missing entitlements (WeatherKit/iCloud/HealthKit) detected at runtime →
+  feature rows disabled with explanation.
+- State of Mind writes are best-effort; failures logged, never surfaced
+  mid-survey.
 
-## 10. Repository
+## 10. Testing
+
+- **Unit**: v1→model→v2 import/export round-trip against Robbie's real
+  export locally (synthetic fixture in CI); scheduler determinism + DST
+  window math; trigger cooldown logic; upsert idempotency; CSV shape;
+  State of Mind mapping.
+- **UI**: XCUITest smoke — complete a report with mocked sensors.
+- **CI**: GitHub Actions, `xcodebuild test` on iOS 26 simulator.
+
+## 11. Repository
 
 - GitHub `robbiet480/Dispatch`, MIT.
-- README: hero screenshots of Dispatch itself, feature list, build steps, entitlement notes
-  (WeatherKit, iCloud, HealthKit-free), import instructions, credit to the
-  original Reporter app and its creators as inspiration.
-- No personal data committed: screenshots and `reporter-export.json` stay
-  out of the repo (gitignored).
+- README: screenshots of Dispatch itself, feature list, build steps,
+  entitlement notes, v1-import instructions, credit to the original
+  Reporter app and its creators as inspiration.
+- No personal data committed (screenshots + export gitignored).
 
-## 11. Build order (summary; detailed plan follows in writing-plans)
+## 12. v2 backlog (documented, not built)
 
-1. Xcode project scaffold, themes, SwiftData models + JSON codec with
-   round-trip tests (import CLI-testable early).
-2. Report flow with mock sensors → real sensor pipeline.
-3. Home, reports list/detail, question settings, token vocabulary.
-4. Notification engine.
-5. Visualizations.
-6. Export/backup/iCloud, onboarding, About, polish, CI, README.
+Apple Watch app; Live Activities (pending-report countdown); Journaling
+Suggestions API integration; calendar (EventKit) and now-playing context
+sensors; motion-activity context; voice dictation for note answers;
+Dropbox export.
+
+## 13. Build order (summary; detailed plan follows in writing-plans)
+
+1. Scaffold, themes, SwiftData models, v1/v2 codecs + round-trip tests.
+2. Report flow with mocked context → real capture pipeline (HealthKit hub).
+3. Home, reports list/detail, question settings, vocabularies.
+4. Prompting engine: timed → interactive notifications → event triggers →
+   App Intents.
+5. Visualizations; State of Mind write-through.
+6. Widgets + Control Center; weekly digest.
+7. Export/backup/iCloud, onboarding, About, CI, README, polish.
