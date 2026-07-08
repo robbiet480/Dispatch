@@ -12,10 +12,35 @@ public enum QuestionType: Int, Codable, Sendable, CaseIterable {
     case note = 6
 }
 
+/// Wraps a decodable element to capture failures on a per-record basis.
+/// If decoding fails, value is nil; the container itself doesn't throw.
+struct FailableElement<T: Decodable>: Decodable {
+    let value: T?
+
+    init(from decoder: Decoder) throws {
+        value = try? T(from: decoder)
+    }
+}
+
 /// Decode-only DTOs mirroring the original Reporter `reporter-export.json`.
 public struct V1Export: Decodable {
     public var questions: [V1Question]
     public var snapshots: [V1Snapshot]
+    public var decodeFailures: Int = 0
+
+    enum CodingKeys: String, CodingKey {
+        case questions, snapshots
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let questionsContainer = try container.decode([FailableElement<V1Question>].self, forKey: .questions)
+        let snapshotsContainer = try container.decode([FailableElement<V1Snapshot>].self, forKey: .snapshots)
+
+        questions = questionsContainer.compactMap { $0.value }
+        snapshots = snapshotsContainer.compactMap { $0.value }
+        decodeFailures = (questionsContainer.count - questions.count) + (snapshotsContainer.count - snapshots.count)
+    }
 
     public static func decode(from data: Data) throws -> V1Export {
         try JSONDecoder().decode(V1Export.self, from: data)

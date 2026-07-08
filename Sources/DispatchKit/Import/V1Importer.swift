@@ -13,12 +13,14 @@ public enum V1Importer {
     /// Idempotent: records are upserted by uniqueIdentifier; re-importing
     /// the same file changes nothing. Structurally malformed JSON (fails to
     /// decode as `V1Export`) throws and aborts the import. Within a
-    /// successfully decoded export, only per-snapshot date-parse failures
-    /// are skipped and counted via `ImportSummary.skipped`; every other
-    /// field is imported best-effort even when absent.
+    /// successfully decoded export, per-record decode failures (malformed questions
+    /// or snapshots) and per-snapshot date-parse failures are skipped and counted
+    /// via `ImportSummary.skipped`; every other field is imported best-effort
+    /// even when absent.
     public static func importExport(_ data: Data, into context: ModelContext) throws -> ImportSummary {
         let export = try V1Export.decode(from: data)
         var summary = ImportSummary()
+        summary.skipped += export.decodeFailures
 
         for (index, v1q) in export.questions.enumerated() {
             let question = try fetchOrCreateQuestion(id: v1q.uniqueIdentifier, in: context)

@@ -64,3 +64,41 @@ import Testing
     #expect(summary.questionsImported == 38)
     #expect(summary.skipped == 0)
 }
+
+@Test func skipsMalformedSnapshotButImportsGoodOnes() throws {
+    // One good snapshot, one malformed (bad date type).
+    let json = Data("""
+    {"questions": [{"questionType": 0, "prompt": "Test", "uniqueIdentifier": "q-1"}], "snapshots": [
+        {"uniqueIdentifier": "snap-good", "date": "2016-02-11T19:08:54-0400"},
+        {"uniqueIdentifier": "snap-bad", "date": {"nested": true}}
+    ]}
+    """.utf8)
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let summary = try V1Importer.importExport(json, into: context)
+
+    #expect(summary.reportsImported == 1)
+    #expect(summary.skipped == 1)
+    let reports = try context.fetch(FetchDescriptor<Report>())
+    #expect(reports.count == 1)
+    #expect(reports.first?.uniqueIdentifier == "snap-good")
+}
+
+@Test func skipsMalformedQuestionButImportsGoodOnes() throws {
+    // One good question, one malformed (missing required field).
+    let json = Data("""
+    {"questions": [
+        {"questionType": 0, "prompt": "Good Q", "uniqueIdentifier": "q-good"},
+        {"questionType": 1, "uniqueIdentifier": "q-bad"}
+    ], "snapshots": []}
+    """.utf8)
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let summary = try V1Importer.importExport(json, into: context)
+
+    #expect(summary.questionsImported == 1)
+    #expect(summary.skipped == 1)
+    let questions = try context.fetch(FetchDescriptor<Question>())
+    #expect(questions.count == 1)
+    #expect(questions.first?.uniqueIdentifier == "q-good")
+}
