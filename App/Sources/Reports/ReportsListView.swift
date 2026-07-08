@@ -11,7 +11,11 @@ struct ReportsListView: View {
 
     private var theme: Theme { themeStore.theme }
 
-    private var sections: [DaySection] { ReportsOverview.sections(from: reports) }
+    @State private var searchQuery = ""
+
+    private var filteredReports: [Report] { ReportSearch.filter(reports, query: searchQuery) }
+
+    private var sections: [DaySection] { ReportsOverview.sections(from: filteredReports) }
 
     var body: some View {
         ZStack {
@@ -110,12 +114,15 @@ struct ReportsListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .searchable(text: $searchQuery, prompt: "Search reports")
         .accessibilityIdentifier("reports-list")
     }
 
     private func delete(at offsets: IndexSet, in section: DaySection) {
         for offset in offsets {
-            context.delete(section.reports[offset])
+            let report = section.reports[offset]
+            SpotlightIndexer.deindex(reportID: report.uniqueIdentifier)
+            context.delete(report)
         }
         try? context.save()
     }

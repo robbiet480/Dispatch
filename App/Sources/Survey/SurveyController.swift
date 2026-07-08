@@ -64,6 +64,8 @@ final class SurveyController {
                                             timeZone: TimeZone.current, outcomes: outcomes,
                                             answers: survey.drafts(), in: context)
 
+        SpotlightIndexer.index(report: report)
+
         guard !isTestEnvironment else { return }
         let savedQuestions = questions
         Task {
