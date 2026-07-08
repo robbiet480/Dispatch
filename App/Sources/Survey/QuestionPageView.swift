@@ -32,22 +32,26 @@ struct QuestionPageView: View {
                            tokens: currentTokens,
                            onChange: { onAnswer(.tokens($0)) })
         case .number:
-            TextField(page.placeholder ?? "0", text: numberBinding)
-                .keyboardType(.decimalPad)
-                .font(.title2)
-                .padding()
-                .accessibilityIdentifier("number-field")
+            LocalTextEditorField(
+                initialText: { if case .number(let number) = value { number } else { "" } }(),
+                onChange: { onAnswer($0.isEmpty ? .skipped : .number($0)) },
+                placeholder: page.placeholder ?? "0",
+                identifier: "number-field",
+                style: .field(keyboard: .decimalPad))
         case .note:
-            TextEditor(text: noteBinding)
-                .frame(minHeight: 160)
-                .padding(.horizontal)
-                .scrollContentBackground(.hidden)
-                .accessibilityIdentifier("note-editor")
+            LocalTextEditorField(
+                initialText: { if case .note(let note) = value { note } else { "" } }(),
+                onChange: { onAnswer($0.isEmpty ? .skipped : .note($0)) },
+                placeholder: nil,
+                identifier: "note-editor",
+                style: .editor)
         case .location:
-            TextField(page.placeholder ?? "Where are you?", text: locationBinding)
-                .font(.title2)
-                .padding()
-                .accessibilityIdentifier("location-field")
+            LocalTextEditorField(
+                initialText: { if case .location(let text) = value { text } else { "" } }(),
+                onChange: { onAnswer($0.isEmpty ? .skipped : .location(text: $0)) },
+                placeholder: page.placeholder ?? "Where are you?",
+                identifier: "location-field",
+                style: .field(keyboard: .default))
         }
     }
 
@@ -60,23 +64,58 @@ struct QuestionPageView: View {
         if case .tokens(let tokens) = value { return tokens }
         return []
     }
+}
 
-    private var numberBinding: Binding<String> {
-        Binding(
-            get: { if case .number(let number) = value { number } else { "" } },
-            set: { onAnswer($0.isEmpty ? .skipped : .number($0)) })
+/// A text input whose live keystrokes are held in local `@State`, seeded once
+/// from the survey's answer value and pushed back out via `.onChange`.
+///
+/// This exists to fix a keyboard-freeze bug: previously each field's
+/// `Binding` read/wrote directly through the app-wide `@Observable`
+/// `SurveyViewModel`. Because that view model tracks all answers as a single
+/// dictionary property, every keystroke invalidated the observable graph,
+/// which caused the parent `SurveyFlowView` (and its `TabView`/`ForEach` over
+/// *all* survey pages) to re-evaluate its body on every keystroke — freezing
+/// the keyboard and even dropping/garbling characters under load. Keeping
+/// the live text local means typing only touches this leaf view's state.
+private struct LocalTextEditorField: View {
+    enum Style {
+        case field(keyboard: UIKeyboardType)
+        case editor
     }
 
-    private var noteBinding: Binding<String> {
-        Binding(
-            get: { if case .note(let note) = value { note } else { "" } },
-            set: { onAnswer($0.isEmpty ? .skipped : .note($0)) })
-    }
+    let initialText: String
+    let onChange: (String) -> Void
+    let placeholder: String?
+    let identifier: String
+    let style: Style
 
-    private var locationBinding: Binding<String> {
-        Binding(
-            get: { if case .location(let text) = value { text } else { "" } },
-            set: { onAnswer($0.isEmpty ? .skipped : .location(text: $0)) })
+    @State private var text: String = ""
+    @State private var hasSeeded = false
+
+    var body: some View {
+        Group {
+            switch style {
+            case .field(let keyboard):
+                TextField(placeholder ?? "", text: $text)
+                    .keyboardType(keyboard)
+                    .font(.title2)
+                    .padding()
+            case .editor:
+                TextEditor(text: $text)
+                    .frame(minHeight: 160)
+                    .padding(.horizontal)
+                    .scrollContentBackground(.hidden)
+            }
+        }
+        .accessibilityIdentifier(identifier)
+        .onAppear {
+            guard !hasSeeded else { return }
+            hasSeeded = true
+            text = initialText
+        }
+        .onChange(of: text) { _, newValue in
+            onChange(newValue)
+        }
     }
 }
 
