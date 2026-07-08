@@ -1,0 +1,58 @@
+import Foundation
+import SwiftData
+
+public enum V2Exporter {
+    public static func export(from context: ModelContext) throws -> V2Export {
+        var export = V2Export()
+
+        let questions = try context.fetch(
+            FetchDescriptor<Question>(sortBy: [SortDescriptor(\.sortOrder)]))
+        export.questions = questions.map { q in
+            V2Question(uniqueIdentifier: q.uniqueIdentifier, prompt: q.prompt,
+                       questionType: q.typeRaw, placeholderString: q.placeholderString,
+                       choices: q.choices.isEmpty ? nil : q.choices,
+                       sortOrder: q.sortOrder, isEnabled: q.isEnabled,
+                       stateOfMindKind: q.stateOfMindKind, reportKinds: q.reportKinds)
+        }
+
+        let reports = try context.fetch(
+            FetchDescriptor<Report>(sortBy: [SortDescriptor(\.date)]))
+        export.reports = reports.map { r in
+            var dto = V2Report(uniqueIdentifier: r.uniqueIdentifier, date: r.date,
+                               timeZone: r.timeZoneIdentifier, kind: r.kind, trigger: r.trigger)
+            dto.legacyImpetus = r.legacyImpetus
+            dto.isBackdated = r.isBackdated
+            dto.isDraft = r.isDraft
+            dto.wasInBackground = r.wasInBackground
+            dto.battery = r.battery
+            dto.altitudeMeters = r.altitudeMeters
+            dto.connection = r.connection
+            dto.audio = r.audio
+            dto.location = r.location
+            dto.weather = r.weather
+            dto.photos = r.photos.isEmpty ? nil : r.photos
+            dto.health = r.health.isEmpty ? nil : r.health
+            dto.focus = r.focus
+            dto.stateOfMindSampleIDs = r.stateOfMindSampleIDs.isEmpty ? nil : r.stateOfMindSampleIDs
+            let responses = r.responses
+                .sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
+                .map { resp in
+                    var rdto = V2Response(uniqueIdentifier: resp.uniqueIdentifier,
+                                          questionPrompt: resp.questionPrompt)
+                    rdto.tokens = resp.tokens
+                    rdto.answeredOptions = resp.answeredOptions
+                    rdto.locationResponse = resp.locationResponse
+                    rdto.numericResponse = resp.numericResponse
+                    rdto.textResponses = resp.textResponses
+                    return rdto
+                }
+            dto.responses = responses.isEmpty ? nil : responses
+            return dto
+        }
+        return export
+    }
+
+    public static func exportData(from context: ModelContext) throws -> Data {
+        try JSONEncoder.v2.encode(try export(from: context))
+    }
+}
