@@ -94,6 +94,14 @@ struct DispatchApp: App {
             notificationScheduler: scheduler,
             notificationPrefs: notificationPrefs
         )
+
+        // Register the workout-end observer at LAUNCH, not just onAppear:
+        // HealthKit background delivery relaunches a terminated app headless
+        // (no scene, ContentView.onAppear never runs), so the HKObserverQuery
+        // must be re-registered here or the fire is missed and HealthKit
+        // throttles future deliveries. Self-gating for the test environment
+        // and the no-groups case; the onAppear call stays for group edits.
+        workoutEndObserver.refresh()
     }
 
     var body: some Scene {

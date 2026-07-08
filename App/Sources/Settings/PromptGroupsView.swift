@@ -100,7 +100,7 @@ struct PromptGroupRowView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .lineLimit(2)
-                    Text("\(group.schedule.summary) – \(group.questionIDs.count) questions")
+                    Text("\(group.schedule.summary) – \(questionCountText)")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.7))
                 }
@@ -117,6 +117,11 @@ struct PromptGroupRowView: View {
     private var displayName: String {
         let name = group.name.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? "Untitled group" : name
+    }
+
+    private var questionCountText: String {
+        let count = group.questionIDs.count
+        return count == 1 ? "1 question" : "\(count) questions"
     }
 
     private var enabledBinding: Binding<Bool> {
@@ -263,7 +268,10 @@ struct PromptGroupEditorView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                // A group with no questions would fire prompts that open an
+                // empty survey — require at least one question to save.
                 Button("Save") { save() }
+                    .disabled(questionIDs.isEmpty)
                     .accessibilityIdentifier("group-save")
             }
         }

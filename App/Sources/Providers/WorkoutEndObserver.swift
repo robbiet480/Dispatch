@@ -32,6 +32,12 @@ final class WorkoutEndObserver {
     @ObservationIgnored private let isTestEnvironment: Bool
     @ObservationIgnored private let store = HKHealthStore()
     @ObservationIgnored private var query: HKObserverQuery?
+    /// Serializes handleObserverFire: it reads the last-seen marker and then
+    /// SUSPENDS at the workout fetch, so a second observer fire interleaving
+    /// on the main actor would read the same stale marker and double-post
+    /// delivered banners. While set, subsequent fires are skipped (their
+    /// completion handlers still run in start()'s wrapper).
+    @ObservationIgnored private var isHandlingFire = false
 
     init(container: ModelContainer, awakeStore: AwakeStore, defaults: UserDefaults,
          isTestEnvironment: Bool) {
@@ -114,15 +120,26 @@ final class WorkoutEndObserver {
     }
 
     private func handleObserverFire() async {
+        guard !isHandlingFire else {
+            observerLog.info("workout observer fire skipped — a fire is already being handled")
+            return
+        }
+        isHandlingFire = true
+        defer { isHandlingFire = false }
+
         let lastSeen = Date(timeIntervalSince1970: defaults.double(forKey: Self.lastSeenKey))
-        guard let workout = await latestWorkout(endingAfter: lastSeen) else { return }
+        // ALL workouts past the marker, oldest first — a single fire can
+        // cover several workouts (e.g. batched background delivery), and
+        // handling only the newest would silently swallow the others.
+        let workouts = await workouts(endingAfter: lastSeen)
+        guard let newestEndDate = workouts.last?.endDate else { return }
 
         // Persist BEFORE posting so a rapid second observer fire can't
-        // duplicate the prompts for the same workout.
-        defaults.set(workout.endDate.timeIntervalSince1970, forKey: Self.lastSeenKey)
+        // duplicate the prompts for the same workouts.
+        defaults.set(newestEndDate.timeIntervalSince1970, forKey: Self.lastSeenKey)
 
         guard awakeStore.isAwake else {
-            observerLog.info("workout ended while asleep — no prompt")
+            observerLog.info("\(workouts.count, privacy: .public) workout(s) ended while asleep — no prompt")
             return
         }
 
@@ -131,41 +148,47 @@ final class WorkoutEndObserver {
 
         let context = ModelContext(container)
         let center = UNUserNotificationCenter.current()
-        for group in groups {
-            let content = NotificationScheduler.makeGroupContent(
-                groupID: group.uniqueIdentifier,
-                body: NotificationScheduler.groupBody(for: group, in: context))
-            var userInfo = content.userInfo
-            userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] = workout.uuid.uuidString
-            content.userInfo = userInfo
-            let stamp = Self.stampFormatter.string(from: workout.endDate)
-            let identifier = "\(NotificationIdentifiers.groupPromptPrefix)\(group.uniqueIdentifier)-\(stamp)"
-            // nil trigger ⇒ deliver immediately.
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-            do {
-                try await center.add(request)
-                observerLog.info("posted workout-end prompt \(identifier, privacy: .public)")
-            } catch {
-                observerLog.error("failed to post workout-end prompt \(identifier, privacy: .public): \(error, privacy: .public)")
+        for workout in workouts {
+            observerLog.info("handling workout \(workout.uuid, privacy: .public) ended \(workout.endDate, privacy: .public)")
+            for group in groups {
+                let content = NotificationScheduler.makeGroupContent(
+                    groupID: group.uniqueIdentifier,
+                    body: NotificationScheduler.groupBody(for: group, in: context))
+                var userInfo = content.userInfo
+                userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] = workout.uuid.uuidString
+                content.userInfo = userInfo
+                let stamp = Self.stampFormatter.string(from: workout.endDate)
+                let identifier = "\(NotificationIdentifiers.groupPromptPrefix)\(group.uniqueIdentifier)-\(stamp)"
+                // nil trigger ⇒ deliver immediately.
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+                do {
+                    try await center.add(request)
+                    observerLog.info("posted workout-end prompt \(identifier, privacy: .public)")
+                } catch {
+                    observerLog.error("failed to post workout-end prompt \(identifier, privacy: .public): \(error, privacy: .public)")
+                }
             }
         }
     }
 
-    private func latestWorkout(endingAfter lastSeen: Date) async -> HKWorkout? {
+    /// The (up to 5) most recent workouts ending after `lastSeen`, oldest
+    /// first so prompts post in workout order.
+    private func workouts(endingAfter lastSeen: Date) async -> [HKWorkout] {
         await withCheckedContinuation { continuation in
             let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
             let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: 5,
                                       sortDescriptors: sort) { _, samples, error in
                 if let error {
                     observerLog.error("workout fetch failed: \(error, privacy: .public)")
-                    continuation.resume(returning: nil)
+                    continuation.resume(returning: [])
                     return
                 }
                 let now = Date()
-                let workout = (samples ?? [])
+                let workouts = (samples ?? [])
                     .compactMap { $0 as? HKWorkout }
-                    .first { $0.endDate > lastSeen && $0.endDate <= now }
-                continuation.resume(returning: workout)
+                    .filter { $0.endDate > lastSeen && $0.endDate <= now }
+                    .sorted { $0.endDate < $1.endDate }
+                continuation.resume(returning: workouts)
             }
             store.execute(query)
         }

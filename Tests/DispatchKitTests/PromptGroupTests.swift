@@ -119,6 +119,42 @@ import Testing
     #expect(exportA == exportB)
 }
 
+/// A `.dailyAt` group's scheduledTimes wire format ("HH:mm" strings) must
+/// survive export → import → export byte-identically.
+@Test func dailyAtGroupScheduledTimesRoundTripThroughV2() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+
+    var nineThirty = DateComponents(); nineThirty.hour = 9; nineThirty.minute = 30
+    var seventeen = DateComponents(); seventeen.hour = 17; seventeen.minute = 0
+    let group = PromptGroup()
+    group.uniqueIdentifier = "pg-daily"
+    group.name = "Daily check-in"
+    group.questionIDs = ["q-a"]
+    group.schedule = .dailyAt([nineThirty, seventeen])
+    group.sortOrder = 1
+    contextA.insert(group)
+    try contextA.save()
+
+    let exportA = try V2Exporter.exportData(from: contextA)
+    let json = try #require(String(data: exportA, encoding: .utf8))
+    #expect(json.contains("\"scheduledTimes\""))
+    #expect(json.contains("09:30"))
+    #expect(json.contains("17:00"))
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    let summary = try V2Importer.importExport(exportA, into: contextB)
+    #expect(summary.promptGroupsImported == 1)
+
+    let imported = try #require(try contextB.fetch(FetchDescriptor<PromptGroup>()).first)
+    #expect(imported.schedule == .dailyAt([nineThirty, seventeen]))
+    #expect(imported.scheduledTimeStrings == ["09:30", "17:00"])
+
+    let exportB = try V2Exporter.exportData(from: contextB)
+    #expect(exportA == exportB)
+}
+
 /// Groupless data must export WITHOUT the new keys — pre-plan-12 v2 exports
 /// stay byte-identical, and reports without a group omit promptGroupID.
 @Test func emptyPromptGroupsAndNilGroupIDAreOmittedFromExportedJSON() throws {

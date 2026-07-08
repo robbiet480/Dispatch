@@ -123,7 +123,9 @@ struct ChoiceOptionsEditorView: View {
 }
 
 /// In-place option editor row. Keystrokes stay in the local draft (the
-/// LocalTextEditorField discipline); the edit commits on submit, and an
+/// LocalTextEditorField discipline); the edit commits on submit, focus loss
+/// (tapping another row, dismissing the keyboard), or row disappearance —
+/// Return-only commits silently dropped edits (gating review fix). An
 /// emptied field reverts to the old text instead of committing.
 private struct ChoiceOptionField: View {
     let text: String
@@ -131,6 +133,7 @@ private struct ChoiceOptionField: View {
     let onCommit: (String) -> Void
 
     @State private var draft: String
+    @SwiftUI.FocusState private var isFocused: Bool
 
     init(text: String, placeholder: String, onCommit: @escaping (String) -> Void) {
         self.text = text
@@ -143,15 +146,22 @@ private struct ChoiceOptionField: View {
         TextField(placeholder, text: $draft)
             .foregroundStyle(.white)
             .submitLabel(.done)
-            .onSubmit {
-                let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty {
-                    draft = text // empty keeps the old option
-                } else {
-                    draft = trimmed
-                    onCommit(trimmed)
-                }
+            .focused($isFocused)
+            .onSubmit(commit)
+            .onChange(of: isFocused) { _, focused in
+                if !focused { commit() }
             }
+            .onDisappear(perform: commit)
+    }
+
+    private func commit() {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            draft = text // empty keeps the old option
+        } else {
+            draft = trimmed
+            onCommit(trimmed)
+        }
     }
 }
 

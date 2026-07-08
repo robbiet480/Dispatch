@@ -76,6 +76,55 @@ private let nags = NotificationBudget.NagRequest(delayMinutes: 10, intervalMinut
     #expect(negative.count(forGroup: "a") == 0)
 }
 
+@Test func resurrectedPastParentTailsAreChargedAgainstTheCap() {
+    // 20 future prompts + resurrected tails for 10 past parents. Each past
+    // parent fired 1 minute ago; delay 10m / interval 5m means EVERY fire of
+    // its chain is still in the future, so a chain of length n adds n tails
+    // per past parent. Without charging tails: nags = min(3, 40/20) = 2 and
+    // total adds = 20*3 + 10*2 = 80 > 60. With charging: n=2 needs
+    // 20*2 + 10*2 = 60 > 40, n=1 needs 20 + 10 = 30 ≤ 40 → nags clamp to 1.
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let pastParents = (0..<10).map { _ in now.addingTimeInterval(-60) }
+    let allocation = NotificationBudget.allocate(
+        globalCount: 12,
+        groupCounts: [("a", 8)],
+        nagRequest: nags,
+        pastNagParents: pastParents,
+        now: now,
+        cap: 60)
+    #expect(allocation.nagsPerPrompt == 1)
+    #expect(allocation.pastNagTails == 10)
+    #expect(allocation.total == 20 * 2 + 10)
+    #expect(allocation.total <= 60)
+}
+
+@Test func onlyStillFutureTailFiresAreCharged() {
+    // A past parent whose chain has partially elapsed: fired 16 minutes ago
+    // with delay 10m / interval 5m → fires at -6m, -1m, +4m. Only the +4m
+    // fire is still pending, so exactly 1 tail is charged and the full
+    // maxCount chain length survives.
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let allocation = NotificationBudget.allocate(
+        globalCount: 4,
+        groupCounts: [],
+        nagRequest: nags,
+        pastNagParents: [now.addingTimeInterval(-16 * 60)],
+        now: now,
+        cap: 64)
+    #expect(allocation.nagsPerPrompt == 3)
+    #expect(allocation.pastNagTails == 1)
+    #expect(allocation.total == 4 * 4 + 1)
+}
+
+@Test func noPastParentsMatchesLegacyAllocation() {
+    // The default (no past parents) must be byte-for-byte the old arithmetic.
+    let allocation = NotificationBudget.allocate(
+        globalCount: 12, groupCounts: [("a", 8)], nagRequest: nags, cap: 64)
+    #expect(allocation.nagsPerPrompt == 2)
+    #expect(allocation.pastNagTails == 0)
+    #expect(allocation.total == 60)
+}
+
 @Test func nilNagRequestMeansZeroNags() {
     let allocation = NotificationBudget.allocate(
         globalCount: 4, groupCounts: [("a", 2)], nagRequest: nil, cap: 64)

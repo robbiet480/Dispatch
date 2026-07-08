@@ -184,7 +184,7 @@ final class NavigationUITests: XCTestCase {
         // Back on the list: the new group shows with its question count and
         // the empty-state explainer is gone.
         XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["4× per day – 1 questions"].exists)
+        XCTAssertTrue(app.staticTexts["4× per day – 1 question"].exists)
         XCTAssertFalse(app.staticTexts["prompt-groups-empty"].exists)
     }
 }

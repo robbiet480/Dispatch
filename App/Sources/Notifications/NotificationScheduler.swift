@@ -207,6 +207,16 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             return (group, all, all.filter { $0 > now })
         }
 
+        // Past parents (delivered-but-unanswered prompts, both families)
+        // whose nag chains scheduleNagChains will resurrect below: their
+        // still-future tail fires consume real slots, so the allocator must
+        // charge them before sizing nagsPerPrompt or the total adds can
+        // silently exceed iOS's 64-pending cap.
+        let lastActedAt = prefs.lastActedAt ?? .distantPast
+        let pastNagParents = prefs.nagEnabled
+            ? (allPlannedDates + groupPlans.flatMap(\.all)).filter { $0 > lastActedAt && $0 <= now }
+            : []
+
         // One allocator owns the 64-pending arithmetic: global first, groups
         // in order, nags last. Cap 60 keeps the plan-10 headroom for snoozes.
         let allocation = NotificationBudget.allocate(
@@ -217,7 +227,12 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                                                 intervalMinutes: prefs.nagIntervalMinutes,
                                                 maxCount: prefs.nagMaxCount)
                 : nil,
+            pastNagParents: pastNagParents,
+            now: now,
             cap: 60)
+        if allocation.pastNagTails > 0 {
+            notificationLog.info("budget charged \(allocation.pastNagTails, privacy: .public) resurrected nag tail fires for \(pastNagParents.count, privacy: .public) past prompts against the cap")
+        }
         if allocation.global < dates.count {
             notificationLog.info("budget clamped global prompts to \(allocation.global, privacy: .public) of \(dates.count, privacy: .public)")
         }
@@ -270,7 +285,6 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         // parent the user already acted on (quick answer, snooze, tap,
         // in-app save — tracked via `lastActedAt`) stay dead. Group prompts
         // get the identical semantics with the group stamp embedded.
-        let lastActedAt = prefs.lastActedAt ?? .distantPast
         let nagParents = allPlannedDates.filter { $0 > lastActedAt }
         await scheduleNagChains(
             for: nagParents, nagsPerPrompt: allocation.nagsPerPrompt,
@@ -343,6 +357,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// any removal so a concurrent replan can't resurrect the chains being
     /// removed here.
     func reportFiled(now: Date = Date()) {
+        // Cross-family by design: ANY filed report satisfies ALL past-due prompts (global and group).
         prefs.lastActedAt = now
         center.getPendingNotificationRequests { requests in
             let stale = requests
@@ -540,6 +555,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             // nag chain before handling the action. Snooze notifications
             // carry uuid identifiers (no stamp): no-op.
             if let stamp = Self.parentStamp(fromRequestIdentifier: requestIdentifier) {
+                // Cross-family by design: acting on ANY prompt satisfies ALL past-due prompts (global and group).
                 prefs.lastActedAt = Date()
                 removeNagChain(forStamp: stamp)
             }
