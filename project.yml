@@ -23,3 +23,5 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         SWIFT_VERSION: 6.0
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Dispatch samples the ambient sound level (a decibel number only, no recording is kept) when you file a report."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Dispatch counts how many photos you took since your last report."
