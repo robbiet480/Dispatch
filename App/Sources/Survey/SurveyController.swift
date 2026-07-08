@@ -12,18 +12,25 @@ final class SurveyController {
     private let trigger: ReportTrigger
     private let settings: SensorSettings
     private let questions: [Question]
+    /// When set, this is a backdated report: capture is skipped entirely and
+    /// the report is saved at this date with `isBackdated = true`.
+    let overrideDate: Date?
+
+    var isBackdated: Bool { overrideDate != nil }
 
     /// --mock-sensors/--ui-testing gate the State of Mind write so UI tests
     /// never trigger a HealthKit share-authorization dialog.
     private let isTestEnvironment = ProcessInfo.processInfo.arguments.contains("--mock-sensors")
         || ProcessInfo.processInfo.arguments.contains("--ui-testing")
 
-    init(questions: [Question], kind: ReportKind, trigger: ReportTrigger, appDefaults: UserDefaults = .standard) {
+    init(questions: [Question], kind: ReportKind, trigger: ReportTrigger, overrideDate: Date? = nil,
+         appDefaults: UserDefaults = .standard) {
         self.survey = SurveyViewModel(questions: questions, kind: kind)
         self.kind = kind
         self.trigger = trigger
         self.settings = SensorSettings(defaults: appDefaults)
         self.questions = questions
+        self.overrideDate = overrideDate
     }
 
     static func providers(since: Date?) -> [any SensorProvider] {
@@ -52,6 +59,8 @@ final class SurveyController {
     }
 
     func startCapture(since: Date?) async {
+        // Backdated reports skip sensor capture entirely — no providers run.
+        guard overrideDate == nil else { return }
         let stream = CaptureCoordinator.capture(providers: Self.providers(since: since),
                                                 settings: settings)
         for await event in stream {
@@ -60,9 +69,10 @@ final class SurveyController {
     }
 
     func save(in context: ModelContext) throws {
-        let report = try ReportBuilder.save(kind: kind, trigger: trigger, date: Date(),
+        let report = try ReportBuilder.save(kind: kind, trigger: trigger, date: overrideDate ?? Date(),
                                             timeZone: TimeZone.current, outcomes: outcomes,
-                                            answers: survey.drafts(), in: context)
+                                            answers: survey.drafts(), in: context,
+                                            isBackdated: isBackdated)
 
         SpotlightIndexer.index(report: report)
 

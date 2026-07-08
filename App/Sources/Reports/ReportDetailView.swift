@@ -168,6 +168,9 @@ struct ReportDetailView: View {
     private var footerSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
+                if report.isBackdated {
+                    backdatedChip
+                }
                 Text("\(report.kind.rawValue.capitalized) report · \(report.trigger.rawValue)")
                 Text(report.timeZoneIdentifier)
                 Text(exactTimestamp)
@@ -176,6 +179,18 @@ struct ReportDetailView: View {
             .foregroundStyle(.white.opacity(0.6))
             .listRowBackground(Color.clear)
         }
+    }
+
+    private var backdatedChip: some View {
+        Text("BACKDATED")
+            .font(.caption2)
+            .fontWeight(.bold)
+            .kerning(0.8)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.25), in: Capsule())
+            .accessibilityIdentifier("backdated-chip")
     }
 
     private func sectionHeader(_ title: String) -> some View {

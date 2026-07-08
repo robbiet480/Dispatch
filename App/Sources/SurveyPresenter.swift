@@ -10,6 +10,9 @@ struct SurveyRequest: Identifiable, Equatable {
     let id = UUID()
     let kind: ReportKind
     let trigger: ReportTrigger
+    /// When set, this is a backdated report: sensor capture is skipped
+    /// entirely and the report is saved at this date with `isBackdated = true`.
+    var overrideDate: Date?
 }
 
 @MainActor

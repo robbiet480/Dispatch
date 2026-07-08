@@ -50,7 +50,7 @@ struct ContentView: View {
         .fullScreenCover(item: Binding(
             get: { appLockStore.isLocked ? nil : surveyPresenter.request },
             set: { surveyPresenter.request = $0 })) { request in
-            SurveyFlowView(kind: request.kind, trigger: request.trigger)
+            SurveyFlowView(kind: request.kind, trigger: request.trigger, overrideDate: request.overrideDate)
         }
         .fullScreenCover(isPresented: Binding(
             get: { appLockStore.isLocked },

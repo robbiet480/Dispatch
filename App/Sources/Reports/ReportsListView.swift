@@ -8,10 +8,13 @@ struct ReportsListView: View {
     @Query private var tokenEntities: [TokenEntity]
     @Query private var personEntities: [PersonEntity]
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(SurveyPresenter.self) private var surveyPresenter
 
     private var theme: Theme { themeStore.theme }
 
     @State private var searchQuery = ""
+    @State private var showingBackfillSheet = false
+    @State private var backfillDate = Date()
 
     private var filteredReports: [Report] { ReportSearch.filter(reports, query: searchQuery) }
 
@@ -30,6 +33,49 @@ struct ReportsListView: View {
         .navigationTitle("Reports")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    backfillDate = Date()
+                    showingBackfillSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityIdentifier("backfill-button")
+            }
+        }
+        .sheet(isPresented: $showingBackfillSheet) {
+            backfillSheet
+        }
+    }
+
+    // MARK: - Backfill
+
+    private var backfillSheet: some View {
+        NavigationStack {
+            VStack {
+                DatePicker("Report date", selection: $backfillDate, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .padding()
+                Spacer()
+            }
+            .navigationTitle("Backdated Report")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingBackfillSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Continue") {
+                        showingBackfillSheet = false
+                        surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .manual,
+                                                                overrideDate: backfillDate)
+                    }
+                    .accessibilityIdentifier("backfill-continue")
+                }
+            }
+        }
     }
 
     // MARK: - Stats header

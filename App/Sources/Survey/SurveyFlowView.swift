@@ -11,6 +11,7 @@ struct SurveyFlowView: View {
     @State private var controller: SurveyController?
     let kind: ReportKind
     let trigger: ReportTrigger
+    var overrideDate: Date? = nil
 
     var body: some View {
         Group {
@@ -23,7 +24,7 @@ struct SurveyFlowView: View {
         .task {
             guard controller == nil else { return }
             let newController = SurveyController(questions: questions, kind: kind, trigger: trigger,
-                                                 appDefaults: appDefaults)
+                                                 overrideDate: overrideDate, appDefaults: appDefaults)
             controller = newController
             await newController.startCapture(since: DispatchStore.lastReportDate(in: modelContext))
         }
@@ -44,8 +45,13 @@ struct SurveyFlowView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
                             if index == 0 {
-                                CaptureChecklistView(outcomes: controller.outcomes)
-                                    .padding(.top)
+                                if controller.isBackdated {
+                                    backdatedNote
+                                        .padding(.top)
+                                } else {
+                                    CaptureChecklistView(outcomes: controller.outcomes)
+                                        .padding(.top)
+                                }
                             }
                             QuestionPageView(page: page,
                                              value: controller.survey.answerValue(for: page.id),
@@ -78,5 +84,17 @@ struct SurveyFlowView: View {
             .padding()
         }
         .background(Color.themeBackground(themeStore.theme).opacity(0.9))
+    }
+
+    private var backdatedNote: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "clock.arrow.circlepath").frame(width: 24)
+            Text("BACKDATED REPORT")
+                .font(.subheadline.weight(.semibold))
+                .kerning(1.2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .accessibilityIdentifier("backdated-note")
     }
 }
