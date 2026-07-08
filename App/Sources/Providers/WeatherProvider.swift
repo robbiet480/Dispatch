@@ -1,7 +1,10 @@
 import CoreLocation
 import DispatchKit
 import Foundation
+import OSLog
 import WeatherKit
+
+private let weatherLog = Logger(subsystem: "io.robbie.Dispatch", category: "weather")
 
 /// WeatherKit current conditions at the report's location. Degrades to
 /// unavailable when the entitlement, network, or fix is missing.
@@ -15,7 +18,15 @@ struct WeatherProvider: SensorProvider {
         // abandons the waiter and yields `.unavailable`.
         let location = await store.awaitFix()
 
-        let current = try await WeatherService.shared.weather(for: location, including: .current)
+        let current: CurrentWeather
+        do {
+            current = try await WeatherService.shared.weather(for: location, including: .current)
+        } catch {
+            // 0-for-3 on device with location present — log the real failure
+            // (auth? attribution? network?) so it's diagnosable from Console.
+            weatherLog.error("WeatherKit request failed: \(error, privacy: .public) — \(String(describing: error), privacy: .public)")
+            throw error
+        }
         var observation = WeatherObservation()
         observation.tempF = current.temperature.converted(to: .fahrenheit).value
         observation.tempC = current.temperature.converted(to: .celsius).value
