@@ -1,11 +1,11 @@
 import Foundation
 
-enum PromptDistribution: String, Codable, CaseIterable, Sendable {
+public enum PromptDistribution: String, Codable, CaseIterable, Sendable {
     case random
     case semiRandom
     case regular
 
-    func description(alertsPerDay: Int) -> String {
+    public func description(alertsPerDay: Int) -> String {
         let interval = 24 / alertsPerDay
         switch self {
         case .random:

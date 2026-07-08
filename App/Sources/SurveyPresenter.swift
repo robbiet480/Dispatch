@@ -6,7 +6,7 @@ import Observation
 /// `fullScreenCover(item:)` from anywhere in the view hierarchy — not just
 /// from the view that triggered it. This is the landing pad for Plan 4's
 /// notification/intent-triggered surveys, which won't originate from HomeView.
-struct SurveyRequest: Identifiable {
+struct SurveyRequest: Identifiable, Equatable {
     let id = UUID()
     let kind: ReportKind
     let trigger: ReportTrigger

@@ -2,22 +2,29 @@ import DispatchKit
 import os
 import SwiftData
 import SwiftUI
+import UserNotifications
 
 private let seedLog = Logger(subsystem: "com.robbiet480.dispatch", category: "seed")
 
 @main
 struct DispatchApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     let container: ModelContainer
     let themeStore: ThemeStore
     let awakeStore: AwakeStore
+    let notificationPrefs: NotificationPrefs
     let surveyPresenter = SurveyPresenter()
+    let notificationScheduler: NotificationScheduler
     private let appDefaults: UserDefaults
+    private let isTestEnvironment: Bool
 
     init() {
         container = try! ModelContainer(for: Schema(DispatchStore.allModels))
 
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--mock-sensors") || arguments.contains("--ui-testing"),
+        isTestEnvironment = arguments.contains("--mock-sensors") || arguments.contains("--ui-testing")
+        if isTestEnvironment,
            let uiTestingDefaults = UserDefaults(suiteName: "ui-testing") {
             uiTestingDefaults.removePersistentDomain(forName: "ui-testing")
             appDefaults = uiTestingDefaults
@@ -27,11 +34,18 @@ struct DispatchApp: App {
 
         themeStore = ThemeStore(defaults: appDefaults)
         awakeStore = AwakeStore(defaults: appDefaults)
+        notificationPrefs = NotificationPrefs(defaults: appDefaults)
+
+        let scheduler = NotificationScheduler(container: container, isTestEnvironment: isTestEnvironment)
+        notificationScheduler = scheduler
+        UNUserNotificationCenter.current().delegate = scheduler
 
         seedDefaultQuestionsIfNeeded()
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
         }
+
+        scheduler.registerCategory()
     }
 
     var body: some Scene {
@@ -40,7 +54,18 @@ struct DispatchApp: App {
                 .environment(themeStore)
                 .environment(awakeStore)
                 .environment(surveyPresenter)
+                .environment(notificationScheduler)
                 .environment(\.appDefaults, appDefaults)
+                .environment(\.notificationPrefs, notificationPrefs)
+                .onAppear {
+                    if appDefaults.bool(forKey: OnboardingFlag.key) {
+                        notificationScheduler.requestPermissionIfNeeded()
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active else { return }
+                    notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+                }
         }
         .modelContainer(container)
     }

@@ -1,13 +1,13 @@
 import Foundation
 
-final class NotificationPrefs: @unchecked Sendable {
+public final class NotificationPrefs: @unchecked Sendable {
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults) {
+    public init(defaults: UserDefaults) {
         self.defaults = defaults
     }
 
-    var alertsPerDay: Int {
+    public var alertsPerDay: Int {
         get {
             let stored = defaults.integer(forKey: "alertsPerDay")
             if stored == 0 {
@@ -20,7 +20,7 @@ final class NotificationPrefs: @unchecked Sendable {
         }
     }
 
-    var distribution: PromptDistribution {
+    public var distribution: PromptDistribution {
         get {
             if let rawValue = defaults.string(forKey: "distribution"),
                let dist = PromptDistribution(rawValue: rawValue) {
@@ -33,7 +33,7 @@ final class NotificationPrefs: @unchecked Sendable {
         }
     }
 
-    var scheduledTimes: [DateComponents] {
+    public var scheduledTimes: [DateComponents] {
         get {
             guard let jsonData = defaults.data(forKey: "scheduledTimes") else {
                 return []

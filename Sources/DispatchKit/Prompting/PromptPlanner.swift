@@ -1,13 +1,13 @@
 import Foundation
 
-struct SeededGenerator: RandomNumberGenerator {
+public struct SeededGenerator: RandomNumberGenerator {
     private var state: UInt64
 
-    init(seed: UInt64) {
+    public init(seed: UInt64) {
         self.state = seed
     }
 
-    mutating func next() -> UInt64 {
+    public mutating func next() -> UInt64 {
         state &+= 0x9E3779B97F4A7C15
         var z = state
         z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
@@ -16,8 +16,8 @@ struct SeededGenerator: RandomNumberGenerator {
     }
 }
 
-enum PromptPlanner {
-    static func plan(
+public enum PromptPlanner {
+    public static func plan(
         prefs: NotificationPrefs,
         awakeStart: Date,
         awakeEnd: Date,

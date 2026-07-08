@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(\.appDefaults) private var appDefaults
     @Environment(SurveyPresenter.self) private var surveyPresenter
+    @Environment(NotificationScheduler.self) private var notificationScheduler
     @State private var onboardingCompleted = false
     @State private var hasCheckedOnboarding = false
 
@@ -14,6 +15,7 @@ struct ContentView: View {
             } else {
                 OnboardingView {
                     onboardingCompleted = true
+                    notificationScheduler.requestPermissionIfNeeded()
                 }
             }
         }
@@ -26,6 +28,11 @@ struct ContentView: View {
             get: { surveyPresenter.request },
             set: { surveyPresenter.request = $0 })) { request in
             SurveyFlowView(kind: request.kind, trigger: request.trigger)
+        }
+        .onChange(of: notificationScheduler.pendingSurveyRequest) { _, newValue in
+            guard let newValue else { return }
+            surveyPresenter.request = newValue
+            notificationScheduler.pendingSurveyRequest = nil
         }
     }
 }
