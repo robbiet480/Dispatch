@@ -68,6 +68,12 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("notifications-settings-link")
             .listRowBackground(Color.white.opacity(0.12))
+
+            NavigationLink(destination: PromptGroupsView()) {
+                settingsLabel("Prompt Groups")
+            }
+            .accessibilityIdentifier("prompt-groups-link")
+            .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("SCHEDULE")
         }

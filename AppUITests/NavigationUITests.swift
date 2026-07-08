@@ -142,4 +142,49 @@ final class NavigationUITests: XCTestCase {
             app.swipeLeft()
         }
     }
+
+    @MainActor
+    func testCreatePromptGroupWithQuestionAppearsInList() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        // Settings → Prompt Groups.
+        let settingsButton = app.buttons["settings-button"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
+        settingsButton.tap()
+
+        let groupsLink = app.buttons["prompt-groups-link"]
+        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
+        groupsLink.tap()
+
+        XCTAssertTrue(
+            app.otherElements["prompt-groups"].waitForExistence(timeout: 10)
+                || app.collectionViews["prompt-groups"].waitForExistence(timeout: 10)
+                || app.tables["prompt-groups"].waitForExistence(timeout: 10)
+        )
+        // Add a group: name it (uniquely — the SwiftData store persists
+        // across UI test runs) and assign one question.
+        let addButton = app.buttons["group-add"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+        addButton.tap()
+
+        let groupName = "Check-in \(Int(Date().timeIntervalSince1970) % 100_000)"
+        let nameField = app.textFields["group-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
+        nameField.tap()
+        nameField.typeText(groupName)
+
+        let questionRow = app.buttons["Are you working?"]
+        XCTAssertTrue(questionRow.waitForExistence(timeout: 10))
+        questionRow.tap()
+
+        app.buttons["group-save"].tap()
+
+        // Back on the list: the new group shows with its question count and
+        // the empty-state explainer is gone.
+        XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["4× per day – 1 questions"].exists)
+        XCTAssertFalse(app.staticTexts["prompt-groups-empty"].exists)
+    }
 }
