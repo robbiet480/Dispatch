@@ -33,6 +33,54 @@ public final class NotificationPrefs: @unchecked Sendable {
         }
     }
 
+    public var nagEnabled: Bool {
+        get {
+            defaults.bool(forKey: "nagEnabled") // default false
+        }
+        set {
+            defaults.set(newValue, forKey: "nagEnabled")
+        }
+    }
+
+    public var nagDelayMinutes: Int {
+        get {
+            let stored = defaults.integer(forKey: "nagDelayMinutes")
+            if stored == 0 {
+                return 10 // default
+            }
+            return max(1, min(120, stored))
+        }
+        set {
+            defaults.set(max(1, min(120, newValue)), forKey: "nagDelayMinutes")
+        }
+    }
+
+    public var nagIntervalMinutes: Int {
+        get {
+            let stored = defaults.integer(forKey: "nagIntervalMinutes")
+            if stored == 0 {
+                return 5 // default
+            }
+            return max(1, min(60, stored))
+        }
+        set {
+            defaults.set(max(1, min(60, newValue)), forKey: "nagIntervalMinutes")
+        }
+    }
+
+    public var nagMaxCount: Int {
+        get {
+            let stored = defaults.integer(forKey: "nagMaxCount")
+            if stored == 0 {
+                return 3 // default
+            }
+            return max(1, min(10, stored))
+        }
+        set {
+            defaults.set(max(1, min(10, newValue)), forKey: "nagMaxCount")
+        }
+    }
+
     public var scheduledTimes: [DateComponents] {
         get {
             guard let jsonData = defaults.data(forKey: "scheduledTimes") else {
