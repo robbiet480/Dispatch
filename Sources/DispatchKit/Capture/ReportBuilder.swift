@@ -43,13 +43,15 @@ public enum ReportBuilder {
         timeZone: TimeZone,
         outcomes: [SensorKind: SensorOutcome],
         answers: [AnswerDraft],
-        in context: ModelContext
+        in context: ModelContext,
+        isBackdated: Bool = false
     ) throws -> Report {
         let report = Report()
         report.date = date
         report.timeZoneIdentifier = timeZone.identifier
         report.kind = kind
         report.trigger = trigger
+        report.isBackdated = isBackdated
 
         var health: [HealthReading] = []
         for outcome in outcomes.values {
