@@ -17,8 +17,10 @@ struct DispatchApp: App {
     let visualizationFilterStore: VisualizationFilterStore
     let surveyPresenter = SurveyPresenter()
     let notificationScheduler: NotificationScheduler
+    let appLockStore: AppLockStore
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
+    @State private var backgroundedAt: Date?
 
     init() {
         container = try! ModelContainer(for: Schema(DispatchStore.allModels))
@@ -37,6 +39,8 @@ struct DispatchApp: App {
         awakeStore = AwakeStore(defaults: appDefaults)
         notificationPrefs = NotificationPrefs(defaults: appDefaults)
         visualizationFilterStore = VisualizationFilterStore(defaults: appDefaults)
+        appLockStore = AppLockStore(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
+        appLockStore.lockAtLaunchIfNeeded()
 
         let scheduler = NotificationScheduler(container: container, isTestEnvironment: isTestEnvironment)
         notificationScheduler = scheduler
@@ -65,6 +69,7 @@ struct DispatchApp: App {
                 .environment(visualizationFilterStore)
                 .environment(surveyPresenter)
                 .environment(notificationScheduler)
+                .environment(appLockStore)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onAppear {
@@ -72,9 +77,14 @@ struct DispatchApp: App {
                         notificationScheduler.requestPermissionIfNeeded(prefs: notificationPrefs, awakeStore: awakeStore)
                     }
                 }
-                .onChange(of: scenePhase) { _, newPhase in
-                    guard newPhase == .active else { return }
-                    notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    if newPhase == .active {
+                        notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+                        appLockStore.evaluateReturnFromBackground(backgroundedAt: backgroundedAt)
+                        backgroundedAt = nil
+                    } else if newPhase == .background {
+                        backgroundedAt = Date()
+                    }
                 }
                 .task {
                     guard ProcessInfo.processInfo.arguments.contains("--dump-pending") else { return }

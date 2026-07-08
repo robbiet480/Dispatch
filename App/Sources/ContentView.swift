@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(SurveyPresenter.self) private var surveyPresenter
     @Environment(NotificationScheduler.self) private var notificationScheduler
     @Environment(AwakeStore.self) private var awakeStore
+    @Environment(AppLockStore.self) private var appLockStore
     @State private var onboardingCompleted = false
     @State private var hasCheckedOnboarding = false
 
@@ -44,6 +45,11 @@ struct ContentView: View {
             guard let newValue else { return }
             surveyPresenter.request = newValue
             notificationScheduler.pendingSurveyRequest = nil
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { appLockStore.isLocked },
+            set: { appLockStore.isLocked = $0 })) {
+            AppLockView()
         }
     }
 }

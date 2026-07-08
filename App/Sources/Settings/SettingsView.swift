@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(NotificationScheduler.self) private var scheduler
+    @Environment(AppLockStore.self) private var appLockStore
     @Environment(\.notificationPrefs) private var notificationPrefs
     @Environment(\.appDefaults) private var appDefaults
     @State private var nextAlertCaption: String?
@@ -18,6 +19,7 @@ struct SettingsView: View {
             List {
                 scheduleSection
                 surveySection
+                privacySection
                 dataSection
                 interfaceSection
                 aboutSection
@@ -90,6 +92,23 @@ struct SettingsView: View {
             .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("SURVEY")
+        }
+    }
+
+    private var privacySection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { appLockStore.enabled },
+                set: { newValue in
+                    Task { await appLockStore.setEnabled(newValue) }
+                })) {
+                settingsLabel("Require Face ID")
+            }
+            .tint(ThemeColor.color(theme))
+            .accessibilityIdentifier("app-lock-toggle")
+            .listRowBackground(Color.white.opacity(0.12))
+        } header: {
+            sectionHeader("PRIVACY")
         }
     }
 
