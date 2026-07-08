@@ -114,10 +114,11 @@ struct SettingsView: View {
 
     private var dataSection: some View {
         Section {
-            NavigationLink(destination: Text("Coming soon")) {
-                settingsLabel("Export")
+            NavigationLink(destination: DataSettingsView()) {
+                settingsLabel("Import & Export")
             }
             .listRowBackground(Color.white.opacity(0.12))
+            .accessibilityIdentifier("data-settings-link")
 
             NavigationLink(destination: Text("Coming soon")) {
                 settingsLabel("iCloud")
