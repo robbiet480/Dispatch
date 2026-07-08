@@ -137,6 +137,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// daemon processes an add before a stale remove and the new schedule
     /// gets deleted out from under it.
     func replanNow(prefs: NotificationPrefs, awakeStore: AwakeStore, now: Date = Date(), calendar: Calendar = .current) async {
+        // Re-register the category on every replan (not just at launch) so
+        // question renames/reorders can't leave the quick-answer action
+        // titles stale or mismatched with the notification body. This only
+        // affects requests scheduled/updated after this point — already
+        // DELIVERED notifications keep whatever content/actions they were
+        // presented with, which is acceptable (the user already saw them).
+        registerCategory()
+
         let pending = await center.pendingNotificationRequests()
         var identifiersToRemove = pending
             .map(\.identifier)
@@ -156,9 +164,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         let dates = plannedDates(prefs: prefs, now: now, calendar: calendar)
             .filter { $0 > now }
 
+        let context = ModelContext(container)
         for date in dates {
             let identifier = "\(NotificationIdentifiers.promptPrefix)\(Self.isoMinuteFormatter.string(from: date))"
-            let content = Self.makeContent()
+            let content = Self.makeContent(in: context)
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
@@ -258,7 +267,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
 
     private func scheduleSnooze() {
         let identifier = "\(NotificationIdentifiers.snoozePrefix)\(UUID().uuidString)"
-        let content = Self.makeContent()
+        let context = ModelContext(container)
+        let content = Self.makeContent(in: context)
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 15 * 60, repeats: false)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         center.add(request) { error in
@@ -303,10 +313,19 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Helpers
 
-    private static func makeContent() -> UNMutableNotificationContent {
+    /// Builds notification content. When a quick-answer Yes/No question
+    /// exists, the body states that question's prompt so the "Yes"/"No"
+    /// actions on the notification are unambiguous about what they answer.
+    /// Falls back to the generic body when there's no quick-answer question
+    /// (and therefore no quick-answer actions to disambiguate).
+    private static func makeContent(in context: ModelContext) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = "Time to report"
-        content.body = "What are you up to right now?"
+        if let question = firstEnabledYesNoQuestion(in: context) {
+            content.body = question.prompt
+        } else {
+            content.body = "What are you up to right now?"
+        }
         content.sound = .default
         content.categoryIdentifier = NotificationIdentifiers.category
         return content
