@@ -36,8 +36,8 @@ public struct Placemark: Codable, Hashable, Sendable {
 }
 
 public struct LocationSnapshot: Codable, Hashable, Sendable {
-    public var latitude: Double
-    public var longitude: Double
+    public var latitude: Double?
+    public var longitude: Double?
     public var altitude: Double?
     public var horizontalAccuracy: Double?
     public var verticalAccuracy: Double?
@@ -45,7 +45,7 @@ public struct LocationSnapshot: Codable, Hashable, Sendable {
     public var course: Double?
     public var timestamp: Date?
     public var placemark: Placemark?
-    public init(latitude: Double, longitude: Double) {
+    public init(latitude: Double? = nil, longitude: Double? = nil) {
         self.latitude = latitude
         self.longitude = longitude
     }

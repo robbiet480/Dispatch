@@ -42,18 +42,26 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
     #expect(report.altitudeMeters == 63.0)
     #expect(report.connectionType == .wifi)
     #expect(report.focus?.isFocused == true)
-    #expect(report.weather == nil)
+    #expect(report.weather == nil) // unavailable → absent
+    // Two health outcomes merge into one array.
     #expect(Set(report.health.map(\.type)) == ["steps", "heartRateAvg"])
     #expect(report.timeZoneIdentifier == "America/New_York")
-    #expect(report.responses.count == 6)
 
-    // Check responses exist
-    #expect(report.responses[0].questionIdentifier != nil)
-    #expect(report.responses[0].questionPrompt != "")
+    // Skipped answers still record a Response with no payload (v1 semantics).
+    #expect(report.responses.count == 6)
+    let byPrompt = Dictionary(uniqueKeysWithValues: report.responses.map { ($0.questionPrompt, $0) })
+    #expect(byPrompt["Are you working?"]?.answeredOptions == ["Yes"])
+    #expect(byPrompt["What are you doing?"]?.tokens?.map(\.text) == ["Testing", "Coding"])
+    #expect(byPrompt["How many coffees did you have today?"]?.numericResponse == "2")
+    #expect(byPrompt["What did you learn today?"]?.textResponses?.first?.text == "ReportBuilder works")
+    #expect(byPrompt["Where are you?"]?.locationResponse?.text == "Home")
+    let skipped = try #require(byPrompt["Who are you with?"])
+    #expect(skipped.tokens == nil && skipped.answeredOptions == nil)
+    #expect(skipped.questionIdentifier == "q-people")
 
     // Vocabulary rebuilt after save.
     let tokens = try context.fetch(FetchDescriptor<TokenEntity>())
-    #expect(!tokens.isEmpty)
+    #expect(Set(tokens.map(\.text)).isSuperset(of: ["Testing", "Coding"]))
 }
 
 @Test func lastReportDateReturnsMostRecent() throws {
