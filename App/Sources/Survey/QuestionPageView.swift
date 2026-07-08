@@ -1,4 +1,5 @@
 import DispatchKit
+import SwiftData
 import SwiftUI
 
 /// A plain (non-`@Observable`) reference box that debounced text fields
@@ -57,6 +58,7 @@ struct QuestionPageView: View {
         case .tokens, .people:
             TokenEntryView(placeholder: page.placeholder ?? "Add…",
                            tokens: currentTokens,
+                           isPeople: page.question.type == .people,
                            onChange: { onAnswer(.tokens($0)) })
         case .number:
             LocalTextEditorField(
@@ -245,8 +247,20 @@ struct ChoiceListView: View {
 struct TokenEntryView: View {
     let placeholder: String
     let tokens: [String]
+    /// Whether this page is a people question — selects which vocabulary
+    /// entity (`PersonEntity` vs `TokenEntity`) backs autocomplete.
+    let isPeople: Bool
     let onChange: ([String]) -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @SwiftUI.FocusState private var fieldFocused: Bool
+    /// Live keystrokes stay in this local `@State`; suggestions are computed
+    /// purely from local state per render — never writing to any observable
+    /// per keystroke (see `LocalTextEditorField`'s doc comment for the
+    /// keyboard-garbling bug that motivates this).
     @State private var draft = ""
+    /// Vocabulary candidates, fetched once per appearance — never per keystroke.
+    @State private var candidates: [(text: String, usageCount: Int)] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -257,6 +271,7 @@ struct TokenEntryView: View {
             }
             TextField(placeholder, text: $draft)
                 .font(.title3)
+                .focused($fieldFocused)
                 .onSubmit {
                     let trimmed = draft.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { return }
@@ -264,8 +279,52 @@ struct TokenEntryView: View {
                     draft = ""
                 }
                 .accessibilityIdentifier("token-field")
+            if fieldFocused, !suggestions.isEmpty {
+                suggestionsRow
+            }
         }
         .padding()
+        .task {
+            loadCandidates()
+        }
+    }
+
+    private var suggestions: [String] {
+        TokenSuggester.suggest(query: draft, candidates: candidates, excluding: tokens)
+    }
+
+    private var suggestionsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach(suggestions, id: \.self) { suggestion in
+                    Button {
+                        onChange(tokens + [suggestion])
+                        draft = ""
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.arrow.circlepath").imageScale(.small)
+                            Text(suggestion)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.quaternary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("token-suggestion-\(suggestion)")
+                }
+            }
+        }
+        .accessibilityIdentifier("token-suggestions")
+    }
+
+    private func loadCandidates() {
+        if isPeople {
+            let fetched = (try? modelContext.fetch(FetchDescriptor<PersonEntity>())) ?? []
+            candidates = fetched.map { (text: $0.text, usageCount: $0.usageCount) }
+        } else {
+            let fetched = (try? modelContext.fetch(FetchDescriptor<TokenEntity>())) ?? []
+            candidates = fetched.map { (text: $0.text, usageCount: $0.usageCount) }
+        }
     }
 }
 
