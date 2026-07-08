@@ -3,8 +3,10 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.appDefaults) private var appDefaults
+    @Environment(\.notificationPrefs) private var notificationPrefs
     @Environment(SurveyPresenter.self) private var surveyPresenter
     @Environment(NotificationScheduler.self) private var notificationScheduler
+    @Environment(AwakeStore.self) private var awakeStore
     @State private var onboardingCompleted = false
     @State private var hasCheckedOnboarding = false
 
@@ -15,7 +17,7 @@ struct ContentView: View {
             } else {
                 OnboardingView {
                     onboardingCompleted = true
-                    notificationScheduler.requestPermissionIfNeeded()
+                    notificationScheduler.requestPermissionIfNeeded(prefs: notificationPrefs, awakeStore: awakeStore)
                 }
             }
         }
@@ -23,6 +25,15 @@ struct ContentView: View {
             guard !hasCheckedOnboarding else { return }
             hasCheckedOnboarding = true
             onboardingCompleted = appDefaults.bool(forKey: OnboardingFlag.key)
+        }
+        .task {
+            // Drain any pending survey request set before this view's
+            // onChange handler registered — a notification tap that
+            // cold-launches the app can set `pendingSurveyRequest` before
+            // SwiftUI wires up observation, so onChange alone would miss it.
+            guard let pending = notificationScheduler.pendingSurveyRequest else { return }
+            surveyPresenter.request = pending
+            notificationScheduler.pendingSurveyRequest = nil
         }
         .fullScreenCover(item: Binding(
             get: { surveyPresenter.request },

@@ -66,12 +66,27 @@ struct DispatchApp: App {
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onAppear {
                     if appDefaults.bool(forKey: OnboardingFlag.key) {
-                        notificationScheduler.requestPermissionIfNeeded()
+                        notificationScheduler.requestPermissionIfNeeded(prefs: notificationPrefs, awakeStore: awakeStore)
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     guard newPhase == .active else { return }
                     notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+                }
+                .task {
+                    guard ProcessInfo.processInfo.arguments.contains("--dump-pending") else { return }
+                    // Diagnostic harness for verifying the replan
+                    // remove-before-add sequencing empirically: replans on
+                    // launch, waits for the async add() calls to land, then
+                    // prints the pending `prompt-` request count so it can
+                    // be grepped from `xcrun simctl launch --console-pty`
+                    // output. Kept permanently behind this launch argument
+                    // as a lightweight diagnostic; no effect on normal runs.
+                    await notificationScheduler.replanNow(prefs: notificationPrefs, awakeStore: awakeStore)
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    let pending = await UNUserNotificationCenter.current().pendingNotificationRequests()
+                    let count = pending.filter { $0.identifier.hasPrefix(NotificationIdentifiers.promptPrefix) }.count
+                    print("PENDING-PROMPTS: \(count)")
                 }
         }
         .modelContainer(container)

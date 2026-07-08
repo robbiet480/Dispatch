@@ -38,6 +38,11 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     private let container: ModelContainer
     private let isTestEnvironment: Bool
 
+    /// Guards against re-firing the permission request when the scene is
+    /// recreated (e.g. backgrounding/foregrounding rebuilds ContentView,
+    /// which would otherwise call `requestPermissionIfNeeded` again).
+    private var hasRequestedThisLaunch = false
+
     init(container: ModelContainer, isTestEnvironment: Bool) {
         self.container = container
         self.isTestEnvironment = isTestEnvironment
@@ -86,13 +91,23 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// Requests `.alert .sound .badge` permission. Skipped under
     /// `--mock-sensors` / `--ui-testing` so UI tests never hit the system
     /// permission dialog (which blocks the test runner indefinitely).
-    func requestPermissionIfNeeded() {
+    /// Guarded by `hasRequestedThisLaunch` so scene recreation (e.g.
+    /// background/foreground rebuilding ContentView) doesn't refire the
+    /// system prompt. On grant, triggers a replan so prompts scheduled
+    /// before permission existed actually get queued.
+    func requestPermissionIfNeeded(prefs: NotificationPrefs, awakeStore: AwakeStore) {
         guard !isTestEnvironment else { return }
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+        guard !hasRequestedThisLaunch else { return }
+        hasRequestedThisLaunch = true
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             if let error {
                 notificationLog.error("notification permission request failed: \(error, privacy: .public)")
             } else {
                 notificationLog.info("notification permission granted: \(granted, privacy: .public)")
+            }
+            guard granted else { return }
+            Task { @MainActor in
+                await self?.replanNow(prefs: prefs, awakeStore: awakeStore)
             }
         }
     }
@@ -100,27 +115,57 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Planning
 
     /// Re-plans pending DISPATCH_PROMPT requests: clears everything with the
-    /// `prompt-` identifier prefix (snoozes are untouched), does nothing
-    /// further while asleep, otherwise plans today's remaining window plus
-    /// tomorrow's full window and schedules calendar-trigger requests for
-    /// every future date.
+    /// `prompt-` identifier prefix (snoozes are untouched while awake; while
+    /// asleep, pending snoozes are also cleared so they can't fire during
+    /// quiet hours), does nothing further while asleep, otherwise plans
+    /// today's remaining window plus tomorrow's full window and schedules
+    /// calendar-trigger requests for every future date.
+    ///
+    /// Sync wrapper around `replanNow` for call sites that can't await
+    /// (scenePhase/onChange handlers, intents, etc). Fire-and-forget is safe
+    /// here because `replanNow` sequences remove-before-add internally, so
+    /// concurrent callers can't race a stale removal against a fresh add.
     func replan(prefs: NotificationPrefs, awakeStore: AwakeStore, now: Date = Date(), calendar: Calendar = .current) {
-        removePendingPromptRequests()
+        Task { await replanNow(prefs: prefs, awakeStore: awakeStore, now: now, calendar: calendar) }
+    }
+
+    /// Async replan: reads pending requests, computes the identifiers to
+    /// remove, removes them, and only THEN adds the freshly-planned
+    /// requests. This ordering matters — `identifiers` are content-addressed
+    /// (`prompt-<yyyyMMdd>-<HHmm>`) and can collide across replans of the
+    /// same minute, so removing before adding avoids a race where the
+    /// daemon processes an add before a stale remove and the new schedule
+    /// gets deleted out from under it.
+    func replanNow(prefs: NotificationPrefs, awakeStore: AwakeStore, now: Date = Date(), calendar: Calendar = .current) async {
+        let pending = await center.pendingNotificationRequests()
+        var identifiersToRemove = pending
+            .map(\.identifier)
+            .filter { $0.hasPrefix(NotificationIdentifiers.promptPrefix) }
+
+        if !awakeStore.isAwake {
+            let snoozeIdentifiers = pending
+                .map(\.identifier)
+                .filter { $0.hasPrefix(NotificationIdentifiers.snoozePrefix) }
+            identifiersToRemove.append(contentsOf: snoozeIdentifiers)
+        }
+
+        center.removePendingNotificationRequests(withIdentifiers: identifiersToRemove)
+
         guard awakeStore.isAwake else { return }
 
         let dates = plannedDates(prefs: prefs, now: now, calendar: calendar)
             .filter { $0 > now }
 
-        for (index, date) in dates.enumerated() {
-            let identifier = "\(NotificationIdentifiers.promptPrefix)\(Self.isoDayFormatter.string(from: date))-\(index)"
+        for date in dates {
+            let identifier = "\(NotificationIdentifiers.promptPrefix)\(Self.isoMinuteFormatter.string(from: date))"
             let content = Self.makeContent()
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-            center.add(request) { error in
-                if let error {
-                    notificationLog.error("failed to schedule prompt \(identifier, privacy: .public): \(error, privacy: .public)")
-                }
+            do {
+                try await center.add(request)
+            } catch {
+                notificationLog.error("failed to schedule prompt \(identifier, privacy: .public): \(error, privacy: .public)")
             }
         }
     }
@@ -151,15 +196,6 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             prefs: prefs, awakeStart: tomorrowAwakeStart, awakeEnd: tomorrowAwakeEnd, seed: tomorrowSeed, calendar: calendar
         )
         return (todayDates + tomorrowDates).sorted()
-    }
-
-    private func removePendingPromptRequests() {
-        center.getPendingNotificationRequests { [center] requests in
-            let identifiers = requests
-                .map(\.identifier)
-                .filter { $0.hasPrefix(NotificationIdentifiers.promptPrefix) }
-            center.removePendingNotificationRequests(withIdentifiers: identifiers)
-        }
     }
 
     // MARK: - Next alert readout
@@ -301,6 +337,17 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     private static let isoDayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd"
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        return formatter
+    }()
+
+    /// Content-addressed identifier suffix (`yyyyMMdd-HHmm`) so pending
+    /// prompt requests for the same planned minute collide (by design) on
+    /// re-plan instead of accumulating index-based duplicates.
+    private static let isoMinuteFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmm"
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .current
         return formatter
