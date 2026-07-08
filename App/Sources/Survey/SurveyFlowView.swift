@@ -74,6 +74,6 @@ struct SurveyFlowView: View {
             .font(.subheadline.weight(.semibold))
             .padding()
         }
-        .background(Color(red: 0.98, green: 0.36, blue: 0.22).opacity(0.12))
+        .background(Color.themeBackground(ThemeStore().theme).opacity(0.9))
     }
 }

@@ -12,6 +12,9 @@ struct DispatchApp: App {
     init() {
         container = try! ModelContainer(for: Schema(DispatchStore.allModels))
         seedDefaultQuestionsIfNeeded()
+        if ProcessInfo.processInfo.arguments.contains("--skip-onboarding") {
+            UserDefaults.standard.set(true, forKey: "onboarding.completed")
+        }
     }
 
     var body: some Scene {
