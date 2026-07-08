@@ -1,3 +1,4 @@
+import CoreData
 import DispatchKit
 import os
 import SwiftData
@@ -22,6 +23,7 @@ struct DispatchApp: App {
     let privacyCoverWindow: PrivacyCoverWindow
     let permissionCascade: PermissionCascade
     let workoutEndObserver: WorkoutEndObserver
+    let remoteChangeObserver: RemoteChangeObserver
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
     @State private var backgroundedAt: Date?
@@ -40,7 +42,8 @@ struct DispatchApp: App {
         // Container construction consults the sync policy (defaults suite +
         // test environment), so defaults selection above must precede it.
         let syncPolicy = SyncPolicy(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
-        container = Self.makeContainer(syncEnabled: syncPolicy.shouldSync)
+        let (madeContainer, cloudKitActive) = Self.makeContainer(syncEnabled: syncPolicy.shouldSync)
+        container = madeContainer
 
         // One-time legacy default-question ID migration. Must run before
         // anything reads questions — in particular before
@@ -84,6 +87,21 @@ struct DispatchApp: App {
             isTestEnvironment: isTestEnvironment
         )
 
+        // Remote-change reactions: dedupe/vocabulary/Spotlight run on a
+        // background context inside the observer; the callback re-plans
+        // notifications (which also re-registers the quick-answer category)
+        // because questions/groups may have changed on another device.
+        // Locals (not self) captured — self isn't fully initialized yet.
+        let prefsForReplan = notificationPrefs
+        let awakeForReplan = awakeStore
+        remoteChangeObserver = RemoteChangeObserver(
+            container: container,
+            isTestEnvironment: isTestEnvironment,
+            isSyncActive: cloudKitActive
+        ) {
+            scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
+        }
+
         seedDefaultQuestionsIfNeeded()
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
@@ -105,6 +123,11 @@ struct DispatchApp: App {
         // throttles future deliveries. Self-gating for the test environment
         // and the no-groups case; the onAppear call stays for group edits.
         workoutEndObserver.refresh()
+
+        // Subscribe to remote-change notifications and schedule the launch
+        // SyncDedupe pass (debounced with the observer's first fire).
+        // Test-gated internally.
+        remoteChangeObserver.start()
     }
 
     var body: some Scene {
@@ -118,6 +141,7 @@ struct DispatchApp: App {
                 .environment(appLockStore)
                 .environment(permissionCascade)
                 .environment(workoutEndObserver)
+                .environment(remoteChangeObserver)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onAppear {
@@ -182,6 +206,32 @@ struct DispatchApp: App {
                     let count = pending.filter { $0.identifier.hasPrefix(NotificationIdentifiers.promptPrefix) }.count
                     print("PENDING-PROMPTS: \(count)")
                 }
+                .task {
+                    guard ProcessInfo.processInfo.arguments.contains("--probe-remote-change") else { return }
+                    // Diagnostic harness proving NSPersistentStoreRemoteChange
+                    // is reachable through SwiftData's stack (plan 13): counts
+                    // notifications observed around a background-context save
+                    // and prints the tally for `simctl launch --console-pty`
+                    // grepping. Kept permanently behind this launch argument,
+                    // same pattern as --dump-pending above.
+                    let counter = OSAllocatedUnfairLock(initialState: 0)
+                    let observer = NotificationCenter.default.addObserver(
+                        forName: .NSPersistentStoreRemoteChange, object: nil, queue: nil
+                    ) { _ in
+                        counter.withLock { $0 += 1 }
+                    }
+                    let context = ModelContext(container)
+                    let question = Question()
+                    question.prompt = "remote-change probe"
+                    question.isEnabled = false
+                    context.insert(question)
+                    try? context.save()
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    let observed = counter.withLock { $0 }
+                    print("REMOTE-CHANGE-EVENTS: \(observed)")
+                    syncLog.info("REMOTE-CHANGE-EVENTS: \(observed, privacy: .public)")
+                    NotificationCenter.default.removeObserver(observer)
+                }
         }
         .modelContainer(container)
     }
@@ -197,7 +247,7 @@ struct DispatchApp: App {
     /// entitlements now present, the default `.automatic` would infer
     /// CloudKit from them, which must not happen for the sync-disabled and
     /// test paths.
-    private static func makeContainer(syncEnabled: Bool) -> ModelContainer {
+    private static func makeContainer(syncEnabled: Bool) -> (ModelContainer, cloudKitActive: Bool) {
         let schema = Schema(DispatchStore.allModels)
         if syncEnabled {
             do {
@@ -207,7 +257,7 @@ struct DispatchApp: App {
                 )
                 let container = try ModelContainer(for: schema, configurations: [config])
                 syncLog.info("CloudKit-mirrored container active (\(SyncPolicy.containerIdentifier, privacy: .public))")
-                return container
+                return (container, cloudKitActive: true)
             } catch {
                 syncLog.error("CloudKit container construction failed, falling back to local: \(error, privacy: .public)")
             }
@@ -216,7 +266,7 @@ struct DispatchApp: App {
             let config = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
             let container = try ModelContainer(for: schema, configurations: [config])
             syncLog.info("local (non-CloudKit) container active")
-            return container
+            return (container, cloudKitActive: false)
         } catch {
             // Same hard-failure semantics the app has always had for an
             // unopenable local store (previously `try!` at this call site) —

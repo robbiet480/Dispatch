@@ -126,9 +126,10 @@ struct SettingsView: View {
             .listRowBackground(Color.white.opacity(0.12))
             .accessibilityIdentifier("data-settings-link")
 
-            NavigationLink(destination: Text("Coming soon")) {
+            NavigationLink(destination: ICloudSettingsView()) {
                 settingsLabel("iCloud")
             }
+            .accessibilityIdentifier("icloud-settings-link")
             .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("DATA")
