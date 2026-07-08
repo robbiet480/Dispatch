@@ -4,13 +4,20 @@ import SwiftUI
 
 struct HomeView: View {
     @Query private var reports: [Report]
+    @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Environment(ThemeStore.self) private var themeStore
     @Environment(AwakeStore.self) private var awakeStore
+    @Environment(VisualizationFilterStore.self) private var filterStore
     @Environment(SurveyPresenter.self) private var surveyPresenter
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(\.notificationPrefs) private var notificationPrefs
+    @State private var isShowingFilter = false
 
     private var theme: Theme { themeStore.theme }
+
+    private var visibleQuestions: [Question] {
+        questions.filter { $0.isEnabled && filterStore.isVisible($0.uniqueIdentifier) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -20,17 +27,72 @@ struct HomeView: View {
 
                 VStack {
                     topBar
-                    Spacer()
-                    hexagon
-                    Text("\(reports.count) reports")
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
-                        .accessibilityIdentifier("report-count")
-                    Spacer()
+                    if reports.isEmpty {
+                        Spacer()
+                        hexagon
+                        Text("\(reports.count) reports")
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                            .accessibilityIdentifier("report-count")
+                        Spacer()
+                    } else {
+                        filterPill
+                        visualizationPages
+                        Text("\(reports.count) reports")
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                            .accessibilityIdentifier("report-count")
+                    }
                     bottomBar
                 }
             }
             .navigationBarHidden(true)
+            .sheet(isPresented: $isShowingFilter) {
+                VisualizationFilterView(
+                    questions: questions.filter(\.isEnabled),
+                    filterStore: filterStore
+                )
+            }
+        }
+    }
+
+    private var filterPill: some View {
+        Button {
+            isShowingFilter = true
+        } label: {
+            Text("Filter Visualizations…")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.15))
+                .clipShape(Capsule())
+        }
+        .accessibilityIdentifier("viz-filter-button")
+        .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private var visualizationPages: some View {
+        if visibleQuestions.isEmpty {
+            Spacer()
+            Text("No visualizations to show")
+                .font(.headline)
+                .foregroundStyle(.white.opacity(0.7))
+            Spacer()
+        } else {
+            TabView {
+                ForEach(visibleQuestions, id: \.uniqueIdentifier) { question in
+                    QuestionVisualizationView(
+                        question: question,
+                        visualization: VisualizationData.build(for: question, reports: reports),
+                        theme: theme
+                    )
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            .indexViewStyle(.page(backgroundDisplayMode: .always))
         }
     }
 

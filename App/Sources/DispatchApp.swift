@@ -14,6 +14,7 @@ struct DispatchApp: App {
     let themeStore: ThemeStore
     let awakeStore: AwakeStore
     let notificationPrefs: NotificationPrefs
+    let visualizationFilterStore: VisualizationFilterStore
     let surveyPresenter = SurveyPresenter()
     let notificationScheduler: NotificationScheduler
     private let appDefaults: UserDefaults
@@ -35,6 +36,7 @@ struct DispatchApp: App {
         themeStore = ThemeStore(defaults: appDefaults)
         awakeStore = AwakeStore(defaults: appDefaults)
         notificationPrefs = NotificationPrefs(defaults: appDefaults)
+        visualizationFilterStore = VisualizationFilterStore(defaults: appDefaults)
 
         let scheduler = NotificationScheduler(container: container, isTestEnvironment: isTestEnvironment)
         notificationScheduler = scheduler
@@ -60,6 +62,7 @@ struct DispatchApp: App {
             ContentView()
                 .environment(themeStore)
                 .environment(awakeStore)
+                .environment(visualizationFilterStore)
                 .environment(surveyPresenter)
                 .environment(notificationScheduler)
                 .environment(\.appDefaults, appDefaults)
