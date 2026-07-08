@@ -58,7 +58,8 @@ struct ContentView: View {
         .fullScreenCover(item: Binding(
             get: { appLockStore.isLocked ? nil : surveyPresenter.request },
             set: { surveyPresenter.request = $0 })) { request in
-            SurveyFlowView(kind: request.kind, trigger: request.trigger, overrideDate: request.overrideDate)
+            SurveyFlowView(kind: request.kind, trigger: request.trigger, overrideDate: request.overrideDate,
+                           promptGroupID: request.promptGroupID)
         }
         // NOTE: the lock surface itself now lives in a dedicated UIWindow
         // (`PrivacyCoverWindow`, driven from DispatchApp's scenePhase handler)

@@ -15,6 +15,8 @@ final class SurveyController {
     /// When set, this is a backdated report: capture is skipped entirely and
     /// the report is saved at this date with `isBackdated = true`.
     let overrideDate: Date?
+    /// Group-scoped survey (plan 12): recorded on the saved report.
+    private let promptGroupID: String?
 
     var isBackdated: Bool { overrideDate != nil }
 
@@ -24,13 +26,15 @@ final class SurveyController {
         || ProcessInfo.processInfo.arguments.contains("--ui-testing")
 
     init(questions: [Question], kind: ReportKind, trigger: ReportTrigger, overrideDate: Date? = nil,
+         promptGroupID: String? = nil, groupQuestionIDs: [String]? = nil,
          appDefaults: UserDefaults = .standard) {
-        self.survey = SurveyViewModel(questions: questions, kind: kind)
+        self.survey = SurveyViewModel(questions: questions, kind: kind, groupQuestionIDs: groupQuestionIDs)
         self.kind = kind
         self.trigger = trigger
         self.settings = SensorSettings(defaults: appDefaults)
         self.questions = questions
         self.overrideDate = overrideDate
+        self.promptGroupID = promptGroupID
     }
 
     static func providers(since: Date?) -> [any SensorProvider] {
@@ -74,7 +78,8 @@ final class SurveyController {
         let report = try ReportBuilder.save(kind: kind, trigger: trigger, date: overrideDate ?? Date(),
                                             timeZone: TimeZone.current, outcomes: outcomes,
                                             answers: survey.drafts(), in: context,
-                                            isBackdated: isBackdated)
+                                            isBackdated: isBackdated,
+                                            promptGroupID: promptGroupID)
 
         SpotlightIndexer.index(report: report)
 

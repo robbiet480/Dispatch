@@ -44,7 +44,8 @@ public enum ReportBuilder {
         outcomes: [SensorKind: SensorOutcome],
         answers: [AnswerDraft],
         in context: ModelContext,
-        isBackdated: Bool = false
+        isBackdated: Bool = false,
+        promptGroupID: String? = nil
     ) throws -> Report {
         let report = Report()
         report.date = date
@@ -52,6 +53,7 @@ public enum ReportBuilder {
         report.kind = kind
         report.trigger = trigger
         report.isBackdated = isBackdated
+        report.promptGroupID = promptGroupID
 
         var health: [HealthReading] = []
         for outcome in outcomes.values {

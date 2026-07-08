@@ -20,12 +20,24 @@ public final class SurveyViewModel {
     public private(set) var currentIndex = 0
     private var answers: [String: AnswerValue] = [:]
 
-    public init(questions: [Question], kind: ReportKind) {
-        pages = questions
-            .filter { $0.isEnabled && $0.reportKinds.contains(kind) }
-            .sorted {
-                ($0.sortOrder, $0.uniqueIdentifier) < ($1.sortOrder, $1.uniqueIdentifier)
-            }
+    /// `groupQuestionIDs` (plan 12) scopes the survey to a PromptGroup: pages
+    /// are the group's questions in the GROUP's order (dangling IDs skipped,
+    /// disabled questions excluded), ignoring reportKinds — group membership
+    /// is its own opt-in. nil keeps today's global behavior exactly.
+    public init(questions: [Question], kind: ReportKind, groupQuestionIDs: [String]? = nil) {
+        let ordered: [Question]
+        if let groupQuestionIDs {
+            let byID = Dictionary(questions.map { ($0.uniqueIdentifier, $0) },
+                                  uniquingKeysWith: { first, _ in first })
+            ordered = groupQuestionIDs.compactMap { byID[$0] }.filter(\.isEnabled)
+        } else {
+            ordered = questions
+                .filter { $0.isEnabled && $0.reportKinds.contains(kind) }
+                .sorted {
+                    ($0.sortOrder, $0.uniqueIdentifier) < ($1.sortOrder, $1.uniqueIdentifier)
+                }
+        }
+        pages = ordered
             .map { question in
                 var choices = question.choices
                 if question.type == .yesNo && choices.isEmpty {

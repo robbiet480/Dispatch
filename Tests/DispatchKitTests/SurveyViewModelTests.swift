@@ -115,3 +115,36 @@ private func makeQuestion(_ id: String, _ prompt: String, _ type: QuestionType,
     #expect(viewModel.pages[1].allowsMultipleSelection == false)
     #expect(viewModel.pages[2].allowsMultipleSelection == false)
 }
+
+// MARK: - Group scoping (plan 12)
+
+@Test func groupScopingOrdersByGroupAndSkipsDanglingAndDisabled() {
+    let questions = [
+        makeQuestion("q1", "First?", .yesNo, sort: 1),
+        makeQuestion("q2", "Second?", .tokens, sort: 2),
+        makeQuestion("q-off", "Disabled?", .yesNo, sort: 0, enabled: false),
+        // Group scoping ignores reportKinds — membership is its own opt-in.
+        makeQuestion("q-wake", "How did you sleep?", .multipleChoice, sort: 3, kinds: [.wake]),
+    ]
+    let viewModel = SurveyViewModel(
+        questions: questions, kind: .regular,
+        groupQuestionIDs: ["q-wake", "q-gone", "q-off", "q1"])
+    #expect(viewModel.pages.map(\.id) == ["q-wake", "q1"])
+}
+
+@Test func nilGroupScopeKeepsGlobalBehavior() {
+    let questions = [
+        makeQuestion("q1", "First?", .yesNo, sort: 1),
+        makeQuestion("q2", "Second?", .tokens, sort: 2),
+    ]
+    let scoped = SurveyViewModel(questions: questions, kind: .regular, groupQuestionIDs: nil)
+    let global = SurveyViewModel(questions: questions, kind: .regular)
+    #expect(scoped.pages.map(\.id) == global.pages.map(\.id))
+}
+
+@Test func emptyGroupScopeYieldsNoPages() {
+    let viewModel = SurveyViewModel(
+        questions: [makeQuestion("q1", "First?", .yesNo, sort: 1)],
+        kind: .regular, groupQuestionIDs: [])
+    #expect(viewModel.pages.isEmpty)
+}

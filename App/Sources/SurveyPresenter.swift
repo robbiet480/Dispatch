@@ -13,6 +13,9 @@ struct SurveyRequest: Identifiable, Equatable {
     /// When set, this is a backdated report: sensor capture is skipped
     /// entirely and the report is saved at this date with `isBackdated = true`.
     var overrideDate: Date?
+    /// When set, the survey is scoped to this PromptGroup's questions and
+    /// the saved report records the group (plan 12).
+    var promptGroupID: String?
 }
 
 @MainActor

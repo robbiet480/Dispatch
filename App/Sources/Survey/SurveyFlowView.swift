@@ -20,6 +20,8 @@ struct SurveyFlowView: View {
     let kind: ReportKind
     let trigger: ReportTrigger
     var overrideDate: Date? = nil
+    /// Scopes the survey to this PromptGroup's questions (plan 12).
+    var promptGroupID: String? = nil
 
     var body: some View {
         Group {
@@ -31,8 +33,21 @@ struct SurveyFlowView: View {
         }
         .task {
             guard controller == nil else { return }
+            // Group-scoped survey: resolve the group's ordered question IDs.
+            // A dangling/deleted group degrades to the normal global survey.
+            var groupQuestionIDs: [String]?
+            if let promptGroupID {
+                let id = promptGroupID
+                var descriptor = FetchDescriptor<PromptGroup>(
+                    predicate: #Predicate { $0.uniqueIdentifier == id })
+                descriptor.fetchLimit = 1
+                groupQuestionIDs = (try? modelContext.fetch(descriptor))?.first?.questionIDs
+            }
             let newController = SurveyController(questions: questions, kind: kind, trigger: trigger,
-                                                 overrideDate: overrideDate, appDefaults: appDefaults)
+                                                 overrideDate: overrideDate,
+                                                 promptGroupID: groupQuestionIDs == nil ? nil : promptGroupID,
+                                                 groupQuestionIDs: groupQuestionIDs,
+                                                 appDefaults: appDefaults)
             controller = newController
             await newController.startCapture(since: DispatchStore.lastReportDate(in: modelContext))
         }

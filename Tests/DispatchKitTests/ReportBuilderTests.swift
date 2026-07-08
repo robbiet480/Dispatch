@@ -92,3 +92,18 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
     try context.save()
     #expect(DispatchStore.lastReportDate(in: context) == Date(timeIntervalSince1970: 2_000))
 }
+
+@Test func savesPromptGroupIDWhenProvidedAndNilByDefault() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+
+    let grouped = try ReportBuilder.save(kind: .regular, trigger: .notification, date: Date(),
+                                         timeZone: .current, outcomes: [:], answers: [],
+                                         in: context, promptGroupID: "pg-1")
+    #expect(grouped.promptGroupID == "pg-1")
+
+    let plain = try ReportBuilder.save(kind: .regular, trigger: .manual, date: Date(),
+                                       timeZone: .current, outcomes: [:], answers: [],
+                                       in: context)
+    #expect(plain.promptGroupID == nil)
+}

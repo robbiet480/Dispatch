@@ -19,6 +19,11 @@ enum NotificationIdentifiers {
     static let promptPrefix = "prompt-"
     static let snoozePrefix = "snooze-"
     static let nagPrefix = "nag-"
+    /// Group prompts: `gprompt-<groupID>-<yyyyMMdd-HHmm>` (plan 12). Their
+    /// nags reuse `nag-` with the `<groupID>-<stamp>` parent stamp embedded.
+    static let groupPromptPrefix = "gprompt-"
+    /// userInfo key carrying the PromptGroup uniqueIdentifier.
+    static let promptGroupIDKey = "promptGroupID"
 }
 
 /// Owns UNUserNotificationCenter: permission, request building/re-planning,
@@ -161,11 +166,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         // presented with, which is acceptable (the user already saw them).
         registerCategory(question: question)
 
+        // gprompt- removals MUST share this batch with prompt-/nag- (plan 12):
+        // a remove issued after the adds below could race the daemon and
+        // delete the fresh schedule (this codebase shipped that bug once).
         let pending = await center.pendingNotificationRequests()
         var identifiersToRemove = pending
             .map(\.identifier)
             .filter {
                 $0.hasPrefix(NotificationIdentifiers.promptPrefix)
+                    || $0.hasPrefix(NotificationIdentifiers.groupPromptPrefix)
                     || $0.hasPrefix(NotificationIdentifiers.nagPrefix)
             }
 
@@ -183,7 +192,37 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         let allPlannedDates = plannedDates(prefs: prefs, now: now, calendar: calendar)
         let dates = allPlannedDates.filter { $0 > now }
 
-        for date in dates {
+        // Timer-scheduled groups (plan 12): planned per awake window with a
+        // group-varied seed; event/disabled schedules plan nothing.
+        let groups = Self.timerScheduledGroups(in: questionContext)
+        let windows = planWindows(now: now, calendar: calendar)
+        let groupPlans: [(group: PromptGroup, all: [Date], future: [Date])] = groups.map { group in
+            let all = windows.flatMap { window in
+                GroupPlanner.plan(group: group, awakeStart: window.start, awakeEnd: window.end,
+                                  seed: window.seed, calendar: calendar)
+            }.sorted()
+            return (group, all, all.filter { $0 > now })
+        }
+
+        // One allocator owns the 64-pending arithmetic: global first, groups
+        // in order, nags last. Cap 60 keeps the plan-10 headroom for snoozes.
+        let allocation = NotificationBudget.allocate(
+            globalCount: dates.count,
+            groupCounts: groupPlans.map { ($0.group.uniqueIdentifier, $0.future.count) },
+            nagRequest: prefs.nagEnabled
+                ? NotificationBudget.NagRequest(delayMinutes: prefs.nagDelayMinutes,
+                                                intervalMinutes: prefs.nagIntervalMinutes,
+                                                maxCount: prefs.nagMaxCount)
+                : nil,
+            cap: 60)
+        if allocation.global < dates.count {
+            notificationLog.info("budget clamped global prompts to \(allocation.global, privacy: .public) of \(dates.count, privacy: .public)")
+        }
+        for plan in groupPlans where allocation.count(forGroup: plan.group.uniqueIdentifier) < plan.future.count {
+            notificationLog.info("budget clamped group \(plan.group.uniqueIdentifier, privacy: .public) to \(allocation.count(forGroup: plan.group.uniqueIdentifier), privacy: .public) of \(plan.future.count, privacy: .public)")
+        }
+
+        for date in dates.prefix(allocation.global) {
             let identifier = "\(NotificationIdentifiers.promptPrefix)\(Self.isoMinuteFormatter.string(from: date))"
             let content = Self.makeContent(question: question)
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
@@ -196,45 +235,86 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             }
         }
 
-        guard prefs.nagEnabled else { return }
+        for plan in groupPlans {
+            let granted = allocation.count(forGroup: plan.group.uniqueIdentifier)
+            let body = Self.groupBody(for: plan.group, in: questionContext)
+            for date in plan.future.prefix(granted) {
+                let stamp = Self.groupStamp(groupID: plan.group.uniqueIdentifier, date: date)
+                let identifier = "\(NotificationIdentifiers.groupPromptPrefix)\(stamp)"
+                let content = Self.makeGroupContent(groupID: plan.group.uniqueIdentifier, body: body)
+                let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                do {
+                    try await center.add(request)
+                } catch {
+                    notificationLog.error("failed to schedule group prompt \(identifier, privacy: .public): \(error, privacy: .public)")
+                }
+            }
+        }
+
+        guard prefs.nagEnabled, allocation.nagsPerPrompt >= 0 else { return }
+        if allocation.nagsPerPrompt < prefs.nagMaxCount {
+            notificationLog.info(
+                "nag count clamped to \(allocation.nagsPerPrompt, privacy: .public) (budget) from \(prefs.nagMaxCount, privacy: .public)"
+            )
+        }
+        guard allocation.nagsPerPrompt > 0 else { return }
         // Nag chains are computed from ALL planned dates — including prompts
         // that already fired — so a replan (e.g. foregrounding the app)
         // doesn't kill the in-flight chain of a delivered-but-unanswered
         // prompt (they share the `nag-` removal batch above). Chains whose
         // parent the user already acted on (quick answer, snooze, tap,
-        // in-app save — tracked via `lastActedAt`) stay dead.
+        // in-app save — tracked via `lastActedAt`) stay dead. Group prompts
+        // get the identical semantics with the group stamp embedded.
         let lastActedAt = prefs.lastActedAt ?? .distantPast
         let nagParents = allPlannedDates.filter { $0 > lastActedAt }
-        await scheduleNagChains(for: nagParents, question: question, prefs: prefs, now: now, calendar: calendar)
+        await scheduleNagChains(
+            for: nagParents, nagsPerPrompt: allocation.nagsPerPrompt,
+            stamp: { Self.isoMinuteFormatter.string(from: $0) },
+            makeContent: { Self.makeContent(question: question) },
+            prefs: prefs, now: now, calendar: calendar)
+        for plan in groupPlans {
+            let body = Self.groupBody(for: plan.group, in: questionContext)
+            let groupID = plan.group.uniqueIdentifier
+            let groupNagParents = plan.all.filter { $0 > lastActedAt }
+            await scheduleNagChains(
+                for: groupNagParents, nagsPerPrompt: allocation.nagsPerPrompt,
+                stamp: { Self.groupStamp(groupID: groupID, date: $0) },
+                makeContent: { Self.makeGroupContent(groupID: groupID, body: body) },
+                prefs: prefs, now: now, calendar: calendar)
+        }
     }
 
-    /// Schedules the pre-planned nag chains: `nag-<yyyyMMdd-HHmm>-<n>`
-    /// children at `prompt + delay + (n-1)*interval`. Parents may be in the
-    /// past (delivered-but-unanswered prompts being resurrected on replan),
+    /// Schedules the pre-planned nag chains: `nag-<stamp>-<n>` children at
+    /// `prompt + delay + (n-1)*interval`, where `<stamp>` is
+    /// `yyyyMMdd-HHmm` for global prompts and `<groupID>-<yyyyMMdd-HHmm>`
+    /// for group prompts. Parents may be in the past
+    /// (delivered-but-unanswered prompts being resurrected on replan),
     /// so fires at or before `now` are skipped — only the still-future tail
     /// of a partially-elapsed chain is re-added, and past parents whose
-    /// fires have all elapsed add no requests at all.
+    /// fires have all elapsed add no requests at all. The chain length comes
+    /// from the shared NotificationBudget allocation (clamp already applied),
+    /// so NagPlanner runs unbudgeted here.
     private func scheduleNagChains(
-        for promptDates: [Date], question: Question?, prefs: NotificationPrefs, now: Date, calendar: Calendar
+        for promptDates: [Date], nagsPerPrompt: Int,
+        stamp: (Date) -> String,
+        makeContent: () -> UNMutableNotificationContent,
+        prefs: NotificationPrefs, now: Date, calendar: Calendar
     ) async {
         let chains = NagPlanner.plan(
             promptDates: promptDates,
             delayMinutes: prefs.nagDelayMinutes,
             intervalMinutes: prefs.nagIntervalMinutes,
-            maxCount: prefs.nagMaxCount,
-            budget: 60
+            maxCount: nagsPerPrompt,
+            budget: Int.max
         )
-        if let first = chains.first, first.fires.count < prefs.nagMaxCount {
-            notificationLog.info(
-                "nag count clamped to \(first.fires.count, privacy: .public) (budget) from \(prefs.nagMaxCount, privacy: .public)"
-            )
-        }
 
         for chain in chains {
-            let stamp = Self.isoMinuteFormatter.string(from: chain.parent)
+            let stamp = stamp(chain.parent)
             for (index, fireDate) in chain.fires.enumerated() where fireDate > now {
                 let identifier = "\(NotificationIdentifiers.nagPrefix)\(stamp)-\(index + 1)"
-                let content = Self.makeContent(question: question)
+                let content = makeContent()
                 content.title = "Still waiting on your report"
                 content.interruptionLevel = .timeSensitive
                 let components = calendar.dateComponents(
@@ -266,7 +346,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 .map(\.identifier)
                 .filter { identifier in
                     guard let stamp = Self.nagParentStamp(fromNagIdentifier: identifier),
-                          let parentDate = Self.isoMinuteFormatter.date(from: stamp) else {
+                          let parentDate = Self.parentDate(fromStamp: stamp) else {
                         return false
                     }
                     return parentDate <= now
@@ -285,13 +365,33 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
-    /// Parent stamp (`yyyyMMdd-HHmm`) from a prompt or nag identifier;
+    /// Parent stamp (`yyyyMMdd-HHmm`, or `<groupID>-<yyyyMMdd-HHmm>` for
+    /// group prompts) from a prompt, group-prompt, or nag identifier;
     /// nil for snoozes and anything else.
     private static func parentStamp(fromRequestIdentifier identifier: String) -> String? {
         if identifier.hasPrefix(NotificationIdentifiers.promptPrefix) {
             return String(identifier.dropFirst(NotificationIdentifiers.promptPrefix.count))
         }
+        if identifier.hasPrefix(NotificationIdentifiers.groupPromptPrefix) {
+            return String(identifier.dropFirst(NotificationIdentifiers.groupPromptPrefix.count))
+        }
         return nagParentStamp(fromNagIdentifier: identifier)
+    }
+
+    /// The fire date encoded in a parent stamp. Global stamps are
+    /// `yyyyMMdd-HHmm`; group stamps prepend `<groupID>-` (the group ID is a
+    /// UUID and itself contains dashes), so the date is always the last two
+    /// dash-separated segments.
+    private static func parentDate(fromStamp stamp: String) -> Date? {
+        let segments = stamp.split(separator: "-")
+        guard segments.count >= 2 else { return nil }
+        return isoMinuteFormatter.date(from: segments.suffix(2).joined(separator: "-"))
+    }
+
+    /// `<groupID>-<yyyyMMdd-HHmm>` — the stamp used by gprompt identifiers
+    /// and their nag chains.
+    private static func groupStamp(groupID: String, date: Date) -> String {
+        "\(groupID)-\(isoMinuteFormatter.string(from: date))"
     }
 
     /// Parent stamp from `nag-<yyyyMMdd-HHmm>-<n>`; nil for non-nag identifiers.
@@ -303,7 +403,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         return String(suffix[..<lastDash])
     }
 
-    private func plannedDates(prefs: NotificationPrefs, now: Date, calendar: Calendar) -> [Date] {
+    /// One awake window per planned day (today + tomorrow), with its day
+    /// seed. Shared by the global schedule and every timer-scheduled group.
+    struct PlanWindow {
+        let start: Date
+        let end: Date
+        let seed: UInt64
+    }
+
+    private func planWindows(now: Date, calendar: Calendar) -> [PlanWindow] {
         let todayStart = calendar.startOfDay(for: now)
         guard let tomorrowStart = calendar.date(byAdding: .day, value: 1, to: todayStart),
               let dayAfterStart = calendar.date(byAdding: .day, value: 2, to: todayStart) else {
@@ -314,21 +422,69 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         awakeStartComponents.hour = 8
         awakeStartComponents.minute = 0
 
-        let todayAwakeStart = calendar.date(byAdding: awakeStartComponents, to: todayStart) ?? todayStart
-        let todayAwakeEnd = tomorrowStart
-        let tomorrowAwakeStart = calendar.date(byAdding: awakeStartComponents, to: tomorrowStart) ?? tomorrowStart
-        let tomorrowAwakeEnd = dayAfterStart
+        return [
+            PlanWindow(start: calendar.date(byAdding: awakeStartComponents, to: todayStart) ?? todayStart,
+                       end: tomorrowStart,
+                       seed: Self.daySeed(for: todayStart, calendar: calendar)),
+            PlanWindow(start: calendar.date(byAdding: awakeStartComponents, to: tomorrowStart) ?? tomorrowStart,
+                       end: dayAfterStart,
+                       seed: Self.daySeed(for: tomorrowStart, calendar: calendar)),
+        ]
+    }
 
-        let todaySeed = Self.daySeed(for: todayStart, calendar: calendar)
-        let tomorrowSeed = Self.daySeed(for: tomorrowStart, calendar: calendar)
+    private func plannedDates(prefs: NotificationPrefs, now: Date, calendar: Calendar) -> [Date] {
+        planWindows(now: now, calendar: calendar)
+            .flatMap { window in
+                PromptPlanner.plan(prefs: prefs, awakeStart: window.start, awakeEnd: window.end,
+                                   seed: window.seed, calendar: calendar)
+            }
+            .sorted()
+    }
 
-        let todayDates = PromptPlanner.plan(
-            prefs: prefs, awakeStart: todayAwakeStart, awakeEnd: todayAwakeEnd, seed: todaySeed, calendar: calendar
-        )
-        let tomorrowDates = PromptPlanner.plan(
-            prefs: prefs, awakeStart: tomorrowAwakeStart, awakeEnd: tomorrowAwakeEnd, seed: tomorrowSeed, calendar: calendar
-        )
-        return (todayDates + tomorrowDates).sorted()
+    // MARK: - Prompt groups (plan 12)
+
+    /// Enabled groups with a timer schedule, in creation (sortOrder) order —
+    /// the budget allocator processes them in this order.
+    private static func timerScheduledGroups(in context: ModelContext) -> [PromptGroup] {
+        let descriptor = FetchDescriptor<PromptGroup>(
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.uniqueIdentifier)])
+        guard let groups = try? context.fetch(descriptor) else { return [] }
+        return groups.filter { group in
+            guard group.isEnabled else { return false }
+            switch group.schedule {
+            case .everyNHours, .timesPerDay, .dailyAt: return true
+            case .workoutEnd, .disabled: return false
+            }
+        }
+    }
+
+    /// Notification body for a group prompt: the group's name, else its
+    /// first (non-dangling) question's prompt, else the generic body.
+    static func groupBody(for group: PromptGroup, in context: ModelContext) -> String {
+        let name = group.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        for questionID in group.questionIDs {
+            var descriptor = FetchDescriptor<Question>(
+                predicate: #Predicate { $0.uniqueIdentifier == questionID })
+            descriptor.fetchLimit = 1
+            if let prompt = (try? context.fetch(descriptor))?.first?.prompt, !prompt.isEmpty {
+                return prompt
+            }
+        }
+        return "What are you up to right now?"
+    }
+
+    /// Group prompts use a PLAIN category (no quick-answer/snooze actions):
+    /// the group may not contain the global Yes/No question, so the actions
+    /// would file answers against a question outside the group. userInfo
+    /// carries the group ID for the tap-through survey scoping.
+    static func makeGroupContent(groupID: String, body: String) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = "Time to report"
+        content.body = body
+        content.sound = .default
+        content.userInfo = [NotificationIdentifiers.promptGroupIDKey: groupID]
+        return content
     }
 
     // MARK: - Next alert readout
@@ -369,6 +525,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     ) {
         let actionIdentifier = response.actionIdentifier
         let requestIdentifier = response.notification.request.identifier
+        let promptGroupID = response.notification.request.content
+            .userInfo[NotificationIdentifiers.promptGroupIDKey] as? String
         Task { @MainActor in
             // ANY action on a prompt or one of its nags counts as "acting on
             // it" — persist the `lastActedAt` marker FIRST (so a replan
@@ -389,8 +547,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 fileQuickAnswer(isYes: false)
             default:
                 // Default tap (including UNNotificationDefaultActionIdentifier)
-                // opens the app into a new regular survey.
-                pendingSurveyRequest = SurveyRequest(kind: .regular, trigger: .notification)
+                // opens the app into a new regular survey — scoped to the
+                // prompt's group when the notification carries one.
+                pendingSurveyRequest = SurveyRequest(kind: .regular, trigger: .notification,
+                                                     promptGroupID: promptGroupID)
             }
             completionHandler()
         }
