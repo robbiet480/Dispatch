@@ -99,7 +99,14 @@ struct SurveyFlowView: View {
             .font(.subheadline.weight(.semibold))
             .padding()
         }
-        .background(Color.themeBackground(themeStore.theme).opacity(0.9))
+        .background {
+            // Paint under the keyboard too: without ignoring the keyboard
+            // safe area the theme color stops at the keyboard's top edge,
+            // leaving white behind its rounded corners and a white flash
+            // while the keyboard re-attaches after the app regains focus.
+            Color.themeBackground(themeStore.theme).opacity(0.9)
+                .ignoresSafeArea()
+        }
     }
 
     private var backdatedNote: some View {
