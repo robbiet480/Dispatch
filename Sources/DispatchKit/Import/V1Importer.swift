@@ -11,8 +11,11 @@ public struct ImportSummary: Sendable, Equatable {
 
 public enum V1Importer {
     /// Idempotent: records are upserted by uniqueIdentifier; re-importing
-    /// the same file changes nothing. Malformed records are skipped and
-    /// counted, never fatal.
+    /// the same file changes nothing. Structurally malformed JSON (fails to
+    /// decode as `V1Export`) throws and aborts the import. Within a
+    /// successfully decoded export, only per-snapshot date-parse failures
+    /// are skipped and counted via `ImportSummary.skipped`; every other
+    /// field is imported best-effort even when absent.
     public static func importExport(_ data: Data, into context: ModelContext) throws -> ImportSummary {
         let export = try V1Export.decode(from: data)
         var summary = ImportSummary()
@@ -26,6 +29,13 @@ public enum V1Importer {
             summary.questionsImported += 1
         }
 
+        // Stable join for Response.questionIdentifier: prompt text can be edited
+        // after the fact, but v1 exports only carry prompt strings on responses,
+        // so this lookup is the best available bridge to Question.uniqueIdentifier.
+        let questionIdentifierByPrompt = Dictionary(
+            export.questions.map { ($0.prompt, $0.uniqueIdentifier) },
+            uniquingKeysWith: { first, _ in first })
+
         for snapshot in export.snapshots {
             guard let parsed = snapshot.date.resolved else {
                 summary.skipped += 1
@@ -35,6 +45,7 @@ public enum V1Importer {
             report.date = parsed.date
             report.timeZoneIdentifier = TimeZone(secondsFromGMT: parsed.utcOffsetSeconds)?.identifier ?? "GMT"
             report.legacyImpetus = snapshot.reportImpetus
+            report.legacySectionIdentifier = snapshot.sectionIdentifier
             // v1 impetus (gist.github.com/dbreunig/9315705): 0=button,
             // 1=button while asleep, 2=notification, 3=sleep report, 4=wake report.
             switch snapshot.reportImpetus ?? 0 {
@@ -65,17 +76,36 @@ public enum V1Importer {
             }
             report.connection = snapshot.connection
             report.audio = snapshot.audio.map { AudioSample(avg: $0.avg, peak: $0.peak) }
+            // Only the snapshot-level altitude is polymorphic (V1AltitudeValue,
+            // simple double or detailed object); location/photo altitudes are
+            // always plain Doubles in v1.
             report.location = snapshot.location.map(mapLocation)
             report.weather = snapshot.weather.map(mapWeather)
             report.photos = snapshot.photoSet?.photos.map(mapPhoto) ?? []
-            report.health = snapshot.steps.map {
+            var health: [HealthReading] = snapshot.steps.map {
                 [HealthReading(type: "steps", value: Double($0), unit: "count")]
             } ?? []
+            if case .detailed(let altitudeData) = snapshot.altitude {
+                if let floorsAscended = altitudeData.floorsAscended {
+                    health.append(HealthReading(type: "flightsAscended", value: Double(floorsAscended), unit: "count"))
+                }
+                if let floorsDescended = altitudeData.floorsDescended {
+                    health.append(HealthReading(type: "flightsDescended", value: Double(floorsDescended), unit: "count"))
+                }
+                if let pressure = altitudeData.pressure {
+                    health.append(HealthReading(type: "pressure", value: pressure, unit: "kPa"))
+                }
+                if let adjustedPressure = altitudeData.adjustedPressure {
+                    health.append(HealthReading(type: "adjustedPressure", value: adjustedPressure, unit: "kPa"))
+                }
+            }
+            report.health = health
             summary.reportsImported += 1
 
             for v1r in snapshot.responses ?? [] {
                 let response = try fetchOrCreateResponse(id: v1r.uniqueIdentifier, in: context)
                 response.questionPrompt = v1r.questionPrompt
+                response.questionIdentifier = questionIdentifierByPrompt[v1r.questionPrompt]
                 response.tokens = v1r.tokens?.map { TokenValue(uniqueIdentifier: $0.uniqueIdentifier, text: $0.text) }
                 response.answeredOptions = v1r.answeredOptions
                 response.numericResponse = v1r.numericResponse
@@ -145,6 +175,8 @@ public enum V1Importer {
             placemark.subAdministrativeArea = pm.subAdministrativeArea
             placemark.postalCode = pm.postalCode
             placemark.country = pm.country
+            // pm.region is intentionally unmapped: it's a CLRegion debug string
+            // (radius/identifier dump), not user-facing data.
             return placemark
         }
         return snapshot

@@ -49,6 +49,7 @@ public enum V2Importer {
             report.kind = dto.kind
             report.trigger = dto.trigger
             report.legacyImpetus = dto.legacyImpetus
+            report.legacySectionIdentifier = dto.legacySectionIdentifier
             report.isBackdated = dto.isBackdated
             report.isDraft = dto.isDraft
             report.wasInBackground = dto.wasInBackground
@@ -75,6 +76,7 @@ public enum V2Importer {
                     return resp
                 }()
                 response.questionPrompt = rdto.questionPrompt
+                response.questionIdentifier = rdto.questionIdentifier
                 response.tokens = rdto.tokens
                 response.answeredOptions = rdto.answeredOptions
                 response.locationResponse = rdto.locationResponse

@@ -10,6 +10,8 @@ public final class Report {
     public var triggerRaw: String = ReportTrigger.manual.rawValue
     /// Original v1 `reportImpetus`, preserved verbatim on import.
     public var legacyImpetus: Int?
+    /// Original v1 `sectionIdentifier`, preserved verbatim on import.
+    public var legacySectionIdentifier: String?
     public var isBackdated: Bool = false
     public var isDraft: Bool = false
     public var wasInBackground: Bool = false

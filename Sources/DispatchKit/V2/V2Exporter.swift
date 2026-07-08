@@ -6,7 +6,7 @@ public enum V2Exporter {
         var export = V2Export()
 
         let questions = try context.fetch(
-            FetchDescriptor<Question>(sortBy: [SortDescriptor(\.sortOrder)]))
+            FetchDescriptor<Question>(sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.uniqueIdentifier)]))
         export.questions = questions.map { q in
             V2Question(uniqueIdentifier: q.uniqueIdentifier, prompt: q.prompt,
                        questionType: q.typeRaw, placeholderString: q.placeholderString,
@@ -16,11 +16,12 @@ public enum V2Exporter {
         }
 
         let reports = try context.fetch(
-            FetchDescriptor<Report>(sortBy: [SortDescriptor(\.date)]))
+            FetchDescriptor<Report>(sortBy: [SortDescriptor(\.date), SortDescriptor(\.uniqueIdentifier)]))
         export.reports = reports.map { r in
             var dto = V2Report(uniqueIdentifier: r.uniqueIdentifier, date: r.date,
                                timeZone: r.timeZoneIdentifier, kind: r.kind, trigger: r.trigger)
             dto.legacyImpetus = r.legacyImpetus
+            dto.legacySectionIdentifier = r.legacySectionIdentifier
             dto.isBackdated = r.isBackdated
             dto.isDraft = r.isDraft
             dto.wasInBackground = r.wasInBackground
@@ -39,6 +40,7 @@ public enum V2Exporter {
                 .map { resp in
                     var rdto = V2Response(uniqueIdentifier: resp.uniqueIdentifier,
                                           questionPrompt: resp.questionPrompt)
+                    rdto.questionIdentifier = resp.questionIdentifier
                     rdto.tokens = resp.tokens
                     rdto.answeredOptions = resp.answeredOptions
                     rdto.locationResponse = resp.locationResponse

@@ -44,6 +44,32 @@ import Testing
     }
 }
 
+/// A report date with sub-second precision must survive export -> import ->
+/// export byte-identically, i.e. the v2 wire format must not truncate fractional seconds.
+@Test func fractionalSecondDateRoundTripsByteIdentically() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let report = Report()
+    report.uniqueIdentifier = "frac-report"
+    report.date = Date(timeIntervalSince1970: 1_700_000_000.123456)
+    report.timeZoneIdentifier = "GMT"
+    contextA.insert(report)
+    try contextA.save()
+
+    let exportA = try V2Exporter.exportData(from: contextA)
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(exportA, into: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB)
+
+    #expect(exportA == exportB)
+
+    let decoded = try JSONDecoder.v2.decode(V2Export.self, from: exportA)
+    let importedDate = try #require(decoded.reports.first?.date)
+    #expect(abs(importedDate.timeIntervalSince1970 - report.date.timeIntervalSince1970) < 0.001)
+}
+
 @Test func realExportRoundTripsIfPresent() throws {
     guard let path = ProcessInfo.processInfo.environment["DISPATCH_V1_EXPORT"] else { return }
     let containerA = try DispatchStore.inMemoryContainer()

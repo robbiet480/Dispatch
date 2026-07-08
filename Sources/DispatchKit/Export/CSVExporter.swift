@@ -48,6 +48,9 @@ public enum CSVExporter {
 
     static func flatten(_ response: Response?) -> String {
         guard let response else { return "" }
+        // Positional precedence assumes exactly one payload variant (tokens,
+        // answeredOptions, locationResponse, numericResponse, textResponses)
+        // is populated per response, matching a single question type's answer shape.
         if let tokens = response.tokens { return tokens.map(\.text).joined(separator: "|") }
         if let options = response.answeredOptions { return options.joined(separator: "|") }
         if let location = response.locationResponse { return location.text ?? "" }
