@@ -279,8 +279,12 @@ struct QuestionEditorView: View {
     private func applyParityFields(to target: Question) {
         let savedType = target.type
         target.visualization = visualization?.isCompatible(with: savedType) == true ? visualization : nil
+        // Only persist a default answer that actually parses as a number —
+        // junk text would otherwise be filed as a numeric response
+        // (build-5 review fix).
         let trimmedDefault = defaultAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
-        target.defaultAnswerString = (savedType == .number && !trimmedDefault.isEmpty) ? trimmedDefault : nil
+        let isValidDefault = !trimmedDefault.isEmpty && Double(trimmedDefault) != nil
+        target.defaultAnswerString = (savedType == .number && isValidDefault) ? trimmedDefault : nil
         if savedType == .multipleChoice {
             target.allowsMultipleSelection = allowsMultipleSelection
         } else {

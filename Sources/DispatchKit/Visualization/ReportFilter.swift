@@ -75,6 +75,22 @@ public enum ReportFilter {
             case .weather(let condition): condition
             }
         }
+
+        /// Stable, kind-aware encoding (e.g. "person:Alice", "month:3").
+        /// Used for chip identity and memo keys — `displayText` alone
+        /// collides when e.g. a person and a token share the same text.
+        public var canonicalKey: String {
+            switch self {
+            case .person(let name): "person:\(name)"
+            case .place(let name): "place:\(name)"
+            case .token(let text): "token:\(text)"
+            case .month(let month): "month:\(month)"
+            case .year(let year): "year:\(year)"
+            case .ambientAudio(let bucket): "ambientAudio:\(bucket.rawValue)"
+            case .steps(let bucket): "steps:\(bucket.rawValue)"
+            case .weather(let condition): "weather:\(condition)"
+            }
+        }
     }
 
     /// True when `report` satisfies EVERY criterion ("Results are only shown
@@ -97,8 +113,16 @@ public enum ReportFilter {
                 return (response.tokens ?? []).contains { $0.text.caseInsensitiveCompare(name) == .orderedSame }
             }
         case .token(let text):
+            // Mirror of the person criterion: when people questions are
+            // known, their responses are EXCLUDED here so a name filed under
+            // "Who are you with?" doesn't satisfy a token filter.
             return report.responses.contains { response in
-                (response.tokens ?? []).contains { $0.text.caseInsensitiveCompare(text) == .orderedSame }
+                if !peopleQuestionIDs.isEmpty,
+                   let questionID = response.questionIdentifier,
+                   peopleQuestionIDs.contains(questionID) {
+                    return false
+                }
+                return (response.tokens ?? []).contains { $0.text.caseInsensitiveCompare(text) == .orderedSame }
             }
         case .place(let name):
             let answered = report.responses.contains { response in

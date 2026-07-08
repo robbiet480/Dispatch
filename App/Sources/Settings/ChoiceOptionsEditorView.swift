@@ -9,11 +9,28 @@ struct ChoiceOptionsEditorView: View {
     @Binding var allowsMultipleSelection: Bool
     let theme: Theme
 
+    /// One editable row per option. The stable UUID (NOT the array offset)
+    /// keeps `.onMove`/ForEach identity intact across reorders and edits
+    /// (build-5 review fix).
+    private struct OptionRow: Identifiable {
+        let id: UUID
+        var text: String
+    }
+
+    @State private var rows: [OptionRow]
+
     /// Live keystrokes for the new-option row stay in local @State — never
     /// routed through an observable per keystroke (see LocalTextEditorField's
     /// doc comment in QuestionPageView for the keyboard-garbling lesson).
     @State private var newOption = ""
     @SwiftUI.FocusState private var addFieldFocused: Bool
+
+    init(choices: Binding<[String]>, allowsMultipleSelection: Binding<Bool>, theme: Theme) {
+        _choices = choices
+        _allowsMultipleSelection = allowsMultipleSelection
+        self.theme = theme
+        _rows = State(initialValue: choices.wrappedValue.map { OptionRow(id: UUID(), text: $0) })
+    }
 
     var body: some View {
         ZStack {
@@ -22,15 +39,18 @@ struct ChoiceOptionsEditorView: View {
 
             List {
                 Section {
-                    ForEach(Array(choices.enumerated()), id: \.offset) { index, choice in
-                        Text(choice.isEmpty ? "Option \(index + 1)" : choice)
-                            .foregroundStyle(.white)
+                    ForEach(rows) { row in
+                        ChoiceOptionField(text: row.text, placeholder: "Option") { newText in
+                            commitEdit(id: row.id, text: newText)
+                        }
                     }
                     .onMove { source, destination in
-                        choices.move(fromOffsets: source, toOffset: destination)
+                        rows.move(fromOffsets: source, toOffset: destination)
+                        syncBack()
                     }
                     .onDelete { offsets in
-                        choices.remove(atOffsets: offsets)
+                        rows.remove(atOffsets: offsets)
+                        syncBack()
                     }
 
                     TextField("Add an option…", text: $newOption)
@@ -41,7 +61,7 @@ struct ChoiceOptionsEditorView: View {
                 } header: {
                     header("CHOICES")
                 } footer: {
-                    Text("Drag to reorder. Swipe to delete.")
+                    Text("Tap an option to edit it. Drag to reorder. Swipe to delete.")
                         .foregroundStyle(.white.opacity(0.7))
                 }
                 .listRowBackground(Color.white.opacity(0.12))
@@ -77,8 +97,21 @@ struct ChoiceOptionsEditorView: View {
     private func commitNewOption() {
         let trimmed = newOption.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        choices.append(trimmed)
+        rows.append(OptionRow(id: UUID(), text: trimmed))
         newOption = ""
+        syncBack()
+    }
+
+    /// Commits an in-place edit; an emptied field keeps the old text
+    /// (ChoiceOptionField already reverts its draft in that case).
+    private func commitEdit(id: UUID, text: String) {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
+        rows[index].text = text
+        syncBack()
+    }
+
+    private func syncBack() {
+        choices = rows.map(\.text)
     }
 
     private func header(_ title: String) -> some View {
@@ -86,6 +119,39 @@ struct ChoiceOptionsEditorView: View {
             .font(.caption)
             .fontWeight(.semibold)
             .foregroundStyle(.white.opacity(0.8))
+    }
+}
+
+/// In-place option editor row. Keystrokes stay in the local draft (the
+/// LocalTextEditorField discipline); the edit commits on submit, and an
+/// emptied field reverts to the old text instead of committing.
+private struct ChoiceOptionField: View {
+    let text: String
+    let placeholder: String
+    let onCommit: (String) -> Void
+
+    @State private var draft: String
+
+    init(text: String, placeholder: String, onCommit: @escaping (String) -> Void) {
+        self.text = text
+        self.placeholder = placeholder
+        self.onCommit = onCommit
+        _draft = State(initialValue: text)
+    }
+
+    var body: some View {
+        TextField(placeholder, text: $draft)
+            .foregroundStyle(.white)
+            .submitLabel(.done)
+            .onSubmit {
+                let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    draft = text // empty keeps the old option
+                } else {
+                    draft = trimmed
+                    onCommit(trimmed)
+                }
+            }
     }
 }
 

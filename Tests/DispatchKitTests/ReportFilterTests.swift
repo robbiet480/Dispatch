@@ -154,3 +154,38 @@ private func attachTokens(_ texts: [String], questionIdentifier: String? = nil, 
     reloaded.clearCriteria()
     #expect(VisualizationFilterStore(defaults: defaults).criteria.isEmpty)
 }
+
+/// Task 6 (build-5 review): token criteria must EXCLUDE people-question
+/// responses when people questions are known — a name filed under "Who are
+/// you with?" is not a token. Unknown (empty) people set keeps the permissive
+/// legacy behavior.
+@Test func tokenCriterionExcludesPeopleResponsesWhenScoped() {
+    let report = makeReport()
+    attachTokens(["Ada"], questionIdentifier: "q-people", to: report)
+    attachTokens(["coding"], questionIdentifier: "q-tokens", to: report)
+
+    #expect(!ReportFilter.matches(report: report, criteria: [.token("Ada")],
+                                  peopleQuestionIDs: ["q-people"]))
+    #expect(ReportFilter.matches(report: report, criteria: [.token("coding")],
+                                 peopleQuestionIDs: ["q-people"]))
+    // Unscoped (empty set) still matches any token text.
+    #expect(ReportFilter.matches(report: report, criteria: [.token("Ada")]))
+}
+
+/// Task 6 (build-5 review): canonicalKey is kind-aware and stable, so a
+/// person and a token sharing display text can't collide in chip identity
+/// or memo keys.
+@Test func canonicalKeyIsKindAwareAndStable() {
+    #expect(ReportFilter.FilterCriterion.person("Ada").canonicalKey == "person:Ada")
+    #expect(ReportFilter.FilterCriterion.token("Ada").canonicalKey == "token:Ada")
+    #expect(ReportFilter.FilterCriterion.person("Ada").canonicalKey
+        != ReportFilter.FilterCriterion.token("Ada").canonicalKey)
+    #expect(ReportFilter.FilterCriterion.month(3).canonicalKey == "month:3")
+    #expect(ReportFilter.FilterCriterion.year(2026).canonicalKey == "year:2026")
+    #expect(ReportFilter.FilterCriterion.ambientAudio(.quiet).canonicalKey == "ambientAudio:quiet")
+    #expect(ReportFilter.FilterCriterion.steps(.over10k).canonicalKey == "steps:over10k")
+    #expect(ReportFilter.FilterCriterion.weather("Clear").canonicalKey == "weather:Clear")
+    // displayText collides for these two; canonicalKey must not.
+    #expect(ReportFilter.FilterCriterion.person("Ada").displayText
+        == ReportFilter.FilterCriterion.token("Ada").displayText)
+}

@@ -92,3 +92,17 @@ Verify: build, kit suite, UI suite, archive+codesign proof. Commit `feat: workou
 - Wrap: full suites; completion note appended to this doc.
 
 Verify: build, kit suite, UI suite. Commit `fix: filter chip identity, editable options, review minors` → push. Whole-branch review follows (controller-driven).
+
+---
+
+## Completion note (2026-07-08)
+
+All six tasks landed on main, one scoped commit each:
+1. `03973ba` feat(kit): PromptGroup model + schema — GroupSchedule enum (unknown raw → disabled), Report.promptGroupID, v2 `promptGroups`/`promptGroupID` omitted when nil/empty, dedupe-by-ID import. `ReportTrigger.workoutEnd` already existed (shipped pre-plan); no raw-value change needed.
+2. `f97e825` feat(kit): GroupPlanner (per-kind planning, FNV-1a group-varied seeds, midnight-crossing dailyAt) + NotificationBudget allocator (global → groups in order → nags, legacy clamp parity test).
+3. `ddb9328` feat: scheduler plans enabled timer groups per awake window, `gprompt-<groupID>-<stamp>` requests, gprompt- removals in the SAME batch as prompt-/nag-, nag chains cover group parents (stamp embeds groupID), group prompts use a plain category + userInfo promptGroupID, tap-through opens a group-scoped survey (ordered questionIDs, dangling skipped), report records promptGroupID.
+4. `23107e2` feat: Settings → Prompt Groups editor (list/add/delete/reorder/enable, schedule picker for all four kinds, ordered question membership, empty-state copy, replan on every change) + 8th UI test.
+5. `5b1ce77` feat: `com.apple.developer.healthkit.background-delivery` entitlement PROVEN via device archive + codesign dump BEFORE reliance; WorkoutEndObserver (HKObserverQuery + immediate background delivery, completion handler called on every path, last-seen dedupe, awake-gated, test-gated); Activity Rings sensor (six `activity.*` readings, errorNoData → unavailable, checklist + detail rows); amendment: triggering workout's `workout.trigger.*` readings + "Triggered by" detail line (pure kit formatter, degrades cleanly).
+6. (this commit) fix: criterion-keyed filter chips + kit `FilterCriterion.canonicalKey` memo keys, in-place editable choice options (stable UUID row identity, empty keeps old), token filter excludes people-question responses, default answer persisted only when numeric, filter-sheet vocab fetched once per appear.
+
+Suites at wrap: 194 kit tests, 8 UI tests, sim build clean — all green.

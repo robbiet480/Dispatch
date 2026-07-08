@@ -42,7 +42,9 @@ struct HomeView: View {
             partial ^= report.uniqueIdentifier.hashValue
         }
         let visibleIDs = visibleQuestions.map(\.uniqueIdentifier).sorted().joined(separator: ",")
-        let criteria = filterStore.criteria.map(\.displayText).joined(separator: ",")
+        // canonicalKey, not displayText: kind-aware, so swapping a person
+        // filter for a same-named token filter still changes the memo key.
+        let criteria = filterStore.criteria.map(\.canonicalKey).joined(separator: ",")
         return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)"
     }
 

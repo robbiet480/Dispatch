@@ -15,6 +15,8 @@ struct VisualizationFilterView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @State private var personNames: [String] = []
+    @State private var tokenTexts: [String] = []
 
     private var theme: Theme { themeStore.theme }
 
@@ -75,6 +77,7 @@ struct VisualizationFilterView: View {
             .navigationTitle("Filter Visualizations")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .onAppear(perform: loadVocabularies)
             .toolbar {
                 if !filterStore.criteria.isEmpty {
                     ToolbarItem(placement: .cancellationAction) {
@@ -93,10 +96,26 @@ struct VisualizationFilterView: View {
 
     // MARK: - Active criteria chips
 
+    /// Chips are identified by the CRITERION (kind-aware canonicalKey), not
+    /// displayText — a person and a token sharing text are distinct chips
+    /// and removing one can't remove the other (build-5 review fix).
     private var activeCriteriaChips: some View {
-        FlowingChips(tokens: filterStore.criteria.map(\.displayText)) { removed in
-            if let criterion = filterStore.criteria.first(where: { $0.displayText == removed }) {
-                filterStore.removeCriterion(criterion)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach(filterStore.criteria, id: \.canonicalKey) { criterion in
+                    Button {
+                        filterStore.removeCriterion(criterion)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(criterion.displayText)
+                            Image(systemName: "xmark.circle.fill").imageScale(.small)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.quaternary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
         .accessibilityIdentifier("viz-filter-chips")
@@ -130,14 +149,15 @@ struct VisualizationFilterView: View {
 
     // MARK: - Value vocabularies (from actual data)
 
-    private var personNames: [String] {
-        let fetched = (try? modelContext.fetch(FetchDescriptor<PersonEntity>(sortBy: [SortDescriptor(\.text)]))) ?? []
-        return fetched.map(\.text)
-    }
-
-    private var tokenTexts: [String] {
-        let fetched = (try? modelContext.fetch(FetchDescriptor<TokenEntity>(sortBy: [SortDescriptor(\.text)]))) ?? []
-        return fetched.map(\.text)
+    /// Fetched ONCE when the sheet appears (build-5 review fix) — these fed
+    /// `body` directly before, re-querying SwiftData on every render.
+    private func loadVocabularies() {
+        let people = (try? modelContext.fetch(
+            FetchDescriptor<PersonEntity>(sortBy: [SortDescriptor(\.text)]))) ?? []
+        personNames = people.map(\.text)
+        let tokens = (try? modelContext.fetch(
+            FetchDescriptor<TokenEntity>(sortBy: [SortDescriptor(\.text)]))) ?? []
+        tokenTexts = tokens.map(\.text)
     }
 
     private var placeNames: [String] {
