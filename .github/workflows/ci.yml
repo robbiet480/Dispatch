@@ -27,9 +27,9 @@ jobs:
         # runners (transient exit 70), so retry with backoff and skip when
         # a runtime is already present.
         run: |
-          if xcrun simctl runtime list 2>/dev/null | grep -q "iOS"; then
-            echo "iOS platform already installed"; exit 0
-          fi
+          # No pre-check: `simctl runtime list | grep iOS` false-positives on
+          # unusable/pre-baked runtimes. downloadPlatform is quick when the
+          # platform is already current, so always run it, with retries.
           for i in 1 2 3; do
             sudo xcodebuild -downloadPlatform iOS && exit 0
             echo "downloadPlatform attempt $i failed; retrying in 30s"
