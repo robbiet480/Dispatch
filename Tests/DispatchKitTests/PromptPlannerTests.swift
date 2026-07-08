@@ -67,6 +67,71 @@ private let dayEnd = ISO8601DateFormatter().date(from: "2026-07-09T00:00:00Z")! 
     #expect(dates.contains { calendar.component(.hour, from: $0) == 9 && calendar.component(.minute, from: $0) == 30 })
 }
 
+@Test func scheduledTimeCrossingMidnightMaterializesOnCorrectDay() {
+    // Use a scheduled time (02:17) that a 1-alert .random distribution over an
+    // 8-hour window is vanishingly unlikely to land on by chance, so the only way
+    // dates can contain 02:17 is via the scheduledTimes materialization path.
+    var twoSeventeenAM = DateComponents(); twoSeventeenAM.hour = 2; twoSeventeenAM.minute = 17
+    let p = prefs(1, .random, times: [twoSeventeenAM])
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let awakeStart = ISO8601DateFormatter().date(from: "2026-07-08T22:00:00Z")!
+    let awakeEnd = ISO8601DateFormatter().date(from: "2026-07-09T06:00:00Z")!
+    let dates = PromptPlanner.plan(prefs: p, awakeStart: awakeStart, awakeEnd: awakeEnd, seed: 1, calendar: calendar)
+    let expectedTwoSeventeenAM = ISO8601DateFormatter().date(from: "2026-07-09T02:17:00Z")!
+    #expect(dates.contains(expectedTwoSeventeenAM))
+    #expect(dates.allSatisfy { $0 >= awakeStart && $0 < awakeEnd })
+}
+
+@Test func scheduledTimesPersistAcrossNewInstanceOnSameSuite() {
+    let suiteName = "np-persist-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    var nine = DateComponents(); nine.hour = 9; nine.minute = 15
+    let first = NotificationPrefs(defaults: defaults)
+    first.scheduledTimes = [nine]
+
+    let second = NotificationPrefs(defaults: defaults)
+    #expect(second.scheduledTimes.count == 1)
+    #expect(second.scheduledTimes.first?.hour == 9)
+    #expect(second.scheduledTimes.first?.minute == 15)
+}
+
+@Test func alertsPerDayOneYieldsSingleInWindowDateForEachDistribution() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    for distribution in [PromptDistribution.random, .semiRandom, .regular] {
+        let dates = PromptPlanner.plan(prefs: prefs(1, distribution), awakeStart: dayStart, awakeEnd: dayEnd, seed: 3, calendar: calendar)
+        #expect(dates.count == 1)
+        #expect(dates.allSatisfy { $0 >= dayStart && $0 < dayEnd })
+    }
+}
+
+@Test func shortWindowStillYieldsAllSortedInWindowDates() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let shortStart = dayStart
+    let shortEnd = dayStart.addingTimeInterval(10 * 60) // 10 minute window
+    let n = 4
+    let dates = PromptPlanner.plan(prefs: prefs(n, .regular), awakeStart: shortStart, awakeEnd: shortEnd, seed: 5, calendar: calendar)
+    #expect(dates.count == n)
+    #expect(dates == dates.sorted())
+    #expect(dates.allSatisfy { $0 >= shortStart && $0 < shortEnd })
+}
+
+@Test func scheduledTimeCollidingWithRegularDistributionDedupes() {
+    // awakeStart is 08:00, so a .regular distribution with N alerts always includes
+    // a date exactly at awakeStart (offset 0). Schedule a time matching that same
+    // hour/minute to force a deliberate collision.
+    var eightAM = DateComponents(); eightAM.hour = 8; eightAM.minute = 0
+    let p = prefs(4, .regular, times: [eightAM])
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let dates = PromptPlanner.plan(prefs: p, awakeStart: dayStart, awakeEnd: dayEnd, seed: 1, calendar: calendar)
+    #expect(dates.count == 4) // not 5 - the scheduled time deduped against the regular date at awakeStart
+    let matches = dates.filter { calendar.component(.hour, from: $0) == 8 && calendar.component(.minute, from: $0) == 0 }
+    #expect(matches.count == 1)
+}
+
 @Test func prefsClampAndPersist() {
     let defaults = UserDefaults(suiteName: "np-clamp-\(UUID().uuidString)")!
     let p = NotificationPrefs(defaults: defaults)

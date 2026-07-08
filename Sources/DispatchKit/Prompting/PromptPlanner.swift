@@ -63,15 +63,29 @@ public enum PromptPlanner {
         // Sort the dates
         dates.sort()
 
-        // Materialize scheduled times and append
+        // Materialize scheduled times and append.
+        // A scheduled time-of-day is first tried on awakeStart's calendar day. If that
+        // lands outside [awakeStart, awakeEnd) — e.g. an awake window that crosses
+        // midnight, like 22:00 -> 06:00, with a scheduled time of 02:00 — retry on the
+        // next calendar day before giving up, since the intended occurrence may fall
+        // on the following day within the window.
         let startDay = calendar.startOfDay(for: awakeStart)
         for timeComponent in prefs.scheduledTimes {
             var dateComponent = DateComponents()
             dateComponent.hour = timeComponent.hour
             dateComponent.minute = timeComponent.minute
 
-            if let scheduledDate = calendar.date(byAdding: dateComponent, to: startDay),
-               scheduledDate >= awakeStart && scheduledDate < awakeEnd {
+            var resolvedDate: Date?
+            if let candidate = calendar.date(byAdding: dateComponent, to: startDay),
+               candidate >= awakeStart && candidate < awakeEnd {
+                resolvedDate = candidate
+            } else if let nextDay = calendar.date(byAdding: .day, value: 1, to: startDay),
+                      let candidate = calendar.date(byAdding: dateComponent, to: nextDay),
+                      candidate >= awakeStart && candidate < awakeEnd {
+                resolvedDate = candidate
+            }
+
+            if let scheduledDate = resolvedDate {
                 // Check for minute-level duplicates
                 let scheduledMinute = calendar.component(.minute, from: scheduledDate)
                 let scheduledHour = calendar.component(.hour, from: scheduledDate)
