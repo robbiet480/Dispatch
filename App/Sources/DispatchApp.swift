@@ -46,6 +46,13 @@ struct DispatchApp: App {
         }
 
         scheduler.registerCategory()
+
+        AppActions.shared.register(
+            surveyPresenter: surveyPresenter,
+            awakeStore: awakeStore,
+            notificationScheduler: scheduler,
+            notificationPrefs: notificationPrefs
+        )
     }
 
     var body: some Scene {
