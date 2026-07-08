@@ -23,7 +23,7 @@ targets:
         PRODUCT_MODULE_NAME: DispatchApp
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 2
         MARKETING_VERSION: 0.1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -38,6 +38,7 @@ targets:
         INFOPLIST_KEY_NSFocusStatusUsageDescription: "Dispatch records whether a Focus is on when you file a report."
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Dispatch uses Face ID to unlock the app."
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        TARGETED_DEVICE_FAMILY: "1"
   DispatchUITests:
     type: bundle.ui-testing
     platform: iOS
