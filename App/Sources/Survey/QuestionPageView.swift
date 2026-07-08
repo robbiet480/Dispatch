@@ -1,10 +1,37 @@
 import DispatchKit
 import SwiftUI
 
+/// A plain (non-`@Observable`) reference box that debounced text fields
+/// register a synchronous flush closure into, keyed by field identifier.
+/// Deliberately not observable: registering/deregistering must never
+/// invalidate the survey's view graph the way writing an answer would.
+///
+/// Callers that are about to navigate or save call `flushAll()` first,
+/// which synchronously pushes any pending local keystroke buffer into the
+/// survey model — so a keystroke immediately followed by DONE or a page
+/// swipe is never lost, even though propagation is otherwise debounced.
+@MainActor
+final class PendingFlushRegistry {
+    private var flushers: [String: () -> Void] = [:]
+
+    func register(_ identifier: String, flush: @escaping () -> Void) {
+        flushers[identifier] = flush
+    }
+
+    func unregister(_ identifier: String) {
+        flushers.removeValue(forKey: identifier)
+    }
+
+    func flushAll() {
+        for flush in flushers.values { flush() }
+    }
+}
+
 struct QuestionPageView: View {
     let page: SurveyPage
     let value: AnswerValue
     let onAnswer: (AnswerValue) -> Void
+    let flushRegistry: PendingFlushRegistry
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,22 +63,28 @@ struct QuestionPageView: View {
                 initialText: { if case .number(let number) = value { number } else { "" } }(),
                 onChange: { onAnswer($0.isEmpty ? .skipped : .number($0)) },
                 placeholder: page.placeholder ?? "0",
-                identifier: "number-field",
-                style: .field(keyboard: .decimalPad))
+                identifier: "\(page.id)-number-field",
+                accessibilityIdentifier: "number-field",
+                style: .field(keyboard: .decimalPad),
+                flushRegistry: flushRegistry)
         case .note:
             LocalTextEditorField(
                 initialText: { if case .note(let note) = value { note } else { "" } }(),
                 onChange: { onAnswer($0.isEmpty ? .skipped : .note($0)) },
                 placeholder: nil,
-                identifier: "note-editor",
-                style: .editor)
+                identifier: "\(page.id)-note-editor",
+                accessibilityIdentifier: "note-editor",
+                style: .editor,
+                flushRegistry: flushRegistry)
         case .location:
             LocalTextEditorField(
                 initialText: { if case .location(let text) = value { text } else { "" } }(),
                 onChange: { onAnswer($0.isEmpty ? .skipped : .location(text: $0)) },
                 placeholder: page.placeholder ?? "Where are you?",
-                identifier: "location-field",
-                style: .field(keyboard: .default))
+                identifier: "\(page.id)-location-field",
+                accessibilityIdentifier: "location-field",
+                style: .field(keyboard: .default),
+                flushRegistry: flushRegistry)
         }
     }
 
@@ -67,7 +100,8 @@ struct QuestionPageView: View {
 }
 
 /// A text input whose live keystrokes are held in local `@State`, seeded once
-/// from the survey's answer value and pushed back out via `.onChange`.
+/// from the survey's answer value and pushed back out via a debounced call
+/// to `onChange`.
 ///
 /// This exists to fix a keyboard-freeze bug: previously each field's
 /// `Binding` read/wrote directly through the app-wide `@Observable`
@@ -77,6 +111,16 @@ struct QuestionPageView: View {
 /// *all* survey pages) to re-evaluate its body on every keystroke — freezing
 /// the keyboard and even dropping/garbling characters under load. Keeping
 /// the live text local means typing only touches this leaf view's state.
+///
+/// A follow-up fix found that even with local state, calling `onChange`
+/// (and therefore `survey.answer(...)`) on every single keystroke still
+/// invalidated the observable graph and rebuilt the whole `TabView` on
+/// every character — just without the character-dropping. This field now
+/// debounces that propagation to the model (~300ms idle) and registers a
+/// synchronous flush closure with `flushRegistry` so an ancestor about to
+/// navigate or save can force any pending buffer out immediately — a
+/// keystroke followed immediately by DONE/swipe never loses text. It also
+/// flushes on its own disappearance as a second safety net.
 private struct LocalTextEditorField: View {
     enum Style {
         case field(keyboard: UIKeyboardType)
@@ -86,11 +130,20 @@ private struct LocalTextEditorField: View {
     let initialText: String
     let onChange: (String) -> Void
     let placeholder: String?
+    /// Unique per-field registry key (page id + field kind). Must be
+    /// distinct across pages so registrations from different pages/fields
+    /// never collide or clobber each other in the shared registry.
     let identifier: String
+    let accessibilityIdentifier: String
     let style: Style
+    let flushRegistry: PendingFlushRegistry
+
+    static let debounceInterval: Duration = .milliseconds(300)
 
     @State private var text: String = ""
     @State private var hasSeeded = false
+    @State private var lastFlushedText: String = ""
+    @State private var debounceTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -107,15 +160,45 @@ private struct LocalTextEditorField: View {
                     .scrollContentBackground(.hidden)
             }
         }
-        .accessibilityIdentifier(identifier)
+        .accessibilityIdentifier(accessibilityIdentifier)
         .onAppear {
+            flushRegistry.register(identifier, flush: flush)
             guard !hasSeeded else { return }
             hasSeeded = true
             text = initialText
+            lastFlushedText = initialText
         }
         .onChange(of: text) { _, newValue in
-            onChange(newValue)
+            scheduleDebouncedFlush(newValue)
         }
+        .onDisappear {
+            flush()
+            flushRegistry.unregister(identifier)
+        }
+    }
+
+    /// Cancels any in-flight debounce and schedules a new one. Keystrokes
+    /// only ever touch local `@State` here — the observable survey model
+    /// isn't written to until the debounce fires or a flush is forced.
+    private func scheduleDebouncedFlush(_ newValue: String) {
+        debounceTask?.cancel()
+        debounceTask = Task {
+            try? await Task.sleep(for: Self.debounceInterval)
+            guard !Task.isCancelled else { return }
+            flush()
+        }
+    }
+
+    /// Pushes the current local text to the model immediately, if it
+    /// differs from what was last pushed. Idempotent and safe to call from
+    /// multiple triggers (debounce fire, disappear, forced flush via the
+    /// registry).
+    private func flush() {
+        debounceTask?.cancel()
+        debounceTask = nil
+        guard text != lastFlushedText else { return }
+        lastFlushedText = text
+        onChange(text)
     }
 }
 

@@ -9,6 +9,12 @@ struct SurveyFlowView: View {
     @Query private var questions: [Question]
     @Environment(ThemeStore.self) private var themeStore
     @State private var controller: SurveyController?
+    /// Text fields register a synchronous flush closure here (see
+    /// `LocalTextEditorField`/`PendingFlushRegistry`). Called immediately
+    /// before any navigation/save so in-flight debounced keystrokes land in
+    /// the survey model first — no typed text is lost to a swipe or DONE
+    /// tap that beats the debounce timer.
+    @State private var flushRegistry = PendingFlushRegistry()
     let kind: ReportKind
     let trigger: ReportTrigger
     var overrideDate: Date? = nil
@@ -40,7 +46,10 @@ struct SurveyFlowView: View {
 
             TabView(selection: Binding(
                 get: { controller.survey.currentIndex },
-                set: { controller.survey.select($0) })) {
+                set: { newIndex in
+                    flushRegistry.flushAll()
+                    controller.survey.select(newIndex)
+                })) {
                 ForEach(Array(controller.survey.pages.enumerated()), id: \.element.id) { index, page in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
@@ -55,7 +64,8 @@ struct SurveyFlowView: View {
                             }
                             QuestionPageView(page: page,
                                              value: controller.survey.answerValue(for: page.id),
-                                             onAnswer: { controller.survey.answer($0, for: page.id) })
+                                             onAnswer: { controller.survey.answer($0, for: page.id) },
+                                             flushRegistry: flushRegistry)
                         }
                     }
                     .tag(index)
@@ -71,6 +81,7 @@ struct SurveyFlowView: View {
                     .font(.footnote)
                 Spacer()
                 Button(controller.survey.isLastPage ? "DONE" : "NEXT") {
+                    flushRegistry.flushAll()
                     if controller.survey.isLastPage {
                         try? controller.save(in: modelContext)
                         dismiss()
