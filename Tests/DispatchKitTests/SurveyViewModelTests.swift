@@ -73,3 +73,45 @@ private func makeQuestion(_ id: String, _ prompt: String, _ type: QuestionType,
     #expect(drafts[1].value == .skipped)
     #expect(drafts[1].question.uniqueIdentifier == "q2")
 }
+
+@Test func emptyNumberAnswerFilesDefaultAnswerInsteadOfSkipped() {
+    let withDefault = makeQuestion("q-num", "Coffees?", .number, sort: 0)
+    withDefault.defaultAnswerString = "0"
+    let withoutDefault = makeQuestion("q-num2", "Meetings?", .number, sort: 1)
+    let viewModel = SurveyViewModel(questions: [withDefault, withoutDefault], kind: .regular)
+
+    // Untouched: the default files for q-num, .skipped stays for q-num2.
+    var drafts = viewModel.drafts()
+    #expect(drafts[0].value == .number("0"))
+    #expect(drafts[1].value == .skipped)
+
+    // An explicit answer wins over the default.
+    viewModel.answer(.number("3"), for: "q-num")
+    drafts = viewModel.drafts()
+    #expect(drafts[0].value == .number("3"))
+
+    // Clearing back to skipped re-applies the default.
+    viewModel.answer(.skipped, for: "q-num")
+    #expect(viewModel.drafts()[0].value == .number("0"))
+}
+
+@Test func defaultAnswerOnlyAppliesToNumberQuestions() {
+    // A non-number question with a stray defaultAnswerString must not file it.
+    let note = makeQuestion("q-note", "Learn?", .note, sort: 0)
+    note.defaultAnswerString = "nothing"
+    let viewModel = SurveyViewModel(questions: [note], kind: .regular)
+    #expect(viewModel.pages[0].defaultAnswer == nil)
+    #expect(viewModel.drafts()[0].value == .skipped)
+}
+
+@Test func pagesCarryMultiSelectFlagWithBehaviorPreservingDefaults() {
+    let multi = makeQuestion("q-mc", "Mood?", .multipleChoice, sort: 0, choices: ["A", "B"])
+    let single = makeQuestion("q-mc1", "Pick one?", .multipleChoice, sort: 1, choices: ["A", "B"])
+    single.allowsMultipleSelection = false
+    let yesNo = makeQuestion("q-yn", "Working?", .yesNo, sort: 2)
+
+    let viewModel = SurveyViewModel(questions: [multi, single, yesNo], kind: .regular)
+    #expect(viewModel.pages[0].allowsMultipleSelection == true)
+    #expect(viewModel.pages[1].allowsMultipleSelection == false)
+    #expect(viewModel.pages[2].allowsMultipleSelection == false)
+}

@@ -18,6 +18,11 @@ struct QuestionEditorView: View {
     @State private var placeholder: String
     @State private var kinds: Set<ReportKind>
     @State private var logAsStateOfMind: Bool
+    @State private var visualization: VisualizationStyle?
+    /// Per-keystroke text stays in this local @State (see LocalTextEditorField's
+    /// doc comment in QuestionPageView for the keyboard-garbling lesson).
+    @State private var defaultAnswer: String
+    @State private var allowsMultipleSelection: Bool
 
     private var theme: Theme { themeStore.theme }
 
@@ -29,6 +34,9 @@ struct QuestionEditorView: View {
         _placeholder = State(initialValue: question?.placeholderString ?? "")
         _kinds = State(initialValue: Set(question?.reportKinds ?? [.regular]))
         _logAsStateOfMind = State(initialValue: question?.stateOfMindKind != nil)
+        _visualization = State(initialValue: question?.visualization)
+        _defaultAnswer = State(initialValue: question?.defaultAnswerString ?? "")
+        _allowsMultipleSelection = State(initialValue: question?.allowsMultipleSelection ?? true)
     }
 
     private var supportsStateOfMind: Bool {
@@ -84,24 +92,52 @@ struct QuestionEditorView: View {
 
                 if type == .multipleChoice {
                     Section {
-                        ForEach(Array(choices.enumerated()), id: \.offset) { index, _ in
+                        NavigationLink {
+                            ChoiceOptionsEditorView(choices: $choices,
+                                                    allowsMultipleSelection: $allowsMultipleSelection,
+                                                    theme: theme)
+                        } label: {
                             HStack {
-                                TextField("Choice", text: choiceBinding(index))
-                                Button {
-                                    choices.remove(at: index)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundStyle(.red)
-                                }
+                                Text(choicesSummary)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text("EDIT")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.7))
                             }
                         }
-                        Button {
-                            choices.append("")
-                        } label: {
-                            Label("Add choice", systemImage: "plus.circle.fill")
-                        }
+                        .accessibilityIdentifier("choice-editor")
                     } header: {
                         sectionHeader("CHOICES")
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+                }
+
+                if !VisualizationStyle.compatibleStyles(for: type).isEmpty {
+                    Section {
+                        Picker("Visualization", selection: $visualization) {
+                            Text("Automatic (\(automaticStyleName))").tag(VisualizationStyle?.none)
+                            ForEach(VisualizationStyle.compatibleStyles(for: type), id: \.self) { style in
+                                Text(style.displayName).tag(VisualizationStyle?.some(style))
+                            }
+                        }
+                        .accessibilityIdentifier("visualization-picker")
+                    } header: {
+                        sectionHeader("VISUALIZATION")
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+                }
+
+                if type == .number {
+                    Section {
+                        TextField("Value for empty responses", text: $defaultAnswer)
+                            .keyboardType(.decimalPad)
+                            .accessibilityIdentifier("default-answer-field")
+                    } header: {
+                        sectionHeader("DEFAULT ANSWER")
+                    } footer: {
+                        Text("Filed automatically when you leave this question empty.")
+                            .foregroundStyle(.white.opacity(0.7))
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                 }
@@ -127,28 +163,18 @@ struct QuestionEditorView: View {
                 }
 
                 Section {
-                    ForEach(ReportKind.allCases, id: \.self) { kind in
-                        Button {
-                            toggle(kind)
-                        } label: {
-                            HStack {
-                                Text(kind.displayName)
-                                    .foregroundStyle(.white)
-                                Spacer()
-                                if kinds.contains(kind) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                        }
+                    HStack(spacing: 10) {
+                        scheduleChip("WAKE", icon: "sunrise.fill", kind: .wake, identifier: "schedule-wake")
+                        scheduleChip("DAY", icon: "sun.max.fill", kind: .regular, identifier: "schedule-day")
+                        scheduleChip("SLEEP", icon: "moon.fill", kind: .sleep, identifier: "schedule-sleep")
                     }
+                    .listRowBackground(Color.clear)
                 } header: {
                     sectionHeader("SHOW ON")
                 } footer: {
                     Text("At least one report kind is required.")
                         .foregroundStyle(.white.opacity(0.7))
                 }
-                .listRowBackground(Color.white.opacity(0.12))
             }
             .scrollContentBackground(.hidden)
         }
@@ -163,11 +189,41 @@ struct QuestionEditorView: View {
         }
     }
 
-    private func choiceBinding(_ index: Int) -> Binding<String> {
-        Binding(
-            get: { choices.indices.contains(index) ? choices[index] : "" },
-            set: { newValue in if choices.indices.contains(index) { choices[index] = newValue } }
-        )
+    private var choicesSummary: String {
+        let cleaned = choices.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return cleaned.isEmpty ? "Add an option…" : cleaned.joined(separator: ", ")
+    }
+
+    /// The name of the style the automatic default would pick for `type`,
+    /// shown in the picker's "Automatic" row.
+    private var automaticStyleName: String {
+        VisualizationStyle.compatibleStyles(for: type).first?.displayName ?? "None"
+    }
+
+    /// A capsule chip that toggles membership of `kind` in the schedule set —
+    /// filled when selected, multi-select, ≥1 enforced by `canSave`.
+    private func scheduleChip(_ title: String, icon: String, kind: ReportKind, identifier: String) -> some View {
+        let isSelected = kinds.contains(kind)
+        return Button {
+            toggle(kind)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .imageScale(.small)
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .kerning(1.0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(isSelected ? Color.white.opacity(0.9) : Color.white.opacity(0.12),
+                        in: Capsule())
+            .foregroundStyle(isSelected ? Color.themeBackground(theme) : .white)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     private func toggle(_ kind: ReportKind) {
@@ -196,6 +252,7 @@ struct QuestionEditorView: View {
             question.placeholderString = trimmedPlaceholder.isEmpty ? nil : trimmedPlaceholder
             question.reportKinds = orderedKinds
             question.stateOfMindKind = stateOfMindKind
+            applyParityFields(to: question)
         } else {
             let newQuestion = QuestionAdmin.makeQuestion(
                 prompt: trimmedPrompt,
@@ -206,11 +263,29 @@ struct QuestionEditorView: View {
                 after: questions
             )
             newQuestion.stateOfMindKind = stateOfMindKind
+            applyParityFields(to: newQuestion)
             context.insert(newQuestion)
         }
 
         try? context.save()
         dismiss()
+    }
+
+    /// Writes the plan-11 parity fields, keeping the schema's nil semantics:
+    /// visualization only sticks when compatible with the saved type; default
+    /// answer only applies to number questions; the multi-select flag is only
+    /// recorded for multiple-choice questions (raw nil elsewhere preserves
+    /// pre-flag behavior).
+    private func applyParityFields(to target: Question) {
+        let savedType = target.type
+        target.visualization = visualization?.isCompatible(with: savedType) == true ? visualization : nil
+        let trimmedDefault = defaultAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+        target.defaultAnswerString = (savedType == .number && !trimmedDefault.isEmpty) ? trimmedDefault : nil
+        if savedType == .multipleChoice {
+            target.allowsMultipleSelection = allowsMultipleSelection
+        } else {
+            target.allowsMultipleSelectionRaw = nil
+        }
     }
 
     private func sectionHeader(_ title: String) -> some View {

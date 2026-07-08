@@ -52,7 +52,7 @@ struct QuestionPageView: View {
         switch page.question.type {
         case .yesNo, .multipleChoice:
             ChoiceListView(choices: page.choices,
-                           multiSelect: page.question.type == .multipleChoice,
+                           multiSelect: page.question.type == .multipleChoice && page.allowsMultipleSelection,
                            selected: selectedOptions,
                            onSelect: { onAnswer(.options($0)) })
         case .tokens, .people:

@@ -6,6 +6,10 @@ public struct SurveyPage: Identifiable, Sendable {
     public let question: QuestionRef
     public let choices: [String]
     public let placeholder: String?
+    /// Whether a multiple-choice page allows more than one selected option.
+    public let allowsMultipleSelection: Bool
+    /// Number questions: value filed when the answer is left empty (nil = skip).
+    public let defaultAnswer: String?
 }
 
 /// Drives the paged survey: question filtering/ordering, current page,
@@ -33,7 +37,9 @@ public final class SurveyViewModel {
                                           prompt: question.prompt,
                                           type: question.type),
                     choices: choices,
-                    placeholder: question.placeholderString)
+                    placeholder: question.placeholderString,
+                    allowsMultipleSelection: question.allowsMultipleSelection,
+                    defaultAnswer: question.type == .number ? question.defaultAnswerString : nil)
             }
     }
 
@@ -62,6 +68,14 @@ public final class SurveyViewModel {
     }
 
     public func drafts() -> [AnswerDraft] {
-        pages.map { AnswerDraft(question: $0.question, value: answerValue(for: $0.id)) }
+        pages.map { page in
+            var value = answerValue(for: page.id)
+            // Number questions with a default answer file that value instead of
+            // `.skipped` when the user left the field empty.
+            if case .skipped = value, let defaultAnswer = page.defaultAnswer, !defaultAnswer.isEmpty {
+                value = .number(defaultAnswer)
+            }
+            return AnswerDraft(question: page.question, value: value)
+        }
     }
 }
