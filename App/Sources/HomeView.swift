@@ -51,7 +51,7 @@ struct HomeView: View {
 
             Spacer()
 
-            NavigationLink(destination: Text("Settings")) {
+            NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape")
                     .font(.title2)
                     .foregroundStyle(.white)
@@ -64,7 +64,7 @@ struct HomeView: View {
     @ViewBuilder
     private var hexagon: some View {
         if reports.isEmpty {
-            NavigationLink(destination: Text("Questions coming in Task 5")) {
+            NavigationLink(destination: QuestionSettingsView()) {
                 ZStack {
                     Image(systemName: "hexagon.fill")
                         .font(.system(size: 96))
