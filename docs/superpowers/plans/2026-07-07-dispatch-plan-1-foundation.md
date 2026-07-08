@@ -294,6 +294,28 @@ func fixtureData(_ name: String) throws -> Data {
     #expect(cal.component(.hour, from: parsed.date) == 23) // 19:08 -0400 == 23:08 UTC
 }
 
+@Test func decodesLegacyVariants() throws {
+    // Legacy exports: numeric dates (seconds since 2001-01-01 GMT),
+    // bare-string tokens, singular textResponse (gist.github.com/dbreunig/9315705).
+    let json = Data("""
+    {"questions": [], "snapshots": [{
+        "uniqueIdentifier": "legacy-1",
+        "date": 415092465.0,
+        "responses": [
+            {"questionPrompt": "What are you doing?", "uniqueIdentifier": "lr-1", "tokens": ["Working"]},
+            {"questionPrompt": "What did you learn today?", "uniqueIdentifier": "lr-2", "textResponse": "Old format"}
+        ]
+    }]}
+    """.utf8)
+    let export = try V1Export.decode(from: json)
+    let snap = try #require(export.snapshots.first)
+    let resolved = try #require(snap.date.resolved)
+    #expect(resolved.date == Date(timeIntervalSinceReferenceDate: 415_092_465.0))
+    #expect(resolved.utcOffsetSeconds == 0)
+    #expect(snap.responses?.first?.tokens?.first?.text == "Working")
+    #expect(snap.responses?.last?.textResponses?.first?.text == "Old format")
+}
+
 @Test func decodesRealExportIfPresent() throws {
     // Local-only: DISPATCH_V1_EXPORT=/path/to/reporter-export.json swift test
     guard let path = ProcessInfo.processInfo.environment["DISPATCH_V1_EXPORT"] else { return }
@@ -372,9 +394,33 @@ public struct V1Question: Decodable {
     public var placeholderString: String?
 }
 
+/// v1 dates appear as ISO-ish strings in modern exports and as Doubles
+/// (seconds since 2001-01-01 GMT) in legacy ones. Accept both.
+public enum V1DateValue: Decodable {
+    case string(String)
+    case reference(Double)
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let string = try? container.decode(String.self) {
+            self = .string(string)
+        } else {
+            self = .reference(try container.decode(Double.self))
+        }
+    }
+
+    /// Legacy numeric dates carry no offset; treat them as GMT.
+    public var resolved: (date: Date, utcOffsetSeconds: Int)? {
+        switch self {
+        case .string(let string): return V1DateParser.parse(string)
+        case .reference(let seconds): return (Date(timeIntervalSinceReferenceDate: seconds), 0)
+        }
+    }
+}
+
 public struct V1Snapshot: Decodable {
     public var uniqueIdentifier: String
-    public var date: String
+    public var date: V1DateValue
     public var sectionIdentifier: String?
     public var battery: Double?
     public var steps: Int?
@@ -403,7 +449,7 @@ public struct V1Location: Decodable {
     public var altitude: Double?
     public var horizontalAccuracy: Double?
     public var verticalAccuracy: Double?
-    public var timestamp: String?
+    public var timestamp: V1DateValue?
     public var placemark: V1Placemark?
 }
 
@@ -455,7 +501,7 @@ public struct V1Photo: Decodable {
     public var assetUrl: String?
     public var pixelWidth: Int?
     public var pixelHeight: Int?
-    public var dateTime: String?
+    public var dateTime: V1DateValue?
     public var latitude: Double?
     public var longitude: Double?
     public var altitude: Double?
@@ -469,11 +515,51 @@ public struct V1Response: Decodable {
     public var locationResponse: V1LocationResponse?
     public var numericResponse: String?
     public var textResponses: [V1Token]?
+
+    enum CodingKeys: String, CodingKey {
+        case questionPrompt, uniqueIdentifier, tokens, answeredOptions
+        case locationResponse, numericResponse, textResponses, textResponse
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        questionPrompt = try container.decode(String.self, forKey: .questionPrompt)
+        uniqueIdentifier = try container.decode(String.self, forKey: .uniqueIdentifier)
+        tokens = try container.decodeIfPresent([V1Token].self, forKey: .tokens)
+        answeredOptions = try container.decodeIfPresent([String].self, forKey: .answeredOptions)
+        locationResponse = try container.decodeIfPresent(V1LocationResponse.self, forKey: .locationResponse)
+        numericResponse = try container.decodeIfPresent(String.self, forKey: .numericResponse)
+        // Modern exports: textResponses [{id, text}]. Legacy: textResponse "…".
+        if let modern = try container.decodeIfPresent([V1Token].self, forKey: .textResponses) {
+            textResponses = modern
+        } else if let legacy = try container.decodeIfPresent(String.self, forKey: .textResponse) {
+            textResponses = [V1Token(uniqueIdentifier: UUID().uuidString, text: legacy)]
+        }
+    }
 }
 
+/// Modern exports encode tokens as {uniqueIdentifier, text}; legacy ones as
+/// bare strings. Accept both.
 public struct V1Token: Decodable {
     public var uniqueIdentifier: String
     public var text: String
+
+    enum CodingKeys: String, CodingKey { case uniqueIdentifier, text }
+
+    init(uniqueIdentifier: String, text: String) {
+        self.uniqueIdentifier = uniqueIdentifier
+        self.text = text
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let bare = try? decoder.singleValueContainer().decode(String.self) {
+            self.init(uniqueIdentifier: UUID().uuidString, text: bare)
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(uniqueIdentifier: try container.decode(String.self, forKey: .uniqueIdentifier),
+                  text: try container.decode(String.self, forKey: .text))
+    }
 }
 
 public struct V1LocationResponse: Decodable {
@@ -606,6 +692,13 @@ public enum ReportKind: String, Codable, Sendable, CaseIterable {
 public enum ReportTrigger: String, Codable, Sendable, CaseIterable {
     case manual, notification, visitArrival, visitDeparture
     case wake, workoutEnd, widget, control, intent
+}
+
+/// Raw values match the original Reporter export (gist.github.com/dbreunig/9315705).
+public enum ConnectionType: Int, Codable, Sendable {
+    case cellular = 0
+    case wifi = 1
+    case none = 2
 }
 
 public struct AudioSample: Codable, Hashable, Sendable {
@@ -800,6 +893,10 @@ public final class Report {
         get { ReportTrigger(rawValue: triggerRaw) ?? .manual }
         set { triggerRaw = newValue.rawValue }
     }
+
+    public var connectionType: ConnectionType? {
+        connection.flatMap(ConnectionType.init(rawValue:))
+    }
 }
 ```
 
@@ -924,7 +1021,13 @@ import Testing
     let snap2 = try #require(reports.first { $0.uniqueIdentifier == "snap-2" })
     #expect(snap2.photos.count == 1)
     #expect(snap2.trigger == .notification) // impetus 2 = notification-initiated
+    #expect(snap2.connectionType == .wifi)  // connection 1
     #expect(snap2.responses.count == 3)
+
+    // impetus 4 = wake report: kind and trigger recovered from v1 data.
+    let snap3 = try #require(reports.first { $0.uniqueIdentifier == "snap-3" })
+    #expect(snap3.kind == .wake)
+    #expect(snap3.trigger == .wake)
 
     let questions = try context.fetch(FetchDescriptor<Question>())
     #expect(questions.count == 7)
@@ -997,16 +1100,30 @@ public enum V1Importer {
         }
 
         for snapshot in export.snapshots {
-            guard let parsed = V1DateParser.parse(snapshot.date) else {
+            guard let parsed = snapshot.date.resolved else {
                 summary.skipped += 1
                 continue
             }
             let report = try fetchOrCreateReport(id: snapshot.uniqueIdentifier, in: context)
             report.date = parsed.date
             report.timeZoneIdentifier = TimeZone(secondsFromGMT: parsed.utcOffsetSeconds)?.identifier ?? "GMT"
-            report.kind = .regular
             report.legacyImpetus = snapshot.reportImpetus
-            report.trigger = (snapshot.reportImpetus ?? 0) == 0 ? .manual : .notification
+            // v1 impetus (gist.github.com/dbreunig/9315705): 0=button,
+            // 1=button while asleep, 2=notification, 3=sleep report, 4=wake report.
+            switch snapshot.reportImpetus ?? 0 {
+            case 2:
+                report.kind = .regular
+                report.trigger = .notification
+            case 3:
+                report.kind = .sleep
+                report.trigger = .manual
+            case 4:
+                report.kind = .wake
+                report.trigger = .wake
+            default:
+                report.kind = .regular
+                report.trigger = .manual
+            }
             report.isDraft = snapshot.draft == 1
             report.wasInBackground = snapshot.background == 1
             report.battery = snapshot.battery
@@ -1081,7 +1198,7 @@ public enum V1Importer {
         snapshot.verticalAccuracy = v1.verticalAccuracy
         snapshot.speed = v1.speed
         snapshot.course = v1.course
-        snapshot.timestamp = v1.timestamp.flatMap { V1DateParser.parse($0)?.date }
+        snapshot.timestamp = v1.timestamp?.resolved?.date
         snapshot.placemark = v1.placemark.map { pm in
             var placemark = Placemark()
             placemark.name = pm.name
@@ -1129,7 +1246,7 @@ public enum V1Importer {
         photo.assetUrl = v1.assetUrl
         photo.pixelWidth = v1.pixelWidth
         photo.pixelHeight = v1.pixelHeight
-        photo.dateTime = v1.dateTime.flatMap { V1DateParser.parse($0)?.date }
+        photo.dateTime = v1.dateTime?.resolved?.date
         photo.latitude = v1.latitude
         photo.longitude = v1.longitude
         return photo

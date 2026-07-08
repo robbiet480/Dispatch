@@ -76,6 +76,14 @@ v2 changes:
 - `trigger` replaces the overloaded `reportImpetus` semantics (v1 value
   preserved on import): `manual | notification | visitArrival |
   visitDeparture | wake | workoutEnd | widget | control | intent`.
+  v1 impetus mapping (per dbreunig's format doc,
+  gist.github.com/dbreunig/9315705): 0/1 → manual, 2 → notification,
+  3 → kind `sleep`, 4 → kind `wake` + trigger `wake` — so historical
+  wake/sleep reports are recovered on import.
+- `connection` gains a typed enum view: 0=cellular, 1=wifi, 2=none.
+- v1 legacy tolerance: numeric dates (seconds since 2001-01-01 GMT),
+  bare-string tokens, and singular `textResponse` are accepted on import
+  alongside the modern string/object forms.
 - `stateOfMindSampleIDs`: HealthKit UUIDs written from this report's
   answers (for dedupe/undo).
 - `focus`: optional `{label?, isFocused}` — active Focus at report time
@@ -148,7 +156,7 @@ or disabled toggle degrades to "UNABLE TO DETECT X" / omission.
 | Location + placemark | CoreLocation (when-in-use + always for visits) + CLGeocoder |
 | Weather | WeatherKit (entitlement; degrades gracefully) |
 | Altitude | CLLocation.altitude |
-| Audio dB | AVAudioRecorder metering ~2s → avg/peak + label scale |
+| Audio dB | AVAudioRecorder metering ~2s → avg/peak (raw −160…0 dBFS); display value = (raw + 65) × 2, matching the original's "24.40 DB" scale + label ("EXTREMELY QUIET"…"EXTREMELY LOUD") |
 | Photos since last report | PhotoKit `creationDate > lastReportDate` |
 | Battery / connection | UIDevice / NWPathMonitor |
 | **All health metrics** | HealthKit statistics + sample queries (steps, flights, HR, HRV, resting HR, sleep, workouts, medications, caffeine). No CoreMotion anywhere. |
