@@ -1,0 +1,25 @@
+name: Dispatch
+options:
+  bundleIdPrefix: com.robbiet480
+  deploymentTarget:
+    iOS: "26.0"
+packages:
+  DispatchKit:
+    path: .
+targets:
+  DispatchApp:
+    type: application
+    platform: iOS
+    sources: [App/Sources]
+    dependencies:
+      - package: DispatchKit
+    settings:
+      base:
+        PRODUCT_NAME: Dispatch
+        PRODUCT_BUNDLE_IDENTIFIER: com.robbiet480.dispatch
+        PRODUCT_MODULE_NAME: DispatchApp
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        SWIFT_VERSION: 6.0
