@@ -233,10 +233,6 @@ struct NotificationSettingsView: View {
     }
 
     private func refreshNextAlert() {
-        guard awakeStore.isAwake else {
-            nextAlertText = "—"
-            return
-        }
         scheduler.nextPromptDate { date in
             Task { @MainActor in
                 guard let date else {

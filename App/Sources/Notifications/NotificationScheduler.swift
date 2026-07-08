@@ -169,8 +169,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     func nextPromptDate(completion: @escaping @Sendable (Date?) -> Void) {
         center.getPendingNotificationRequests { requests in
             let dates = requests.compactMap { request -> Date? in
-                guard let trigger = request.trigger as? UNCalendarNotificationTrigger else { return nil }
-                return trigger.nextTriggerDate()
+                let nextDate: Date? = switch request.trigger {
+                case let calendar as UNCalendarNotificationTrigger:
+                    calendar.nextTriggerDate()
+                case let interval as UNTimeIntervalNotificationTrigger:
+                    interval.nextTriggerDate()
+                default:
+                    nil
+                }
+                return nextDate
             }
             completion(dates.min())
         }
