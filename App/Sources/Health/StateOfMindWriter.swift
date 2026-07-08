@@ -14,6 +14,7 @@ private let stateOfMindLog = Logger(subsystem: "com.robbiet480.dispatch", catego
 @MainActor
 enum StateOfMindWriter {
     private static let store = HKHealthStore()
+    private static var hasRequestedAuthorization = false
 
     /// Writes one HKStateOfMind sample per answered response whose question
     /// has a non-nil `stateOfMindKind`, then records the resulting sample
@@ -27,12 +28,15 @@ enum StateOfMindWriter {
         let moodQuestions = questions.filter { $0.stateOfMindKind != nil }
         guard !moodQuestions.isEmpty else { return }
 
-        let stateOfMindType = HKObjectType.stateOfMindType()
-        do {
-            try await store.requestAuthorization(toShare: [stateOfMindType], read: [])
-        } catch {
-            stateOfMindLog.error("state of mind authorization failed: \(error, privacy: .public)")
-            return
+        if !hasRequestedAuthorization {
+            let stateOfMindType = HKObjectType.stateOfMindType()
+            do {
+                try await store.requestAuthorization(toShare: [stateOfMindType], read: [])
+                hasRequestedAuthorization = true
+            } catch {
+                stateOfMindLog.error("state of mind authorization failed: \(error, privacy: .public)")
+                return
+            }
         }
 
         var newSampleIDs: [String] = []
@@ -67,25 +71,13 @@ enum StateOfMindWriter {
         }
     }
 
-    /// Maps an answered choice linearly onto valence [-1, +1]. Single
-    /// choice ⇒ 0 (neutral); implicit Yes/No ⇒ Yes = +0.5, No = -0.5;
-    /// otherwise the option's index across the question's choices maps
-    /// linearly (first = -1, last = +1). Returns nil for skipped/
-    /// unanswered/unrecognized responses.
+    /// Delegates to the pure `StateOfMindValence.value` mapping. Returns nil
+    /// for skipped/unanswered responses.
     private static func valence(for response: Response, question: Question) -> Double? {
-        guard let answer = response.answeredOptions?.first else { return nil }
-
-        let choices = question.type == .yesNo && question.choices.isEmpty
-            ? ["Yes", "No"]
-            : question.choices
-
-        if question.type == .yesNo {
-            let yesLabel = choices.first ?? "Yes"
-            return answer == yesLabel ? 0.5 : -0.5
-        }
-
-        guard choices.count > 1, let index = choices.firstIndex(of: answer) else { return 0 }
-        let fraction = Double(index) / Double(choices.count - 1)
-        return -1.0 + fraction * 2.0
+        StateOfMindValence.value(
+            answer: response.answeredOptions?.first,
+            choices: question.choices,
+            type: question.type
+        )
     }
 }
