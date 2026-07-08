@@ -5,7 +5,10 @@ on:
   pull_request:
 jobs:
   test:
-    runs-on: macos-latest
+    # macOS 26 image required: DispatchKit links SwiftData symbols that only
+    # exist in the macOS 26 runtime (an older host dlopen-fails the test bundle
+    # even though the Xcode 26 SDK compiles it).
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -13,7 +16,7 @@ jobs:
       - name: Run DispatchKit tests
         run: swift test
   build-app:
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -23,6 +26,6 @@ jobs:
       - name: Generate project
         run: xcodegen generate
       - name: Build app
-        run: |
-          DEST_ID=$(xcrun simctl list devices available --json | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for devs in d.values() for dev in devs if 'iPhone' in dev['name']))")
-          xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination "id=$DEST_ID" build
+        # generic simulator destination: compiles against the SDK without
+        # requiring a concrete simulator runtime to be installed on the image.
+        run: xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination 'generic/platform=iOS Simulator' build
