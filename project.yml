@@ -27,3 +27,5 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Dispatch counts how many photos you took since your last report."
         CODE_SIGN_ENTITLEMENTS: App/Dispatch.entitlements
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Dispatch records where you are when you file a report."
+        INFOPLIST_KEY_NSHealthShareUsageDescription: "Dispatch reads steps, flights, heart rate, HRV, sleep, workouts, and caffeine to add context to your reports."
+        INFOPLIST_KEY_NSFocusStatusUsageDescription: "Dispatch records whether a Focus is on when you file a report."
