@@ -18,6 +18,7 @@ struct DispatchApp: App {
     let surveyPresenter = SurveyPresenter()
     let notificationScheduler: NotificationScheduler
     let appLockStore: AppLockStore
+    let privacyCoverWindow: PrivacyCoverWindow
     let permissionCascade: PermissionCascade
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
@@ -45,6 +46,7 @@ struct DispatchApp: App {
         if arguments.contains("--enable-app-lock") {
             appLockStore.forceLockForUITesting()
         }
+        privacyCoverWindow = PrivacyCoverWindow(appLockStore: appLockStore, themeStore: themeStore)
 
         let scheduler = NotificationScheduler(
             container: container, prefs: notificationPrefs, isTestEnvironment: isTestEnvironment
@@ -91,14 +93,44 @@ struct DispatchApp: App {
                     if appDefaults.bool(forKey: OnboardingFlag.key) {
                         notificationScheduler.requestPermissionIfNeeded(prefs: notificationPrefs, awakeStore: awakeStore)
                     }
+                    // Cold launch with lock enabled (or the --enable-app-lock
+                    // forced-lock UI-test path): the window scene is connected
+                    // by now, so raise the lock window before content is seen.
+                    if appLockStore.isLocked {
+                        privacyCoverWindow.show()
+                    }
                 }
                 .onChange(of: scenePhase) { oldPhase, newPhase in
-                    if newPhase == .active {
+                    switch newPhase {
+                    case .active:
                         notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
                         appLockStore.evaluateReturnFromBackground(backgroundedAt: backgroundedAt)
                         backgroundedAt = nil
-                    } else if newPhase == .background {
-                        backgroundedAt = Date()
+                        // Decide first, then adjust the cover in the same
+                        // main-actor turn: keep the window while locked (it
+                        // hosts AppLockView's unlock flow), drop it otherwise.
+                        if appLockStore.isLocked || appLockStore.isCovered {
+                            privacyCoverWindow.show()
+                        } else {
+                            privacyCoverWindow.hide()
+                        }
+                    case .inactive, .background:
+                        // Synchronous, same handler — the cover must be up
+                        // before the app-switcher snapshot is taken and before
+                        // any frame of real content can flash on return.
+                        // coverForBackgroundingIfNeeded is a no-op while
+                        // already locked/covered, so the .inactive fired by
+                        // the Face ID prompt itself can't re-lock or disturb
+                        // an in-progress unlock.
+                        appLockStore.coverForBackgroundingIfNeeded()
+                        if appLockStore.isCovered || appLockStore.isLocked {
+                            privacyCoverWindow.show()
+                        }
+                        if newPhase == .background {
+                            backgroundedAt = Date()
+                        }
+                    default:
+                        break
                     }
                 }
                 .task {

@@ -60,22 +60,13 @@ struct ContentView: View {
             set: { surveyPresenter.request = $0 })) { request in
             SurveyFlowView(kind: request.kind, trigger: request.trigger, overrideDate: request.overrideDate)
         }
-        .fullScreenCover(isPresented: Binding(
-            get: { appLockStore.isLocked },
-            set: { appLockStore.isLocked = $0 })) {
-            AppLockView()
-        }
-        // NOTE (post-TestFlight follow-up): this same lock-gating pattern had to be
-        // threaded individually into ReportsListView's backfill sheet and HomeView's
-        // visualization filter sheet (each gates its own `isPresented` binding on
-        // `!appLockStore.isLocked`, mirroring the survey cover above) so that any
-        // `.sheet`/`.fullScreenCover` presented from a subview can't block this
-        // lock cover from appearing. That per-call-site fix is fragile — any new
-        // sheet added anywhere in the tree needs the same treatment or it can
-        // reintroduce this bug. The durable fix is a window-level lock overlay
-        // (e.g. driven from the WindowGroup/UIWindowScene) that always wins
-        // regardless of what SwiftUI presentation state exists underneath it.
-        // Deferred until after TestFlight to avoid destabilizing presentation
-        // flow this close to release.
+        // NOTE: the lock surface itself now lives in a dedicated UIWindow
+        // (`PrivacyCoverWindow`, driven from DispatchApp's scenePhase handler)
+        // at `.alert + 1`, so it always wins over any SwiftUI presentation
+        // state in this tree and appears synchronously before the
+        // app-switcher snapshot. The `isLocked` gating of the survey cover
+        // above (and of ReportsListView's backfill sheet and HomeView's
+        // visualization filter sheet) stays: while locked, presentations are
+        // suppressed and re-present automatically once isLocked flips false.
     }
 }

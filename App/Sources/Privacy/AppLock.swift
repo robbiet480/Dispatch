@@ -16,6 +16,12 @@ public final class AppLockStore: @unchecked Sendable {
     private var _enabled: Bool
     public var isLocked: Bool = false
 
+    /// Runtime-only: true while the app is covered for backgrounding but not
+    /// (yet) locked — the privacy cover window is up hiding content from the
+    /// app-switcher snapshot, but no authentication is required to return
+    /// within the grace interval. Cleared by `evaluateReturnFromBackground`.
+    public var isCovered: Bool = false
+
     /// Backgrounding this long or longer re-locks the app on return.
     public static let backgroundGraceInterval: TimeInterval = 60
 
@@ -65,9 +71,26 @@ public final class AppLockStore: @unchecked Sendable {
         isLocked = true
     }
 
+    /// Call synchronously the moment the scene leaves the foreground
+    /// (`.inactive` or `.background`): marks the app as covered so the
+    /// privacy cover window hides content before the app-switcher snapshot.
+    ///
+    /// Deliberately a no-op when already locked or covered: `.inactive` also
+    /// fires for the Face ID system prompt itself (and notification-center
+    /// pulls, share sheets, etc.), so re-covering mid-authentication must not
+    /// disturb the in-progress unlock flow.
+    public func coverForBackgroundingIfNeeded() {
+        guard enabled, !isTestEnvironment, !isLocked, !isCovered else { return }
+        isCovered = true
+    }
+
     /// Call when the scene becomes active again after having backgrounded
-    /// at `backgroundedAt`. Locks only if enabled and the grace interval elapsed.
+    /// at `backgroundedAt`. Locks only if enabled and the grace interval
+    /// elapsed. Always clears `isCovered` AFTER the lock decision, in the
+    /// same main-actor turn, so there is never a gap where the app is
+    /// neither covered nor locked but should be.
     public func evaluateReturnFromBackground(backgroundedAt: Date?) {
+        defer { isCovered = false }
         guard !isTestEnvironment else { return }
         if AppLockPolicy.shouldLock(
             enabled: enabled,
