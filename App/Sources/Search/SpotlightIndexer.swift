@@ -3,7 +3,7 @@ import DispatchKit
 import Foundation
 import os
 
-private let spotlightLog = Logger(subsystem: "com.robbiet480.dispatch", category: "spotlight")
+private let spotlightLog = Logger(subsystem: "io.robbie.Dispatch", category: "spotlight")
 
 /// Indexes reports into the system-wide Spotlight index via CSSearchableIndex.
 /// Every failure is logged and swallowed — indexing is best-effort and must

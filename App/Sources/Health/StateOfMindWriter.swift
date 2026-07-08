@@ -4,7 +4,7 @@ import HealthKit
 import os
 import SwiftData
 
-private let stateOfMindLog = Logger(subsystem: "com.robbiet480.dispatch", category: "stateOfMind")
+private let stateOfMindLog = Logger(subsystem: "io.robbie.Dispatch", category: "stateOfMind")
 
 /// Writes Apple Health `HKStateOfMind` samples for report answers whose
 /// question opts into mood logging (`Question.stateOfMindKind`).

@@ -1,6 +1,6 @@
 name: Dispatch
 options:
-  bundleIdPrefix: com.robbiet480
+  bundleIdPrefix: io.robbie
   deploymentTarget:
     iOS: "26.0"
 packages:
@@ -19,7 +19,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Dispatch
-        PRODUCT_BUNDLE_IDENTIFIER: com.robbiet480.dispatch
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch
         PRODUCT_MODULE_NAME: DispatchApp
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -46,7 +46,7 @@ targets:
     settings:
       base:
         TEST_TARGET_NAME: DispatchApp
-        PRODUCT_BUNDLE_IDENTIFIER: com.robbiet480.dispatch.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.uitests
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: 6.0
 schemes:

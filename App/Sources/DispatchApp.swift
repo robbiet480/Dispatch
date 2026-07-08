@@ -4,7 +4,7 @@ import SwiftData
 import SwiftUI
 import UserNotifications
 
-private let seedLog = Logger(subsystem: "com.robbiet480.dispatch", category: "seed")
+private let seedLog = Logger(subsystem: "io.robbie.Dispatch", category: "seed")
 
 @main
 struct DispatchApp: App {

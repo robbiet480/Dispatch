@@ -5,7 +5,7 @@ import os
 import SwiftData
 import UserNotifications
 
-private let notificationLog = Logger(subsystem: "com.robbiet480.dispatch", category: "notifications")
+private let notificationLog = Logger(subsystem: "io.robbie.Dispatch", category: "notifications")
 
 /// Category + action identifiers for the interactive `DISPATCH_PROMPT`
 /// notification (quick Yes/No answer + snooze) and the pending-request
