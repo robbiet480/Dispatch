@@ -31,7 +31,20 @@ final class HealthKitReader: Sendable {
             let predicate = HKQuery.predicateForSamples(withStart: since, end: nil)
             let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate,
                                           options: .cumulativeSum) { _, stats, error in
-                if let error { continuation.resume(throwing: error); return }
+                if let error {
+                    // HKStatisticsQuery completes with HKError.errorNoData (code 11)
+                    // instead of returning empty stats when zero samples match the
+                    // predicate window (e.g. short report intervals with no steps
+                    // logged yet). That's a legitimate "0", not a failure — do NOT
+                    // rethrow it, or short windows will report "unavailable"
+                    // instead of 0. Any other error still propagates.
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: 0)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
                 continuation.resume(returning: stats?.sumQuantity()?.doubleValue(for: unit) ?? 0)
             }
             store.execute(query)
@@ -44,7 +57,16 @@ final class HealthKitReader: Sendable {
             let predicate = HKQuery.predicateForSamples(withStart: since, end: nil)
             let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate,
                                           options: .discreteAverage) { _, stats, error in
-                if let error { continuation.resume(throwing: error); return }
+                if let error {
+                    // Same errorNoData semantics as sum(): zero matching samples is
+                    // "no reading" (nil), not an error to surface/throw.
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: nil)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
                 continuation.resume(returning: stats?.averageQuantity()?.doubleValue(for: unit))
             }
             store.execute(query)
@@ -160,11 +182,16 @@ struct HealthMetricProvider: SensorProvider {
         case .healthHeart:
             var readings: [HealthReading] = []
             let bpm = HKUnit.count().unitDivided(by: .minute())
-            if let avg = try await reader.average(.heartRate, unit: bpm, since: window) {
+            // avg and latest are independent reads: fetch both even if one
+            // fails/has-no-data, so a no-data average doesn't destroy an
+            // otherwise-valid latest reading (and vice versa).
+            let avg = try? await reader.average(.heartRate, unit: bpm, since: window)
+            let latest = try? await reader.latest(.heartRate, unit: bpm)
+            if let avg = avg ?? nil {
                 readings.append(HealthReading(type: "heartRateAvg", value: avg, unit: "bpm",
                                               startDate: window, endDate: now))
             }
-            if let latest = try await reader.latest(.heartRate, unit: bpm) {
+            if let latest = latest ?? nil {
                 readings.append(HealthReading(type: "heartRateLatest", value: latest.value, unit: "bpm",
                                               endDate: latest.date))
             }
