@@ -42,13 +42,26 @@ struct HomeView: View {
             partial ^= report.uniqueIdentifier.hashValue
         }
         let visibleIDs = visibleQuestions.map(\.uniqueIdentifier).sorted().joined(separator: ",")
-        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)"
+        let criteria = filterStore.criteria.map(\.displayText).joined(separator: ",")
+        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)"
+    }
+
+    /// Content-filtered reports feeding the viz pages. Only computed inside
+    /// `rebuildVisualizations()` (the memoized `.task(id:)` path) — never per frame.
+    private func filteredReports() -> [Report] {
+        let criteria = filterStore.criteria
+        guard !criteria.isEmpty else { return reports }
+        let peopleQuestionIDs = Set(questions.filter { $0.type == .people }.map(\.uniqueIdentifier))
+        return reports.filter {
+            ReportFilter.matches(report: $0, criteria: criteria, peopleQuestionIDs: peopleQuestionIDs)
+        }
     }
 
     private func rebuildVisualizations() {
+        let matching = filteredReports()
         var next: [String: QuestionVisualization] = [:]
         for question in visibleQuestions {
-            next[question.uniqueIdentifier] = VisualizationData.build(for: question, reports: reports)
+            next[question.uniqueIdentifier] = VisualizationData.build(for: question, reports: matching)
         }
         // Only replace values that actually changed so QuestionVisualizationView identity/diffing
         // (via Equatable QuestionVisualization) stays cheap for unaffected pages.
@@ -94,6 +107,7 @@ struct HomeView: View {
                 set: { isShowingFilter = $0 })) {
                 VisualizationFilterView(
                     questions: questions.filter(\.isEnabled),
+                    reports: reports,
                     filterStore: filterStore
                 )
             }
@@ -101,10 +115,13 @@ struct HomeView: View {
     }
 
     private var filterPill: some View {
-        Button {
+        let activeCount = filterStore.criteria.count
+        return Button {
             isShowingFilter = true
         } label: {
-            Text("Filter Visualizations…")
+            Text(activeCount == 0
+                 ? "Filter Visualizations…"
+                 : "^[\(activeCount) filter](inflect: true) active")
                 .font(.caption)
                 .fontWeight(.semibold)
                 .foregroundStyle(.white)

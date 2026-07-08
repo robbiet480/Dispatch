@@ -1,12 +1,19 @@
 import DispatchKit
+import SwiftData
 import SwiftUI
 
-/// Sheet listing all enabled questions with visibility toggles, backed by
-/// `VisualizationFilterStore`. Presented from Home's "Filter Visualizations…" pill.
+/// Home's filter sheet, mirroring the original Reporter's content filters:
+/// active criteria as removable chips up top, category rows (People, Places,
+/// Tokens, Months, Years, Ambient Audio, Steps, Weather) drilling into value
+/// pickers populated from actual data, and — a Dispatch extra — the
+/// per-question show/hide toggles at the bottom. Backed by
+/// `VisualizationFilterStore`; reports must match ALL active criteria.
 struct VisualizationFilterView: View {
     let questions: [Question]
+    let reports: [Report]
     let filterStore: VisualizationFilterStore
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     private var theme: Theme { themeStore.theme }
@@ -18,13 +25,50 @@ struct VisualizationFilterView: View {
                     .ignoresSafeArea()
 
                 List {
-                    ForEach(questions, id: \.uniqueIdentifier) { question in
-                        Toggle(question.prompt, isOn: binding(for: question))
-                            .foregroundStyle(.white)
-                            .listRowBackground(Color.white.opacity(0.12))
+                    if !filterStore.criteria.isEmpty {
+                        Section {
+                            activeCriteriaChips
+                                .listRowBackground(Color.clear)
+                        } header: {
+                            header("ACTIVE FILTERS")
+                        }
                     }
+
+                    Section {
+                        categoryLink("People", values: personNames, map: { .person($0) })
+                        categoryLink("Places", values: placeNames, map: { .place($0) })
+                        categoryLink("Tokens", values: tokenTexts, map: { .token($0) })
+                        categoryLink("Months", pairs: monthPairs)
+                        categoryLink("Years", pairs: yearPairs)
+                        categoryLink("Ambient Audio", pairs: ReportFilter.AudioBucket.allCases.map {
+                            ($0.displayName, .ambientAudio($0))
+                        })
+                        categoryLink("Steps", pairs: ReportFilter.StepsBucket.allCases.map {
+                            ($0.displayName, .steps($0))
+                        })
+                        categoryLink("Weather", values: weatherConditions, map: { .weather($0) })
+                    } header: {
+                        header("FILTER BY CONTENT")
+                    } footer: {
+                        Text("Results are only shown for entries matching all filters.")
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+
+                    Section {
+                        ForEach(questions, id: \.uniqueIdentifier) { question in
+                            Toggle(question.prompt, isOn: binding(for: question))
+                                .foregroundStyle(.white)
+                        }
+                    } header: {
+                        header("QUESTIONS")
+                    } footer: {
+                        Text("Hidden questions don't appear as visualization pages.")
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
                 }
-                .listStyle(.plain)
+                .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
                 .accessibilityIdentifier("viz-filter-list")
             }
@@ -32,6 +76,13 @@ struct VisualizationFilterView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                if !filterStore.criteria.isEmpty {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Clear") { filterStore.clearCriteria() }
+                            .tint(.white)
+                            .accessibilityIdentifier("viz-filter-clear")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .tint(.white)
@@ -40,10 +91,152 @@ struct VisualizationFilterView: View {
         }
     }
 
+    // MARK: - Active criteria chips
+
+    private var activeCriteriaChips: some View {
+        FlowingChips(tokens: filterStore.criteria.map(\.displayText)) { removed in
+            if let criterion = filterStore.criteria.first(where: { $0.displayText == removed }) {
+                filterStore.removeCriterion(criterion)
+            }
+        }
+        .accessibilityIdentifier("viz-filter-chips")
+    }
+
+    // MARK: - Category rows
+
+    private func categoryLink(_ title: String, values: [String],
+                              map: @escaping (String) -> ReportFilter.FilterCriterion) -> some View {
+        categoryLink(title, pairs: values.map { ($0, map($0)) })
+    }
+
+    private func categoryLink(_ title: String,
+                              pairs: [(label: String, criterion: ReportFilter.FilterCriterion)]) -> some View {
+        NavigationLink {
+            FilterValuePickerView(title: title, pairs: pairs, filterStore: filterStore, theme: theme)
+        } label: {
+            HStack {
+                Text(title)
+                    .foregroundStyle(.white)
+                Spacer()
+                let activeCount = pairs.filter { filterStore.criteria.contains($0.criterion) }.count
+                if activeCount > 0 {
+                    Text("\(activeCount)")
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+        }
+        .accessibilityIdentifier("viz-filter-category-\(title.lowercased().replacingOccurrences(of: " ", with: "-"))")
+    }
+
+    // MARK: - Value vocabularies (from actual data)
+
+    private var personNames: [String] {
+        let fetched = (try? modelContext.fetch(FetchDescriptor<PersonEntity>(sortBy: [SortDescriptor(\.text)]))) ?? []
+        return fetched.map(\.text)
+    }
+
+    private var tokenTexts: [String] {
+        let fetched = (try? modelContext.fetch(FetchDescriptor<TokenEntity>(sortBy: [SortDescriptor(\.text)]))) ?? []
+        return fetched.map(\.text)
+    }
+
+    private var placeNames: [String] {
+        var names: Set<String> = []
+        for report in reports {
+            if let sensed = report.location?.placemark?.name, !sensed.isEmpty {
+                names.insert(sensed)
+            }
+            for response in report.responses {
+                if let answered = response.locationResponse?.text, !answered.isEmpty {
+                    names.insert(answered)
+                }
+            }
+        }
+        return names.sorted()
+    }
+
+    private var weatherConditions: [String] {
+        Set(reports.compactMap(\.weather?.condition).filter { !$0.isEmpty }).sorted()
+    }
+
+    private var monthPairs: [(String, ReportFilter.FilterCriterion)] {
+        let symbols = Calendar(identifier: .gregorian).monthSymbols
+        return (1...12).map { (symbols[$0 - 1], .month($0)) }
+    }
+
+    private var yearPairs: [(String, ReportFilter.FilterCriterion)] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let years = Set(reports.map { calendar.component(.year, from: $0.date) })
+        return years.sorted(by: >).map { (String($0), .year($0)) }
+    }
+
     private func binding(for question: Question) -> Binding<Bool> {
         Binding(
             get: { filterStore.isVisible(question.uniqueIdentifier) },
             set: { filterStore.setVisible(question.uniqueIdentifier, $0) }
         )
+    }
+
+    private func header(_ title: String) -> some View {
+        Text(title)
+            .font(.caption)
+            .fontWeight(.semibold)
+            .foregroundStyle(.white.opacity(0.8))
+    }
+}
+
+/// Drill-in value picker for one filter category: tapping a value toggles its
+/// criterion in the store (checkmark when active).
+private struct FilterValuePickerView: View {
+    let title: String
+    let pairs: [(label: String, criterion: ReportFilter.FilterCriterion)]
+    let filterStore: VisualizationFilterStore
+    let theme: Theme
+
+    var body: some View {
+        ZStack {
+            Color.themeBackground(theme)
+                .ignoresSafeArea()
+
+            List {
+                if pairs.isEmpty {
+                    Text("No values yet — file some reports first.")
+                        .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.white.opacity(0.12))
+                } else {
+                    ForEach(pairs, id: \.criterion) { pair in
+                        Button {
+                            toggle(pair.criterion)
+                        } label: {
+                            HStack {
+                                Text(pair.label)
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                if filterStore.criteria.contains(pair.criterion) {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                        }
+                        .listRowBackground(Color.white.opacity(0.12))
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .accessibilityIdentifier("viz-filter-values")
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private func toggle(_ criterion: ReportFilter.FilterCriterion) {
+        if filterStore.criteria.contains(criterion) {
+            filterStore.removeCriterion(criterion)
+        } else {
+            filterStore.addCriterion(criterion)
+        }
     }
 }
