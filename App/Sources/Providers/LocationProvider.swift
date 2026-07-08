@@ -1,6 +1,7 @@
 import CoreLocation
 import DispatchKit
 import Foundation
+import MapKit
 import os
 
 /// Shares the CLLocation fix between the location, altitude, and weather
@@ -70,20 +71,28 @@ final class LocationProvider: NSObject, SensorProvider, CLLocationManagerDelegat
         snapshot.speed = fix.speed
         snapshot.course = fix.course
         snapshot.timestamp = fix.timestamp
-        if let clPlacemark = try? await CLGeocoder().reverseGeocodeLocation(fix).first {
-            var placemark = Placemark()
-            placemark.name = clPlacemark.name
-            placemark.thoroughfare = clPlacemark.thoroughfare
-            placemark.subThoroughfare = clPlacemark.subThoroughfare
-            placemark.locality = clPlacemark.locality
-            placemark.subLocality = clPlacemark.subLocality
-            placemark.administrativeArea = clPlacemark.administrativeArea
-            placemark.subAdministrativeArea = clPlacemark.subAdministrativeArea
-            placemark.postalCode = clPlacemark.postalCode
-            placemark.country = clPlacemark.country
+        if let placemark = try? await Self.reverseGeocode(fix) {
             snapshot.placemark = placemark
         }
         return .location(snapshot)
+    }
+
+    /// Reverse-geocodes via MapKit's MKReverseGeocodingRequest (CLGeocoder's
+    /// replacement as of iOS 26). Populates every field MapKit's non-deprecated
+    /// surface (MKMapItem.name/location/address/addressRepresentations) can
+    /// supply; MKMapItem no longer exposes thoroughfare/subThoroughfare/
+    /// subLocality/subAdministrativeArea/postalCode/country without going
+    /// through the now-deprecated `placemark` property, so those fields are
+    /// left nil rather than reintroducing a deprecation warning. Non-fatal:
+    /// callers use `try?`, matching the previous CLGeocoder semantics.
+    private static func reverseGeocode(_ location: CLLocation) async throws -> Placemark? {
+        guard let request = MKReverseGeocodingRequest(location: location) else { return nil }
+        guard let item = try await request.mapItems.first else { return nil }
+        var placemark = Placemark()
+        placemark.name = item.name
+        placemark.locality = item.addressRepresentations?.cityName
+        placemark.country = item.addressRepresentations?.regionName
+        return placemark
     }
 
     private func requestFix() async throws -> CLLocation {

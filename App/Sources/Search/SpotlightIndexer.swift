@@ -1,4 +1,4 @@
-import CoreSpotlight
+@preconcurrency import CoreSpotlight
 import DispatchKit
 import Foundation
 import os
@@ -64,23 +64,39 @@ enum SpotlightIndexer {
         }
     }
 
+    /// Sendable snapshot of the pieces of a `CSSearchableItem` we need — built from
+    /// `Report` (a SwiftData model, not Sendable) up front on the caller's context,
+    /// so only plain value data crosses into the `@Sendable` completion handlers
+    /// below. The actual (non-Sendable) `CSSearchableItem` is constructed from this
+    /// snapshot only at the point of use, inside a single non-escaping closure body,
+    /// so it never itself has to cross a `@Sendable` boundary.
+    private struct SearchableItemSnapshot: Sendable {
+        var uniqueIdentifier: String
+        var title: String
+        var contentDescription: String
+    }
+
     static func rebuildAll(reports: [Report]) {
         guard !isTestEnvironment else { return }
         guard !AppLockStore.isEnabled() else {
             spotlightLog.info("skipping spotlight rebuild: app lock enabled")
             return
         }
-        // Hoist model reads before any completion closure, same reasoning as `index(report:)`.
-        let ids = reports.map(\.uniqueIdentifier)
-        let items = reports.map(searchableItem(for:))
+        // Hoist model reads before any completion closure: `reports` are SwiftData
+        // models and must not be captured/read inside an async completion handler
+        // (see `index(report:)`). Only this Sendable snapshot array crosses into
+        // the completion handlers below — not the reports and not any
+        // CSSearchableItem.
+        let snapshots = reports.map(snapshot(for:))
         CSSearchableIndex.default().deleteAllSearchableItems { deleteError in
             if let deleteError {
                 spotlightLog.error("failed to clear spotlight index before rebuild: \(deleteError, privacy: .public)")
             }
-            guard !items.isEmpty else { return }
+            guard !snapshots.isEmpty else { return }
+            let items = snapshots.map(searchableItem(for:))
             CSSearchableIndex.default().indexSearchableItems(items) { error in
                 if let error {
-                    spotlightLog.error("failed to rebuild spotlight index for \(ids.count, privacy: .public) reports: \(error, privacy: .public)")
+                    spotlightLog.error("failed to rebuild spotlight index for \(snapshots.count, privacy: .public) reports: \(error, privacy: .public)")
                 }
             }
         }
@@ -88,13 +104,21 @@ enum SpotlightIndexer {
 
     // MARK: - Item construction
 
-    private static func searchableItem(for report: Report) -> CSSearchableItem {
+    private static func snapshot(for report: Report) -> SearchableItemSnapshot {
+        SearchableItemSnapshot(
+            uniqueIdentifier: report.uniqueIdentifier,
+            title: title(for: report),
+            contentDescription: contentDescription(for: report)
+        )
+    }
+
+    private static func searchableItem(for snapshot: SearchableItemSnapshot) -> CSSearchableItem {
         let attributes = CSSearchableItemAttributeSet(contentType: .text)
-        attributes.title = title(for: report)
-        attributes.contentDescription = contentDescription(for: report)
+        attributes.title = snapshot.title
+        attributes.contentDescription = snapshot.contentDescription
 
         let item = CSSearchableItem(
-            uniqueIdentifier: report.uniqueIdentifier,
+            uniqueIdentifier: snapshot.uniqueIdentifier,
             domainIdentifier: domainIdentifier,
             attributeSet: attributes
         )
@@ -103,6 +127,10 @@ enum SpotlightIndexer {
         // until explicitly deindexed (delete) or wiped (app lock enabled).
         item.expirationDate = .distantFuture
         return item
+    }
+
+    private static func searchableItem(for report: Report) -> CSSearchableItem {
+        searchableItem(for: snapshot(for: report))
     }
 
     private static func title(for report: Report) -> String {
