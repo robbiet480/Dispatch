@@ -16,6 +16,7 @@ struct SurveyFlowView: View {
     /// the survey model first — no typed text is lost to a swipe or DONE
     /// tap that beats the debounce timer.
     @State private var flushRegistry = PendingFlushRegistry()
+    @State private var isShowingDiscardConfirmation = false
     let kind: ReportKind
     let trigger: ReportTrigger
     var overrideDate: Date? = nil
@@ -75,7 +76,7 @@ struct SurveyFlowView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
 
             HStack {
-                Button("CANCEL") { dismiss() }
+                Button("CANCEL") { isShowingDiscardConfirmation = true }
                     .accessibilityIdentifier("survey-cancel")
                 Spacer()
                 Text("\(controller.survey.currentIndex + 1) / \(max(controller.survey.pages.count, 1))")
@@ -106,6 +107,11 @@ struct SurveyFlowView: View {
             // while the keyboard re-attaches after the app regains focus.
             Color.themeBackground(themeStore.theme).opacity(0.9)
                 .ignoresSafeArea()
+        }
+        .alert("Are you sure you want to discard this report?",
+               isPresented: $isShowingDiscardConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Discard", role: .destructive) { dismiss() }
         }
     }
 

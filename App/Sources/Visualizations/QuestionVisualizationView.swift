@@ -34,7 +34,7 @@ struct QuestionVisualizationView: View {
         case .numericSeries(let points, let average):
             NumericSeriesView(points: points, average: average, theme: theme)
         case .frequency(let items):
-            RankedRowsView(rows: items.map { ($0.text, $0.count) })
+            TokenFrequencyView(items: items)
         case .places(let items):
             RankedRowsView(rows: items.map { ($0.name, $0.count) })
         case .recentNotes(let notes):
@@ -175,7 +175,52 @@ struct NumericSeriesView: View {
     }
 }
 
-/// Tokens/people/places: ranked rows, text left, count right.
+/// Tokens/people: the original Reporter's "N ANSWERS" layout — a large count
+/// numeral over a small-caps ANSWERS label, then a comma-joined wrapping list
+/// of "Token (count)" with the counts de-emphasized. Places keeps RankedRowsView.
+struct TokenFrequencyView: View {
+    let items: [(text: String, count: Int)]
+
+    private var totalAnswers: Int {
+        items.reduce(0) { $0 + $1.count }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(totalAnswers)")
+                        .font(.system(size: 64, weight: .bold))
+                        .foregroundStyle(.white)
+                        .accessibilityIdentifier("viz-answer-count")
+                    Text("ANSWERS")
+                        .font(.caption.weight(.semibold))
+                        .kerning(1.5)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                joinedList
+                    .font(.subheadline)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+        }
+        .accessibilityIdentifier("viz-token-frequency")
+    }
+
+    /// One wrapping Text so the comma-joined list flows naturally across lines.
+    private var joinedList: Text {
+        items.enumerated().reduce(Text("")) { partial, item in
+            let (index, entry) = item
+            let separator = index == 0 ? Text("") : Text(", ").foregroundStyle(.white.opacity(0.6))
+            return partial
+                + separator
+                + Text(entry.text).foregroundStyle(.white)
+                + Text(" (\(entry.count))").font(.caption).foregroundStyle(.white.opacity(0.55))
+        }
+    }
+}
+
+/// Places: ranked rows, text left, count right.
 struct RankedRowsView: View {
     let rows: [(text: String, count: Int)]
 

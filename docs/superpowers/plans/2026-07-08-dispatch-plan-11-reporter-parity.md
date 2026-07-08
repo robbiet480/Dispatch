@@ -64,3 +64,16 @@ Verify: build, kit suite (+ new tests), UI suite. Commit `feat: visualization co
 - Wrap: full suites; append plan-completion note to this doc.
 
 Verify: build, kit suite, UI suite. Commit `feat: discard confirm, tokens viz, detail title` → push. Whole-branch review follows (controller-driven).
+
+---
+
+## Plan completion note (2026-07-08)
+
+All four tasks shipped to main, one commit each:
+
+- **T1** `c5e7846` — kit fields/schema/viz override. The style enum is named `VisualizationStyle` (not `QuestionVisualization` as sketched above) because that name was already taken by the aggregation result enum in VisualizationData.swift.
+- **T2** `5a8f1ce` — editor parity: WAKE/DAY/SLEEP chips (`schedule-wake/day/sleep`), VISUALIZATION picker, DEFAULT ANSWER field (applied kit-side in `SurveyViewModel.drafts()`), `ChoiceOptionsEditorView` (`choice-editor`, `add-option`, `multiple-selections`; drag-reorder via toolbar EditButton edit mode, swipe-delete in default mode), survey honors `allowsMultipleSelection`.
+- **T3** `883a7e4` — `ReportFilter` (8 criterion kinds, AND semantics, report-timezone month/year; `matches(report:criteria:peopleQuestionIDs:)` — the extra defaulted param scopes person criteria to people questions), criteria persistence on `VisualizationFilterStore`, rebuilt filter sheet with chips/category drill-ins/footer + Questions section kept, Home builds viz from matching reports inside the memoized `.task(id:)` path with criteria in the task id.
+- **T4** — discard confirmation alert on survey CANCEL (UI test asserts the alert + Discard/Cancel buttons positively), `TokenFrequencyView` "N ANSWERS" layout for tokens/people (places keeps ranked rows), detail title "MMM d, yyyy 'at' HH:mm".
+
+Suites at wrap: 158 kit tests (was 139), 6 UI tests, all green. `schemaVersion` remains 2; nil parity fields are omitted from v2 JSON (explicit test) and old exports import unchanged.

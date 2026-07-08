@@ -50,6 +50,16 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(surveyCancel.waitForExistence(timeout: 10))
         surveyCancel.tap()
 
+        // CANCEL must not silently dismiss: it presents a discard confirmation.
+        // Positive assertions on the alert and its Discard action, then discard.
+        let discardAlert = app.alerts["Are you sure you want to discard this report?"]
+        XCTAssertTrue(discardAlert.waitForExistence(timeout: 10),
+                      "expected the discard confirmation alert after tapping CANCEL")
+        let discardButton = discardAlert.buttons["Discard"]
+        XCTAssertTrue(discardButton.exists)
+        XCTAssertTrue(discardAlert.buttons["Cancel"].exists)
+        discardButton.tap()
+
         // Toggling is authoritative even though the follow-up survey was cancelled,
         // so the label should have flipped between AWAKE and ASLEEP.
         XCTAssertTrue(awakeToggle.waitForExistence(timeout: 10))

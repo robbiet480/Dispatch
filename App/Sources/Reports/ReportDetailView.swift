@@ -224,11 +224,12 @@ struct ReportDetailView: View {
             .foregroundStyle(.white.opacity(0.8))
     }
 
+    /// Original Reporter's detail title format, e.g. "Dec 13, 2018 at 04:27".
     private var timeTitle: String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: report.timeZoneIdentifier) ?? .gmt
-        formatter.dateFormat = "HH:mm"
+        formatter.dateFormat = "MMM d, yyyy 'at' HH:mm"
         return formatter.string(from: report.date)
     }
 
