@@ -35,9 +35,10 @@ struct ReportsListView: View {
     // MARK: - Stats header
 
     private var statsHeader: some View {
-        let primary = ReportsOverview.stats(from: reports)
+        // Stats reflect the same set the list shows (filtered while searching).
+        let primary = ReportsOverview.stats(from: filteredReports)
         let secondary = ReportsOverview.secondaryStats(
-            reports: reports,
+            reports: filteredReports,
             tokenCount: tokenEntities.count,
             personCount: personEntities.count
         )
