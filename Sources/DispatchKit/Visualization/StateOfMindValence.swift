@@ -19,7 +19,11 @@ public enum StateOfMindValence {
             return answer == yesLabel ? 0.5 : -0.5
         }
 
-        guard resolvedChoices.count > 1, let index = resolvedChoices.firstIndex(of: answer) else { return 0 }
+        if resolvedChoices.count == 1 {
+            return 0
+        }
+
+        guard let index = resolvedChoices.firstIndex(of: answer) else { return nil }
         let fraction = Double(index) / Double(resolvedChoices.count - 1)
         return -1.0 + fraction * 2.0
     }

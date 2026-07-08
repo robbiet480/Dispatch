@@ -17,6 +17,21 @@
 
 ---
 
+### Task 0: Carried from Plan 5 review — viz memoization + polish
+
+**Files:**
+- Modify: `App/Sources/HomeView.swift`
+- Modify: `Sources/DispatchKit/Visualization/VisualizationData.swift` (blank place-name fallback only)
+- Modify: `AppUITests/NavigationUITests.swift` (or new file)
+
+**Contract:**
+- Memoize visualization building: cache `[String: QuestionVisualization]` in view state, recomputed via `.task(id:)` (or equivalent) keyed on (reports count, newest report date, filter/hidden-ids state, enabled-question ids) — NOT rebuilt on unrelated re-renders (theme/awake changes). The existing `QuestionVisualization: Equatable` conformance is the tool for cheap change detection.
+- While in HomeView: give the viz TabView a `@State` selection keyed by question id so page position survives data changes.
+- Places: a venue-grouped place whose responses all lack text falls back to "Unknown place" (never an empty row) — DispatchKit + test.
+- Filter-sheet UI test: tap `viz-filter-button`, toggle a question off in `viz-filter-list`, assert its page disappears (page count or prompt-text existence).
+
+Verify: kit suite, build, UI suite (3 UI tests now). Commit `perf: memoize home visualizations + filter UI test` → push.
+
 ### Task 1: DispatchKit — ReportSearch + backdate plumbing
 
 **Files:**

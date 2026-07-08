@@ -30,4 +30,11 @@ struct StateOfMindValenceTests {
         let value = StateOfMindValence.value(answer: nil, choices: ["A", "B"], type: .multipleChoice)
         #expect(value == nil)
     }
+
+    @Test("answer not in choices returns nil")
+    func answerNotInChoicesIsNil() {
+        let choices = ["Bad", "Meh", "Great"]
+        let value = StateOfMindValence.value(answer: "Unknown", choices: choices, type: .multipleChoice)
+        #expect(value == nil)
+    }
 }
