@@ -10,6 +10,7 @@ struct DataSettingsView: View {
     @State private var isImporting = false
     @State private var alertMessage: String?
     @State private var showAlert = false
+    @State private var isImportRunning = false
 
     private var theme: Theme { themeStore.theme }
 
@@ -27,6 +28,7 @@ struct DataSettingsView: View {
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                     .accessibilityIdentifier("export-json-button")
+                    .disabled(isImportRunning)
 
                     Button {
                         exportCSV()
@@ -35,14 +37,26 @@ struct DataSettingsView: View {
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                     .accessibilityIdentifier("export-csv-button")
+                    .disabled(isImportRunning)
 
                     Button {
                         isImporting = true
                     } label: {
-                        settingsLabel("Import…")
+                        if isImportRunning {
+                            HStack {
+                                settingsLabel("Import…")
+                                Spacer()
+                                ProgressView()
+                                    .tint(.white)
+                                    .accessibilityIdentifier("import-progress")
+                            }
+                        } else {
+                            settingsLabel("Import…")
+                        }
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                     .accessibilityIdentifier("import-button")
+                    .disabled(isImportRunning)
                 } header: {
                     sectionHeader("EXPORT & IMPORT")
                 }
@@ -109,29 +123,58 @@ struct DataSettingsView: View {
         }
     }
 
+    /// Import runs off the main actor: file read, `V1Importer`/`V2Importer`, and
+    /// `VocabularyBuilder.rebuild` all execute against a background
+    /// `ModelContext(container)` inside a detached `Task`, so a large import
+    /// never blocks scrolling/animation on the Data screen. The background
+    /// context saves its own changes; SwiftData propagates those saves to the
+    /// main context's `@Query`-backed views automatically via its persistent
+    /// history mechanism (same container, same store) — this is the same
+    /// cross-context pattern already used by `NotificationScheduler`, which
+    /// creates and mutates through its own `ModelContext(container)` off the
+    /// main actor. `SpotlightIndexer.rebuildAll` is safe to call from the
+    /// background task too: it immediately snapshots the `[Report]` models it
+    /// is given into a `Sendable` value type before any async work runs, so
+    /// no non-Sendable SwiftData model crosses an actor boundary.
     private func importFile(at url: URL) {
-        let didAccess = url.startAccessingSecurityScopedResource()
-        defer {
-            if didAccess { url.stopAccessingSecurityScopedResource() }
-        }
-        do {
-            let data = try Data(contentsOf: url)
-            let summary = try importData(data)
-            try VocabularyBuilder.rebuild(in: context)
-            let reports = try context.fetch(FetchDescriptor<Report>())
-            SpotlightIndexer.rebuildAll(reports: reports)
-            presentAlert(
-                "Imported \(summary.questionsImported) questions, \(summary.reportsImported) reports, "
-                    + "\(summary.responsesImported) responses. Skipped: \(summary.skipped)."
-            )
-        } catch {
-            presentAlert("Import failed: \(error.localizedDescription)")
+        let container = context.container
+        isImportRunning = true
+        Task.detached(priority: .userInitiated) {
+            let didAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if didAccess { url.stopAccessingSecurityScopedResource() }
+            }
+            do {
+                let data = try Data(contentsOf: url)
+                let backgroundContext = ModelContext(container)
+                let summary = try Self.importData(data, into: backgroundContext)
+                try VocabularyBuilder.rebuild(in: backgroundContext)
+                let reports = try backgroundContext.fetch(FetchDescriptor<Report>())
+                SpotlightIndexer.rebuildAll(reports: reports)
+                await MainActor.run {
+                    isImportRunning = false
+                    presentAlert(
+                        "Imported \(summary.questionsImported) questions, \(summary.reportsImported) reports, "
+                            + "\(summary.responsesImported) responses. Skipped: \(summary.skipped)."
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    isImportRunning = false
+                    presentAlert("Import failed: \(error.localizedDescription)")
+                }
+            }
         }
     }
 
     /// Sniffs the file format by probing for a top-level `schemaVersion` key (present
     /// only in v2 exports) and routes to the matching importer.
-    private func importData(_ data: Data) throws -> ImportSummary {
+    ///
+    /// `nonisolated` + `static`: this must run on the background task's thread
+    /// alongside the background `ModelContext`, not be forced back onto the
+    /// main actor just because `DataSettingsView` (a View) is main-actor
+    /// isolated by default.
+    private nonisolated static func importData(_ data: Data, into context: ModelContext) throws -> ImportSummary {
         struct SchemaProbe: Decodable { let schemaVersion: Int }
         if (try? JSONDecoder().decode(SchemaProbe.self, from: data)) != nil {
             return try V2Importer.importExport(data, into: context)
