@@ -21,6 +21,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Install iOS platform
+        # Xcode 26 ships the iOS simulator platform as a separate download,
+        # and CI images may omit it. No-op when already installed.
+        run: sudo xcodebuild -downloadPlatform iOS
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
