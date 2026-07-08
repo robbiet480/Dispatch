@@ -126,7 +126,9 @@ Same surface as the original, plus modern rows:
 - **Notification settings** — alerts/day, distribution (Random /
   Semi-random / Regular), fixed times, next-alert readout.
 - **Trigger settings** (new) — toggles: prompt on arrival, on departure,
-  on wake, after workouts; per-trigger cooldown.
+  on wake, after workouts; per-Focus rules (prompt when a given Focus
+  starts/ends, with a setup hint if that Focus has no Dispatch filter
+  configured yet); per-trigger cooldown.
 - **Question settings** — reorder, toggle, add/edit (prompt, type, choices,
   placeholder, State of Mind mapping for multi-choice).
 - **Custom tokens** — vocabulary with usage counts.
@@ -166,9 +168,16 @@ Regular distributions + fixed scheduled times; seeded RNG for tests.
 **Event triggers (v2)** —
 - **Visits**: CLMonitor/CLVisit arrival & departure → prompt (per-trigger
   cooldown, quiet during asleep window).
-- **Wake/sleep**: awake window derived from last night's HealthKit sleep
-  samples (fallback: manual toggle, which also records wake/sleep like the
-  original). Waking triggers an optional morning prompt.
+- **Focus transitions**: the Focus Filter extension (§4) is invoked on
+  Focus activation/deactivation; per-Focus trigger rules ("when Sleep
+  ends → prompt", "when Work starts → prompt") schedule an immediate
+  notification from that callback. Requires the one-time per-Focus filter
+  setup; Shortcuts automations remain the escape hatch for anything else.
+- **Wake/sleep**: Sleep Focus deactivation is the primary wake signal
+  (immediate); falls back to last night's HealthKit sleep samples, then to
+  the manual toggle (which also records wake/sleep like the original).
+  Waking prompts the `wake`-kind report; the asleep window derives from the
+  same chain.
 - **Workout end**: HKObserverQuery on workouts → prompt.
 - **App Intents**: `StartReportIntent`, `AnswerQuestionIntent`,
   `ToggleAwakeIntent` exposed to Shortcuts/Siri so arbitrary user
