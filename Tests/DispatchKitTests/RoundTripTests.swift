@@ -15,7 +15,7 @@ import Testing
     let summary = try V2Importer.importExport(exportA, into: contextB)
     #expect(summary.questionsImported == 7)
     #expect(summary.reportsImported == 3)
-    #expect(summary.responsesImported == 8)
+    #expect(summary.responsesImported == 9)
 
     let exportB = try V2Exporter.exportData(from: contextB)
     #expect(exportA == exportB)
@@ -32,7 +32,7 @@ import Testing
     _ = try V2Importer.importExport(data, into: contextB)
     _ = try V2Importer.importExport(data, into: contextB)
     #expect(try contextB.fetch(FetchDescriptor<Report>()).count == 3)
-    #expect(try contextB.fetch(FetchDescriptor<Response>()).count == 8)
+    #expect(try contextB.fetch(FetchDescriptor<Response>()).count == 9)
 }
 
 @Test func v2ImportRejectsWrongSchemaVersion() throws {

@@ -21,7 +21,7 @@ import Testing
     #expect(snap1.legacyImpetus == 0)
     #expect(snap1.timeZone == TimeZone(secondsFromGMT: -4 * 3600)!.identifier)
     #expect(snap1.health?.first { $0.type == "steps" }?.value == 481)
-    #expect(snap1.responses?.count == 4)
+    #expect(snap1.responses?.count == 5)
 
     let multi = try #require(decoded.questions.first { $0.uniqueIdentifier == "q-multi" })
     #expect(multi.questionType == QuestionType.multipleChoice.rawValue)

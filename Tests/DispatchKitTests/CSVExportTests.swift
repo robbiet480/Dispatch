@@ -26,7 +26,10 @@ import Testing
 
     // snap-2 files at 20:10 -0400 == 00:10Z the NEXT day; CSV dates are UTC ISO8601.
     let snap2Row = try #require(lines.first { $0.contains("2015-10-22") })
-    #expect(snap2Row.contains("The Grand"))      // locationResponse text
+    #expect(snap2Row.contains("The Plaza"))      // locationResponse text
+
+    let snap1Row2 = try #require(lines.first { $0.contains("2016-02-11") })
+    #expect(snap1Row2.contains(#""Commas, and ""quotes"" happen""#))
 }
 
 @Test func escapesCSVFields() {

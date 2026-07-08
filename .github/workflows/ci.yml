@@ -12,3 +12,17 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
       - name: Run DispatchKit tests
         run: swift test
+  build-app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build app
+        run: |
+          DEST_ID=$(xcrun simctl list devices available --json | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for devs in d.values() for dev in devs if 'iPhone' in dev['name']))")
+          xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination "id=$DEST_ID" build

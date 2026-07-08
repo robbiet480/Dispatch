@@ -17,8 +17,8 @@ import Testing
     #expect(tokens.first { $0.text == "Working" }?.questionCount == 1)
 
     let people = try context.fetch(FetchDescriptor<PersonEntity>())
-    // People-type responses: "Melissa" (q-people, snap-3).
-    #expect(people.map(\.text) == ["Melissa"])
+    // People-type responses: "Alex" (q-people, snap-3).
+    #expect(people.map(\.text) == ["Alex"])
 
     // Rebuild is idempotent (no duplicate rows).
     try VocabularyBuilder.rebuild(in: context)

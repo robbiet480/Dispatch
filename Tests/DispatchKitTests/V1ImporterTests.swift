@@ -10,7 +10,7 @@ import Testing
 
     #expect(summary.questionsImported == 7)
     #expect(summary.reportsImported == 3)
-    #expect(summary.responsesImported == 8)
+    #expect(summary.responsesImported == 9)
     #expect(summary.skipped == 0)
 
     let reports = try context.fetch(FetchDescriptor<Report>())
@@ -21,7 +21,7 @@ import Testing
     #expect(snap1.trigger == .manual)
     #expect(snap1.timeZoneIdentifier == TimeZone(secondsFromGMT: -4 * 3600)!.identifier)
     #expect(snap1.weather?.condition == "Mostly Cloudy")
-    #expect(snap1.location?.placemark?.locality == "Oakland")
+    #expect(snap1.location?.placemark?.locality == "Riverton")
 
     let snap2 = try #require(reports.first { $0.uniqueIdentifier == "snap-2" })
     #expect(snap2.photos.count == 1)
@@ -52,7 +52,7 @@ import Testing
 
     #expect(try context.fetch(FetchDescriptor<Report>()).count == 3)
     #expect(try context.fetch(FetchDescriptor<Question>()).count == 7)
-    #expect(try context.fetch(FetchDescriptor<Response>()).count == 8)
+    #expect(try context.fetch(FetchDescriptor<Response>()).count == 9)
 }
 
 @Test func importsRealExportIfPresent() throws {

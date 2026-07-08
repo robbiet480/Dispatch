@@ -34,7 +34,7 @@ func fixtureData(_ name: String) throws -> Data {
     #expect(snap1.responses?.first { $0.uniqueIdentifier == "r-1d" }?.numericResponse == "3")
 
     let snap2 = try #require(export.snapshots.first { $0.uniqueIdentifier == "snap-2" })
-    #expect(snap2.responses?.first { $0.uniqueIdentifier == "r-2a" }?.locationResponse?.text == "The Grand")
+    #expect(snap2.responses?.first { $0.uniqueIdentifier == "r-2a" }?.locationResponse?.text == "The Plaza")
     #expect(snap2.responses?.first { $0.uniqueIdentifier == "r-2b" }?.textResponses?.first?.text == "SwiftData exists")
     let skipped = try #require(snap2.responses?.first { $0.uniqueIdentifier == "r-2c" })
     #expect(skipped.tokens == nil && skipped.answeredOptions == nil && skipped.numericResponse == nil)

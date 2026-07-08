@@ -22,15 +22,15 @@
       "reportImpetus": 0,
       "audio": {"avg": -43.57, "peak": -34.0, "uniqueIdentifier": "aud-1"},
       "location": {
-        "latitude": 37.8116, "longitude": -122.2642,
+        "latitude": 40.0001, "longitude": -75.0001,
         "speed": -1, "course": 0, "altitude": 0,
         "horizontalAccuracy": 65, "verticalAccuracy": 10,
         "timestamp": "2016-02-11T19:08:54-0400",
         "uniqueIdentifier": "loc-1",
         "placemark": {
-          "locality": "Oakland", "administrativeArea": "CA",
+          "locality": "Riverton", "administrativeArea": "CA",
           "country": "United States", "postalCode": "94612",
-          "thoroughfare": "Valdez St", "name": "2201–2295 Valdez St",
+          "thoroughfare": "Main St", "name": "100–120 Main St",
           "uniqueIdentifier": "pm-1"
         }
       },
@@ -38,11 +38,11 @@
         "tempF": 68.7, "tempC": 20.4, "weather": "Mostly Cloudy",
         "relativeHumidity": "60%", "windMPH": 0, "windKPH": 0,
         "pressureIn": 30.12, "pressureMb": 1020, "visibilityMi": 10,
-        "uv": 1, "stationID": "KCAOAKLA38", "windDirection": "East",
+        "uv": 1, "stationID": "KTEST1", "windDirection": "East",
         "windDegrees": 84, "feelslikeF": 68.7, "feelslikeC": 20.4,
         "dewpointC": 12, "precipTodayIn": 0, "precipTodayMetric": 0,
         "windGustMPH": 4, "windGustKPH": 6.4, "visibilityKM": 16.1,
-        "latitude": 37.8086, "longitude": -122.2675,
+        "latitude": 40.0001, "longitude": -75.0001,
         "uniqueIdentifier": "wx-1"
       },
       "responses": [
@@ -53,7 +53,9 @@
         {"questionPrompt": "What is your anxiety level?", "uniqueIdentifier": "r-1c",
          "answeredOptions": ["Low"]},
         {"questionPrompt": "How many coffees did you have today?", "uniqueIdentifier": "r-1d",
-         "numericResponse": "3"}
+         "numericResponse": "3"},
+        {"questionPrompt": "What did you learn today?", "uniqueIdentifier": "r-1e",
+         "textResponses": [{"uniqueIdentifier": "tr-2", "text": "Commas, and \"quotes\" happen"}]}
       ]
     },
     {
@@ -69,12 +71,12 @@
       "reportImpetus": 2,
       "audio": {"avg": -20.1, "peak": -8.4, "uniqueIdentifier": "aud-2"},
       "location": {
-        "latitude": 37.8114, "longitude": -122.2652,
+        "latitude": 40.0001, "longitude": -75.0001,
         "speed": -1, "course": 0, "altitude": 0,
         "horizontalAccuracy": 30, "verticalAccuracy": -1,
         "timestamp": "2015-10-21T20:10:24-0400",
         "uniqueIdentifier": "loc-2",
-        "placemark": {"locality": "Oakland", "administrativeArea": "CA", "uniqueIdentifier": "pm-2"}
+        "placemark": {"locality": "Riverton", "administrativeArea": "CA", "uniqueIdentifier": "pm-2"}
       },
       "photoSet": {
         "uniqueIdentifier": "ps-2",
@@ -87,9 +89,9 @@
       "responses": [
         {"questionPrompt": "Where are you?", "uniqueIdentifier": "r-2a",
          "locationResponse": {
-           "text": "The Grand", "foursquareVenueId": "4c4a6895",
+           "text": "The Plaza", "foursquareVenueId": "4c4a6895",
            "uniqueIdentifier": "lr-1",
-           "location": {"latitude": 37.8114, "longitude": -122.2652, "speed": -1, "course": 0,
+           "location": {"latitude": 40.0001, "longitude": -75.0001, "speed": -1, "course": 0,
                         "altitude": 0, "horizontalAccuracy": 0, "verticalAccuracy": -1,
                         "timestamp": "2015-10-21T20:10:24-0400", "uniqueIdentifier": "loc-2b"}}},
         {"questionPrompt": "What did you learn today?", "uniqueIdentifier": "r-2b",
@@ -111,7 +113,7 @@
       "audio": {"avg": -50.0, "peak": -41.2, "uniqueIdentifier": "aud-3"},
       "responses": [
         {"questionPrompt": "Who are you with?", "uniqueIdentifier": "r-3a",
-         "tokens": [{"uniqueIdentifier": "t-3", "text": "Melissa"}]}
+         "tokens": [{"uniqueIdentifier": "t-3", "text": "Alex"}]}
       ]
     }
   ]
