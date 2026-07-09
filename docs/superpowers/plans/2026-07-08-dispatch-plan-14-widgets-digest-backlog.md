@@ -13,7 +13,7 @@
 - **Digest delivery:** a "Weekly Digest" screen (Home overflow or Settings → entry point) rendering on demand, plus an optional local notification Sunday 7pm (toggle in notification settings, default off) that deep-links to the digest. No background LLM work — generation happens when the screen opens.
 - **"N ANSWERS" semantics fix (deferred minor, now resolved against the original):** original Reporter's tokens page counts DISTINCT answer values ("5 ANSWERS" over Nothing(9), Can't remember(1), Car chase(1), Disneyland(1), Unknown(1)) — screenshot IMG_3276 arithmetic proves it (13 total, 5 distinct). Current `totalAnswers` sums counts; fix to distinct-value count.
 - **Flights descended:** CMPedometer (`floorsDescended`) alongside the HealthKit flights-climbed reading → "7 STAIRCASES UP · 2 DOWN" parity. New Motion permission: `NSMotionUsageDescription` + a cascade step; sensor toggle default ON with graceful unavailable.
-- **Deliberately still out:** medications capture (device-crash history with bulk auth; needs a hands-on device verification loop — backlogged, not in this plan).
+- **Medications capture is IN (user decision, amendment):** the original day-one crash came from putting the medication dose type into the BULK `requestAuthorization` read set (uncatchable NSInvalidArgumentException on device). The implementation must determine the correct authorization path EMPIRICALLY from the iOS 26 SDK headers (HealthKit medication APIs — check for per-object read authorization à la vision prescriptions, `HKUserAnnotatedMedication`/medication dose event APIs and their documented auth requirements) — never re-adding the type to the bulk set. Ships default-OFF behind its sensor toggle with an explicit "Request Medications Access" flow, and stays default-OFF until the repo owner verifies on hardware (sim can't exercise real medication data or reproduce the original crash).
 
 ## Global Constraints
 
@@ -69,4 +69,17 @@ Verify: build, kit suite, UI suite (8+1). Commit `feat: on-device weekly digest`
 - **iPad scene rebinding:** PrivacyCoverWindow — rebind to the foreground-active scene on each show() instead of caching scenes.first; comment why (future multi-scene).
 - Wrap: full suites; completion note here; update README features list (widgets, Control Center, digest, stairs down).
 
-Verify: build, kit suite, UI suite. Commit `feat: flights descended + backlog sweep` → push. Whole-branch review follows (controller-driven).
+Verify: build, kit suite, UI suite. Commit `feat: flights descended + backlog sweep` → push.
+
+### Task 5: Medications capture (device-verification-gated)
+
+**Files:** `App/Sources/Providers/HealthProviders.swift` (or a dedicated MedicationsProvider), `Sources/DispatchKit/Capture/SensorSettings.swift` (re-enable the kind), `App/Sources/Settings/SensorSettingsView.swift` (explicit access-request row), project.yml purpose strings if the SDK requires one.
+
+**Contract:**
+- **Empirical SDK research FIRST** (session rule — this exact type crashed a device once): inspect the iOS 26 HealthKit SDK headers for the medication APIs (`HKUserAnnotatedMedication`, medication dose event types) and their authorization requirements — specifically whether they require per-object read authorization (`requestPerObjectReadAuthorization`, as vision prescriptions do) rather than bulk `requestAuthorization`. Quote the relevant header/doc lines in the report. The medication type must NEVER re-enter the bulk read set (comment the exclusion where the read-types set is built, referencing the original crash).
+- Provider: captures the report day's medication dose events (name, dose description if exposed, taken/skipped, time) as readings (`medication.<n>` style additive strings). Authorization requested ONLY via the dedicated "Request Medications Access" row in Sensor Settings (NOT the onboarding cascade), using the header-verified API, wrapped so an authorization failure degrades to `.unavailable` — never crashes.
+- Sensor toggle `healthMedications` DEFAULT OFF, with footer: "Requires granting Dispatch medication access in Health."
+- Checklist row + detail rows render dose events; no data → unavailable.
+- Test-gated as usual; kit tests for any pure mapping. **The definition of done for this task is suites-green + archive-clean, NOT feature-verified** — hardware verification is the repo owner's (sim has no medication data and can't reproduce the original crash). State this explicitly in the report with a device test script for the user (enable toggle → request access → grant in Health → file report → confirm readings; then the crash regression check: fresh install, onboarding cascade, confirm NO crash).
+
+Verify: build, kit suite, UI suite, archive. Commit `feat: medications capture behind explicit access request` → push. Whole-branch review follows (controller-driven).
