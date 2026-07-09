@@ -1,0 +1,72 @@
+# Dispatch Plan 14: Widgets, Control Center, weekly digest, backlog sweep
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ship the last unbuilt items from the original roadmap ("Plan 6": home-screen widgets, Control Center quick-report, on-device LLM weekly digest) plus the deferred review-minor backlog and flights-descended parity.
+
+## Design decisions (decide + log)
+
+- **Widgets read a snapshot, not the store.** Sharing the SwiftData store with an extension means relocating it into an App Group container — a risky live migration against a CloudKit-mirrored store for zero benefit at this data volume. Instead the app writes a small JSON snapshot (`WidgetSnapshot`: last report date, today's count, current streak, next scheduled prompt date) to the App Group container on every report save + replan, then calls `WidgetCenter.reloadAllTimelines()`. Widgets are pure snapshot readers. The store never moves.
+- **App Group:** `group.io.robbie.Dispatch` — entitlement on BOTH app and widget extension; archive-proven per session rule (App Groups is auto-provisionable by automatic signing; if the portal balks, report exactly).
+- **Control Center + Lock Screen:** a `ControlWidget` (iOS 18+ API, we're iOS 26 min) wrapping the existing `StartReportIntent` so one tap opens a new report survey; plus an accessory (lock-screen) widget variant of the main widget.
+- **Weekly digest = FoundationModels (Apple Intelligence on-device), with a template fallback.** `SystemLanguageModel.default` availability-checked at runtime; when unavailable (device without Apple Intelligence, model not downloaded), the digest renders a deterministic template summary from the same stats — the feature never looks broken. Digest content: report count vs prior week, top tokens/people/places, mood/State-of-Mind trend, steps/workout aggregates, streak. Prompt instructs the model to write a short second-person weekly reflection FROM THE PROVIDED STATS ONLY (no invention); stats computed kit-side (pure, tested).
+- **Digest delivery:** a "Weekly Digest" screen (Home overflow or Settings → entry point) rendering on demand, plus an optional local notification Sunday 7pm (toggle in notification settings, default off) that deep-links to the digest. No background LLM work — generation happens when the screen opens.
+- **"N ANSWERS" semantics fix (deferred minor, now resolved against the original):** original Reporter's tokens page counts DISTINCT answer values ("5 ANSWERS" over Nothing(9), Can't remember(1), Car chase(1), Disneyland(1), Unknown(1)) — screenshot IMG_3276 arithmetic proves it (13 total, 5 distinct). Current `totalAnswers` sums counts; fix to distinct-value count.
+- **Flights descended:** CMPedometer (`floorsDescended`) alongside the HealthKit flights-climbed reading → "7 STAIRCASES UP · 2 DOWN" parity. New Motion permission: `NSMotionUsageDescription` + a cascade step; sensor toggle default ON with graceful unavailable.
+- **Deliberately still out:** medications capture (device-crash history with bulk auth; needs a hands-on device verification loop — backlogged, not in this plan).
+
+## Global Constraints
+
+- No delegation; suites green before every commit (219 kit + 8 UI at start); commit + push per task; `git pull --rebase` before starting/pushing (another agent may land `aps-environment` in App/Dispatch.entitlements early in this plan's life — always rebase before touching entitlements). Pushing to main is the repo owner's standing instruction.
+- New target = project.yml changes via XcodeGen only; CI must still build (widget extension included in the archive but NOT in the UI-test scheme's test action).
+- All new scheduling/notifications test-gated as usual. Entitlements archive-proven. No store schema changes.
+
+---
+
+### Task 1: Kit — widget snapshot + digest stats
+
+**Files:** new `Sources/DispatchKit/Widgets/WidgetSnapshot.swift`, `Sources/DispatchKit/Digest/DigestStats.swift` + tests.
+
+**Contract:**
+- `WidgetSnapshot`: Codable (lastReportDate, todayCount, streakDays, nextPromptDate); `WidgetSnapshot.compute(reports:now:calendar:)` pure + tested (streak = consecutive days ending today/yesterday with ≥1 report); `write(to:)/read(from:)` file helpers (atomic write).
+- `DigestStats.compute(reports:weekEnding:calendar:) -> DigestStats`: report count + prior-week delta, top 5 tokens/people/places with counts, numeric-question weekly averages, State-of-Mind valence trend when present, steps/workout totals, streak. Pure + tested (fixture week).
+- `DigestStats.templateSummary` — deterministic prose fallback (tested for stability).
+- Tokens viz fix: distinct-value count for "N ANSWERS" (change where `totalAnswers` is computed; update its test to the IMG_3276 semantics).
+
+Verify: `swift test`. Commit `feat(kit): widget snapshot + digest stats` → push.
+
+### Task 2: Widgets + Control Center extension
+
+**Files:** `project.yml` (new `DispatchWidgets` app-extension target, App Group entitlements for BOTH targets), new `Widgets/` sources (bundle: main widget with systemSmall/systemMedium + accessory variants, ControlWidget wrapping StartReportIntent), `App/Sources/` snapshot-writer wiring (report save path + replan → write snapshot + reload timelines; App Group container URL helper), `App/Dispatch.entitlements` (+ App Group — REBASE FIRST, aps-environment may have landed).
+
+**Contract:**
+- Widget shows time since last report + today's count (medium adds streak + next prompt time); accessory rectangular/circular for lock screen; taps deep-link into the app (main → open app; a "New Report" button/intent where the family supports interactive widgets).
+- Control Center control launches StartReportIntent (opens app to survey — existing behavior).
+- Snapshot written on: report save (all paths — grep ReportBuilder.save call sites), replan completion, app foreground. Widget reads snapshot only; missing snapshot → placeholder state.
+- Archive-prove BOTH targets' entitlements (App Group on each, aps-environment intact on the app). CI: ensure `xcodebuild build` for the app scheme still succeeds on the simulator destination with the new target present.
+
+Verify: build, kit suite, UI suite, archive + codesign dumps (app AND appex). Commit `feat: home/lock widgets + Control Center quick report` → push.
+
+### Task 3: Weekly digest UI + optional notification
+
+**Files:** new `App/Sources/Digest/WeeklyDigestView.swift` (+ generator), Home/Settings entry point, `App/Sources/Notifications/` (digest notification toggle + Sunday 19:00 schedule, identifier `digest-` prefix, joins the existing removal batch), NotificationSettingsView row.
+
+**Contract:**
+- Digest screen: stats header (counts, deltas, top lists — from DigestStats), then the narrative: FoundationModels `SystemLanguageModel` when `.available` (availability-switch, generation with a strict stats-only instruction prompt, ~150 words, streamed into the view), else `templateSummary`. Regenerate button. Never blocks main (async generation, progress state). A `digestLog` OSLog category records availability decision + generation timing.
+- Optional weekly notification (default OFF): Sunday 19:00 local, `digest-weekly` identifier, removal-batch integrated, tapping deep-links to the digest screen. Test-gated.
+- UI test: digest screen opens and renders the template path under `--mock-sensors` (LLM unavailable in sim → fallback exercises deterministically).
+
+Verify: build, kit suite, UI suite (8+1). Commit `feat: on-device weekly digest` → push.
+
+### Task 4: Backlog sweep + wrap
+
+**Files:** per item — `App/Sources/Providers/` (new PedometerProvider), `Sources/DispatchKit/Capture/SensorSettings.swift`, `App/Sources/Privacy/PermissionCascade.swift`, `project.yml` (NSMotionUsageDescription), `App/Sources/Reports/ReportDetailView.swift` + checklist (stairs down display), `App/Sources/Visualizations/VisualizationFilterView.swift` (year source), `App/Sources/HomeView.swift` (filter pill).
+
+**Contract:**
+- **Flights descended:** `SensorKind.stairs`… no — keep `healthFlights` for climbed; add readings `flightsDescended` via CMPedometer query for the same window when Motion is authorized (provider merges: HealthKit climbed + pedometer descended; pedometer-unavailable → climbed only, display unchanged). Cascade adds the Motion step (CMPedometer.queryPedometerData triggers the permission dialog — sequence it). Detail/checklist: "7 STAIRCASES UP · 2 DOWN" when descended present.
+- **Year picker timezone:** offered years computed with each report's own timezone (match ReportFilter.matches semantics).
+- **Filter pill pluralization:** replace the inflect markup with explicit singular/plural strings (deterministic, no LocalizedStringKey trap); visual behavior covered by an assertion if a UI test touches it.
+- **iPad scene rebinding:** PrivacyCoverWindow — rebind to the foreground-active scene on each show() instead of caching scenes.first; comment why (future multi-scene).
+- Wrap: full suites; completion note here; update README features list (widgets, Control Center, digest, stairs down).
+
+Verify: build, kit suite, UI suite. Commit `feat: flights descended + backlog sweep` → push. Whole-branch review follows (controller-driven).
