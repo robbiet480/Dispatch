@@ -33,8 +33,8 @@ struct QuestionVisualizationView: View {
             OptionSharesBarsView(shares: shares, theme: theme)
         case .numericSeries(let points, let average):
             NumericSeriesView(points: points, average: average, theme: theme)
-        case .frequency(let items):
-            TokenFrequencyView(items: items)
+        case .frequency(let items, let distinctCount):
+            TokenFrequencyView(items: items, distinctCount: distinctCount)
         case .places(let items):
             RankedRowsView(rows: items.map { ($0.name, $0.count) })
         case .recentNotes(let notes):
@@ -180,16 +180,15 @@ struct NumericSeriesView: View {
 /// of "Token (count)" with the counts de-emphasized. Places keeps RankedRowsView.
 struct TokenFrequencyView: View {
     let items: [(text: String, count: Int)]
-
-    private var totalAnswers: Int {
-        items.reduce(0) { $0 + $1.count }
-    }
+    /// Distinct answer values across ALL answers (not capped at the top-20
+    /// list) — original Reporter's "N ANSWERS" counts distinct values.
+    let distinctCount: Int
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(totalAnswers)")
+                    Text("\(distinctCount)")
                         .font(.system(size: 64, weight: .bold))
                         .foregroundStyle(.white)
                         .accessibilityIdentifier("viz-answer-count")

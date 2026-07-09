@@ -191,13 +191,38 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
 
     let result = VisualizationData.build(for: question, reports: reports)
 
-    guard case .frequency(let items) = result else {
+    guard case .frequency(let items, let distinctCount) = result else {
         Issue.record("expected .frequency, got \(result)")
         return
     }
     // Coding and Baking tie at count 2 — alphabetical tiebreak puts Baking before Coding.
     #expect(items.map(\.text) == ["Baking", "Coding", "Reading"])
     #expect(items.map(\.count) == [2, 2, 1])
+    #expect(distinctCount == 3)
+}
+
+@Test func frequencyDistinctCountMatchesOriginalReporterSemantics() {
+    // IMG_3276: "5 ANSWERS" over Nothing(9), Can't remember(1), Car chase(1),
+    // Disneyland(1), Unknown(1) — 13 total occurrences, 5 distinct values.
+    let question = makeQuestion(id: "q-dream", prompt: "What did you dream about?", type: .tokens)
+    var reports: [Report] = []
+    for _ in 0..<9 {
+        reports.append(makeReport(responses: [makeResponse(questionIdentifier: "q-dream",
+                                                           tokens: [TokenValue(text: "Nothing")])]))
+    }
+    for text in ["Can't remember", "Car chase", "Disneyland", "Unknown"] {
+        reports.append(makeReport(responses: [makeResponse(questionIdentifier: "q-dream",
+                                                           tokens: [TokenValue(text: text)])]))
+    }
+
+    let result = VisualizationData.build(for: question, reports: reports)
+
+    guard case .frequency(let items, let distinctCount) = result else {
+        Issue.record("expected .frequency, got \(result)")
+        return
+    }
+    #expect(distinctCount == 5)
+    #expect(items.reduce(0) { $0 + $1.count } == 13)
 }
 
 @Test func frequencyCapsAtTop20() {
@@ -208,11 +233,13 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
 
     let result = VisualizationData.build(for: question, reports: reports)
 
-    guard case .frequency(let items) = result else {
+    guard case .frequency(let items, let distinctCount) = result else {
         Issue.record("expected .frequency, got \(result)")
         return
     }
     #expect(items.count == 20)
+    // The distinct count is NOT capped by the top-20 list.
+    #expect(distinctCount == 25)
 }
 
 // MARK: - places

@@ -10,7 +10,11 @@ public enum QuestionVisualization: Equatable, Sendable {
     /// Number questions: chronologically sorted points plus their average.
     case numericSeries(points: [(date: Date, value: Double)], average: Double)
     /// Tokens + people: descending count, alphabetical tiebreak, top 20.
-    case frequency([(text: String, count: Int)])
+    /// `distinctCount` is the number of DISTINCT answer values across ALL
+    /// answers (not capped at 20) — the original Reporter's "N ANSWERS"
+    /// numeral counts distinct values, not total occurrences (IMG_3276:
+    /// 13 total answers over 5 values shows "5 ANSWERS").
+    case frequency(items: [(text: String, count: Int)], distinctCount: Int)
     /// Location questions: grouped by `LocationAnswer.text`, descending count, top 20.
     case places([(name: String, count: Int)])
     /// Note questions: newest first, top 20.
@@ -24,8 +28,8 @@ public enum QuestionVisualization: Equatable, Sendable {
             l.count == r.count && zip(l, r).allSatisfy { $0.option == $1.option && abs($0.share - $1.share) < 0.0001 }
         case (.numericSeries(let lp, let la), .numericSeries(let rp, let ra)):
             lp.count == rp.count && zip(lp, rp).allSatisfy { $0.date == $1.date && $0.value == $1.value } && abs(la - ra) < 0.0001
-        case (.frequency(let l), .frequency(let r)):
-            l.count == r.count && zip(l, r).allSatisfy { $0.text == $1.text && $0.count == $1.count }
+        case (.frequency(let l, let ld), .frequency(let r, let rd)):
+            ld == rd && l.count == r.count && zip(l, r).allSatisfy { $0.text == $1.text && $0.count == $1.count }
         case (.places(let l), .places(let r)):
             l.count == r.count && zip(l, r).allSatisfy { $0.name == $1.name && $0.count == $1.count }
         case (.recentNotes(let l), .recentNotes(let r)):
@@ -159,7 +163,7 @@ public enum VisualizationData {
             }
             .prefix(topLimit)
             .map { (text: $0.key, count: $0.value) }
-        return .frequency(Array(items))
+        return .frequency(items: Array(items), distinctCount: counts.count)
     }
 
     private static func buildPlaces(responses: [Response]) -> QuestionVisualization {
