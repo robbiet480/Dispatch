@@ -20,6 +20,7 @@ struct NotificationSettingsView: View {
     @State private var nagDelayMinutes: Int
     @State private var nagIntervalMinutes: Int
     @State private var nagMaxCount: Int
+    @State private var digestEnabled: Bool
     @State private var nextAlertText: String = "—"
     @State private var isAddingTime = false
     @State private var newTimeSelection = Date()
@@ -34,6 +35,7 @@ struct NotificationSettingsView: View {
         _nagDelayMinutes = State(initialValue: prefs.nagDelayMinutes)
         _nagIntervalMinutes = State(initialValue: prefs.nagIntervalMinutes)
         _nagMaxCount = State(initialValue: prefs.nagMaxCount)
+        _digestEnabled = State(initialValue: prefs.digestEnabled)
     }
 
     var body: some View {
@@ -47,6 +49,7 @@ struct NotificationSettingsView: View {
                 distributionSection
                 scheduledSection
                 nagSection
+                digestSection
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -217,6 +220,32 @@ struct NotificationSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
         }
+    }
+
+    private var digestSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { digestEnabled },
+                set: { updateDigestEnabled($0) }
+            )) {
+                Text("Weekly Digest")
+                    .foregroundStyle(.white)
+            }
+            .accessibilityIdentifier("digest-enabled")
+            .listRowBackground(Color.white.opacity(0.12))
+        } header: {
+            sectionHeader("WEEKLY DIGEST")
+        } footer: {
+            Text("A Sunday-evening notification that opens your weekly digest. The digest itself is always available from Settings.")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+        }
+    }
+
+    private func updateDigestEnabled(_ value: Bool) {
+        digestEnabled = value
+        prefs.digestEnabled = value
+        replan()
     }
 
     private func nagStepperRow(

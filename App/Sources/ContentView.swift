@@ -41,6 +41,16 @@ struct ContentView: View {
             surveyPresenter.request = newValue
             notificationScheduler.pendingSurveyRequest = nil
         }
+        // Digest notification tap → present the Weekly Digest sheet. Gated
+        // on the lock like every other presentation: while locked, the
+        // getter yields false and the flag survives until unlock.
+        .sheet(isPresented: Binding(
+            get: { notificationScheduler.pendingDigestOpen && !appLockStore.isLocked },
+            set: { notificationScheduler.pendingDigestOpen = $0 })) {
+            NavigationStack {
+                WeeklyDigestView()
+            }
+        }
         // Single choke point: while locked, the survey cover's item is always nil,
         // so it can never appear simultaneously with the lock cover below. The
         // underlying request is preserved (only the setter clears it on dismiss),

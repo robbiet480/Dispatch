@@ -74,6 +74,12 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("prompt-groups-link")
             .listRowBackground(Color.white.opacity(0.12))
+
+            NavigationLink(destination: WeeklyDigestView()) {
+                settingsLabel("Weekly Digest")
+            }
+            .accessibilityIdentifier("weekly-digest-link")
+            .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("SCHEDULE")
         }

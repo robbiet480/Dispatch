@@ -85,6 +85,15 @@ private let base = ISO8601DateFormatter().date(from: "2026-07-08T10:00:00Z")!
     #expect(p.nagMaxCount == 3)
 }
 
+@Test func digestPrefDefaultsOffAndRoundTrips() {
+    let p = freshPrefs()
+    #expect(p.digestEnabled == false)
+    p.digestEnabled = true
+    #expect(p.digestEnabled == true)
+    p.digestEnabled = false
+    #expect(p.digestEnabled == false)
+}
+
 @Test func nagPrefsRoundTrip() {
     let p = freshPrefs()
     p.nagEnabled = true

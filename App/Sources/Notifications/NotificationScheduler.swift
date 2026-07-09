@@ -22,6 +22,10 @@ enum NotificationIdentifiers {
     /// Group prompts: `gprompt-<groupID>-<yyyyMMdd-HHmm>` (plan 12). Their
     /// nags reuse `nag-` with the `<groupID>-<stamp>` parent stamp embedded.
     static let groupPromptPrefix = "gprompt-"
+    /// Weekly digest reminder (plan 14). One repeating request,
+    /// `digest-weekly`; removals join the prompt-/gprompt-/nag- batch.
+    static let digestPrefix = "digest-"
+    static let digestWeeklyIdentifier = "digest-weekly"
     /// userInfo key carrying the PromptGroup uniqueIdentifier.
     static let promptGroupIDKey = "promptGroupID"
     /// userInfo key carrying the UUID of the HKWorkout that fired a
@@ -179,6 +183,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 $0.hasPrefix(NotificationIdentifiers.promptPrefix)
                     || $0.hasPrefix(NotificationIdentifiers.groupPromptPrefix)
                     || $0.hasPrefix(NotificationIdentifiers.nagPrefix)
+                    || $0.hasPrefix(NotificationIdentifiers.digestPrefix)
             }
 
         if !awakeStore.isAwake {
@@ -189,6 +194,30 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         }
 
         center.removePendingNotificationRequests(withIdentifiers: identifiersToRemove)
+
+        // Weekly digest reminder — scheduled ahead of the asleep guard: the
+        // digest is a Sunday-evening summary, not an awake-window prompt.
+        // Its removal joined the batch above, so a disabled toggle simply
+        // never re-adds it.
+        if prefs.digestEnabled {
+            var digestComponents = DateComponents()
+            digestComponents.weekday = 1 // Sunday
+            digestComponents.hour = 19
+            let digestContent = UNMutableNotificationContent()
+            digestContent.title = "Your weekly digest is ready"
+            digestContent.body = "See how your week stacked up — reports, people, places, and more."
+            digestContent.sound = .default
+            let digestRequest = UNNotificationRequest(
+                identifier: NotificationIdentifiers.digestWeeklyIdentifier,
+                content: digestContent,
+                trigger: UNCalendarNotificationTrigger(dateMatching: digestComponents, repeats: true)
+            )
+            do {
+                try await center.add(digestRequest)
+            } catch {
+                notificationLog.error("failed to schedule weekly digest: \(error, privacy: .public)")
+            }
+        }
 
         guard awakeStore.isAwake else {
             // Asleep ⇒ no prompts scheduled: clear the widget's "next prompt"
@@ -574,6 +603,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         let triggeringWorkoutID = response.notification.request.content
             .userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] as? String
         Task { @MainActor in
+            // Digest taps deep-link to the digest screen — no survey, no
+            // lastActedAt marker (the digest is not a prompt).
+            if requestIdentifier.hasPrefix(NotificationIdentifiers.digestPrefix) {
+                pendingDigestOpen = true
+                completionHandler()
+                return
+            }
             // ANY action on a prompt or one of its nags counts as "acting on
             // it" — persist the `lastActedAt` marker FIRST (so a replan
             // triggered by the action, e.g. the default tap foregrounding
@@ -610,6 +646,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// Set by the delegate on notification tap; ContentView/HomeView observe
     /// this via the environment and present SurveyFlowView, then clear it.
     var pendingSurveyRequest: SurveyRequest?
+
+    /// Set by the delegate when a `digest-` notification is tapped;
+    /// ContentView observes this and presents the Weekly Digest sheet.
+    var pendingDigestOpen = false
 
     private func scheduleSnooze() {
         let identifier = "\(NotificationIdentifiers.snoozePrefix)\(UUID().uuidString)"

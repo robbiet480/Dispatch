@@ -81,6 +81,18 @@ public final class NotificationPrefs: @unchecked Sendable {
         }
     }
 
+    /// Weekly digest notification (Sunday 19:00 local, `digest-weekly`).
+    /// Default OFF — the digest screen is always reachable from Settings;
+    /// this only controls the reminder.
+    public var digestEnabled: Bool {
+        get {
+            defaults.bool(forKey: "digestEnabled") // default false
+        }
+        set {
+            defaults.set(newValue, forKey: "digestEnabled")
+        }
+    }
+
     /// When the user last acted on a prompt (quick answer, snooze,
     /// tap-through, or in-app report save). Replans use this to avoid
     /// resurrecting nag chains for prompts the user already dealt with.
