@@ -278,14 +278,18 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             )
         }
         guard allocation.nagsPerPrompt > 0 else { return }
-        // Nag chains are computed from ALL planned dates — including prompts
-        // that already fired — so a replan (e.g. foregrounding the app)
+        // Nag chains are computed from the budget-GRANTED prompts plus past
+        // parents: the granted prefix of future dates (matching the prompt
+        // adds above — the allocator charged nags for granted prompts only,
+        // so planning from ungranted dates would exceed the cap) plus
+        // already-fired prompts, so a replan (e.g. foregrounding the app)
         // doesn't kill the in-flight chain of a delivered-but-unanswered
         // prompt (they share the `nag-` removal batch above). Chains whose
         // parent the user already acted on (quick answer, snooze, tap,
         // in-app save — tracked via `lastActedAt`) stay dead. Group prompts
         // get the identical semantics with the group stamp embedded.
-        let nagParents = allPlannedDates.filter { $0 > lastActedAt }
+        let pastGlobalParents = allPlannedDates.filter { $0 > lastActedAt && $0 <= now }
+        let nagParents = pastGlobalParents + dates.prefix(allocation.global)
         await scheduleNagChains(
             for: nagParents, nagsPerPrompt: allocation.nagsPerPrompt,
             stamp: { Self.isoMinuteFormatter.string(from: $0) },
@@ -294,7 +298,9 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         for plan in groupPlans {
             let body = Self.groupBody(for: plan.group, in: questionContext)
             let groupID = plan.group.uniqueIdentifier
-            let groupNagParents = plan.all.filter { $0 > lastActedAt }
+            let pastGroupParents = plan.all.filter { $0 > lastActedAt && $0 <= now }
+            let groupNagParents = pastGroupParents
+                + plan.future.prefix(allocation.count(forGroup: groupID))
             await scheduleNagChains(
                 for: groupNagParents, nagsPerPrompt: allocation.nagsPerPrompt,
                 stamp: { Self.groupStamp(groupID: groupID, date: $0) },

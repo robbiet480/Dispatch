@@ -70,6 +70,70 @@ import Testing
     #expect(abs(importedDate.timeIntervalSince1970 - report.date.timeIntervalSince1970) < 0.001)
 }
 
+/// A build-5 export carries legacy seeded identifiers (`default-question-<N>`).
+/// Importing it into a post-migration store must map those IDs through the
+/// frozen migration table — upserting into the existing UUIDv5 rows instead of
+/// inserting duplicates — and remap response/group references. Non-legacy IDs
+/// pass through untouched.
+@Test func v2ImportMapsLegacyDefaultQuestionIDs() throws {
+    // Store A: a build-5-style store, legacy IDs everywhere.
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let legacyQuestion = Question()
+    legacyQuestion.uniqueIdentifier = "default-question-1"
+    legacyQuestion.prompt = "Are you working?"
+    contextA.insert(legacyQuestion)
+    let customQuestion = Question()
+    customQuestion.uniqueIdentifier = "custom-question"
+    customQuestion.prompt = "Custom?"
+    contextA.insert(customQuestion)
+    let report = Report()
+    report.uniqueIdentifier = "legacy-report"
+    contextA.insert(report)
+    let response = Response()
+    response.uniqueIdentifier = "legacy-response"
+    response.questionIdentifier = "default-question-1"
+    response.report = report
+    contextA.insert(response)
+    let customResponse = Response()
+    customResponse.uniqueIdentifier = "custom-response"
+    customResponse.questionIdentifier = "custom-question"
+    customResponse.report = report
+    contextA.insert(customResponse)
+    let group = PromptGroup()
+    group.uniqueIdentifier = "legacy-group"
+    group.questionIDs = ["default-question-1", "custom-question"]
+    contextA.insert(group)
+    try contextA.save()
+    let exportA = try V2Exporter.exportData(from: contextA)
+
+    // Store B: post-migration — the seeded question already has its
+    // deterministic UUID identity.
+    let migratedID = DefaultQuestions.all[1].identifier
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    let migrated = Question()
+    migrated.uniqueIdentifier = migratedID
+    migrated.prompt = "Are you working?"
+    contextB.insert(migrated)
+    try contextB.save()
+
+    _ = try V2Importer.importExport(exportA, into: contextB)
+
+    let questions = try contextB.fetch(FetchDescriptor<Question>())
+    #expect(questions.count == 2) // migrated seed + custom, NO duplicate
+    #expect(questions.map(\.uniqueIdentifier).sorted() == [migratedID, "custom-question"].sorted())
+    #expect(!questions.contains { $0.uniqueIdentifier == "default-question-1" })
+
+    let responses = try contextB.fetch(FetchDescriptor<Response>())
+    let byID = Dictionary(uniqueKeysWithValues: responses.map { ($0.uniqueIdentifier, $0) })
+    #expect(byID["legacy-response"]?.questionIdentifier == migratedID)
+    #expect(byID["custom-response"]?.questionIdentifier == "custom-question")
+
+    let groups = try contextB.fetch(FetchDescriptor<PromptGroup>())
+    #expect(groups.first?.questionIDs == [migratedID, "custom-question"])
+}
+
 @Test func realExportRoundTripsIfPresent() throws {
     guard let path = ProcessInfo.processInfo.environment["DISPATCH_V1_EXPORT"] else { return }
     let containerA = try DispatchStore.inMemoryContainer()

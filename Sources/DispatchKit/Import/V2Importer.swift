@@ -13,8 +13,18 @@ public enum V2Importer {
         }
         var summary = ImportSummary()
 
+        // Build-5 exports carry legacy seeded identifiers
+        // (`default-question-<N>`). Post-migration stores use deterministic
+        // UUIDs, so map any legacy ID through the frozen migration table at
+        // import time — otherwise the upsert-by-identifier below inserts
+        // duplicate default questions (and dangling references) that sync
+        // then propagates everywhere.
+        func mapped(_ id: String) -> String {
+            DefaultQuestions.migratedIdentifier(forLegacyID: id) ?? id
+        }
+
         for dto in export.questions {
-            let id = dto.uniqueIdentifier
+            let id = mapped(dto.uniqueIdentifier)
             var descriptor = FetchDescriptor<Question>(predicate: #Predicate { $0.uniqueIdentifier == id })
             descriptor.fetchLimit = 1
             let question = try context.fetch(descriptor).first ?? {
@@ -80,7 +90,7 @@ public enum V2Importer {
                     return resp
                 }()
                 response.questionPrompt = rdto.questionPrompt
-                response.questionIdentifier = rdto.questionIdentifier
+                response.questionIdentifier = rdto.questionIdentifier.map(mapped)
                 response.tokens = rdto.tokens
                 response.answeredOptions = rdto.answeredOptions
                 response.locationResponse = rdto.locationResponse
@@ -104,7 +114,7 @@ public enum V2Importer {
                 return g
             }()
             group.name = dto.name
-            group.questionIDs = dto.questionIDs ?? []
+            group.questionIDs = (dto.questionIDs ?? []).map(mapped)
             group.scheduleKindRaw = dto.scheduleKind
             group.scheduleHours = dto.scheduleHours
             group.scheduleCount = dto.scheduleCount

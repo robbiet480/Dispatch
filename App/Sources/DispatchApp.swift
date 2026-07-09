@@ -6,7 +6,7 @@ import SwiftUI
 import UserNotifications
 
 private let seedLog = Logger(subsystem: "io.robbie.Dispatch", category: "seed")
-private let migrationLog = Logger(subsystem: "io.robbie.Dispatch", category: "migrationLog")
+private let migrationLog = Logger(subsystem: "io.robbie.Dispatch", category: "migration")
 
 @main
 struct DispatchApp: App {
@@ -82,15 +82,18 @@ struct DispatchApp: App {
             isTestEnvironment: isTestEnvironment
         )
 
-        workoutEndObserver = WorkoutEndObserver(
+        let workoutObserver = WorkoutEndObserver(
             container: container, awakeStore: awakeStore, defaults: appDefaults,
             isTestEnvironment: isTestEnvironment
         )
+        workoutEndObserver = workoutObserver
 
         // Remote-change reactions: dedupe/vocabulary/Spotlight run on a
         // background context inside the observer; the callback re-plans
         // notifications (which also re-registers the quick-answer category)
-        // because questions/groups may have changed on another device.
+        // and refreshes the workout-end observer — a workout-end group
+        // created or deleted on another device must arm/disarm the
+        // HKObserverQuery without a relaunch (refresh() is idempotent).
         // Locals (not self) captured — self isn't fully initialized yet.
         let prefsForReplan = notificationPrefs
         let awakeForReplan = awakeStore
@@ -100,6 +103,7 @@ struct DispatchApp: App {
             isSyncActive: cloudKitActive
         ) {
             scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
+            workoutObserver.refresh()
         }
 
         seedDefaultQuestionsIfNeeded()
@@ -231,6 +235,10 @@ struct DispatchApp: App {
                     print("REMOTE-CHANGE-EVENTS: \(observed)")
                     syncLog.info("REMOTE-CHANGE-EVENTS: \(observed, privacy: .public)")
                     NotificationCenter.default.removeObserver(observer)
+                    // Remove the probe row — it must not linger in the store
+                    // (or sync) after the diagnostic run.
+                    context.delete(question)
+                    try? context.save()
                 }
         }
         .modelContainer(container)

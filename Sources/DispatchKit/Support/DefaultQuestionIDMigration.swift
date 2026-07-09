@@ -2,7 +2,7 @@ import Foundation
 import os
 import SwiftData
 
-private let migrationLog = Logger(subsystem: "io.robbie.Dispatch", category: "migrationLog")
+private let migrationLog = Logger(subsystem: "io.robbie.Dispatch", category: "migration")
 
 /// One-time launch migration: rewrites the legacy seeded question identifiers
 /// (`default-question-<N>`) to the deterministic UUIDv5 identifiers in

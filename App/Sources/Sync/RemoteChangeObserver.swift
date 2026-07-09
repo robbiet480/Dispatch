@@ -47,6 +47,11 @@ final class RemoteChangeObserver {
     @ObservationIgnored private var notificationObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var isHandlerRunning = false
     @ObservationIgnored private var suppressEventsUntil: Date = .distantPast
+    /// Set when an event arrives while suppressed (handler running or in
+    /// cooldown) so it coalesces into one rescheduled pass instead of being
+    /// dropped — a genuine remote burst overlapping the pipeline would
+    /// otherwise never be processed.
+    @ObservationIgnored private var hasPendingEvent = false
 
     private static let debounceInterval: TimeInterval = 2
     private static let postHandlerCooldown: TimeInterval = 1
@@ -89,8 +94,12 @@ final class RemoteChangeObserver {
 
     private func noteRemoteChange() {
         // Ignore our own pipeline's saves (see class doc); genuine remote
-        // events arriving later are unaffected.
-        guard !isHandlerRunning, Date() >= suppressEventsUntil else { return }
+        // events arriving later are unaffected. Suppressed events are
+        // coalesced into a single rescheduled pass (see handleChanges).
+        guard !isHandlerRunning, Date() >= suppressEventsUntil else {
+            hasPendingEvent = true
+            return
+        }
         lastEventDate = Date()
         scheduleHandler()
     }
@@ -109,6 +118,15 @@ final class RemoteChangeObserver {
         defer {
             isHandlerRunning = false
             suppressEventsUntil = Date().addingTimeInterval(Self.postHandlerCooldown)
+            // Events that arrived while suppressed coalesce into ONE follow-up
+            // pass. The debounce interval (2s) exceeds the cooldown (1s), so
+            // by the time the rescheduled handler runs the cooldown has
+            // lapsed; steady state (no store changes → no saves → no events)
+            // terminates the chain.
+            if hasPendingEvent {
+                hasPendingEvent = false
+                scheduleHandler()
+            }
         }
 
         // Heavy lifting on a background context (same cross-context pattern
