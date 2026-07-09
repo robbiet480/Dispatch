@@ -156,6 +156,12 @@ struct DispatchApp: App {
         DispatchFocusFilter.replanInApp = {
             scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
         }
+        // Deactivation (state-clear) path: floor past-parent nag arithmetic
+        // before the replan so prompts suppressed by the filter can't
+        // resurrect nag chains (see NotificationScheduler.focusFilterCleared).
+        DispatchFocusFilter.filterClearedInApp = {
+            scheduler.focusFilterCleared()
+        }
 
         // Register the workout-end observer at LAUNCH, not just onAppear:
         // HealthKit background delivery relaunches a terminated app headless
@@ -291,9 +297,21 @@ struct DispatchApp: App {
                     // writes FocusFilterState and replans; (3) perform()
                     // on an all-defaults instance (a deactivation delivery
                     // per Apple's documented lifecycle) clears it.
+                    // Residue guard: the probe writes real FocusFilterState
+                    // into the App Group defaults; clear it no matter how
+                    // the probe exits (early return, throw, partial run) so
+                    // a diagnostic run can never leave a phantom filter
+                    // muting the real schedule.
+                    let groupDefaults = UserDefaults(suiteName: StoreLocation.appGroupID)
+                    defer {
+                        if let groupDefaults { FocusFilterState.clear(in: groupDefaults) }
+                    }
                     do {
                         let current = try await DispatchFocusFilter.current
-                        print("FOCUS-PROBE-CURRENT: \(current.displayName ?? "<nil>")")
+                        // groups= verifies the framework preserves nil for an
+                        // unset optional [Entity] parameter (nil-vs-empty is
+                        // load-bearing: nil ⇒ all groups, [] ⇒ mute all).
+                        print("FOCUS-PROBE-CURRENT: \(current.displayName ?? "<nil>") groups=\(current.allowedGroups.map { "\($0.count)" } ?? "<nil>")")
                     } catch {
                         print("FOCUS-PROBE-CURRENT-THREW: \(error)")
                     }
@@ -301,9 +319,8 @@ struct DispatchApp: App {
                     activation.displayName = "Work"
                     activation.pauseGlobalPrompts = true
                     _ = try? await activation.perform()
-                    let groupDefaults = UserDefaults(suiteName: StoreLocation.appGroupID)
                     let active = groupDefaults.flatMap(FocusFilterState.read(from:))
-                    print("FOCUS-PROBE-ACTIVATED: label=\(active?.label ?? "<nil>") pauseGlobal=\(active?.pauseGlobal == true) schedulerSees=\(notificationScheduler.activeFocusFilter?.label ?? "<nil>")")
+                    print("FOCUS-PROBE-ACTIVATED: label=\(active?.label ?? "<nil>") pauseGlobal=\(active?.pauseGlobal == true) allowedGroupIDs=\(active?.allowedGroupIDs.map { "\($0.count)" } ?? "<nil>") schedulerSees=\(notificationScheduler.activeFocusFilter?.label ?? "<nil>")")
                     _ = try? await DispatchFocusFilter().perform()
                     let cleared = groupDefaults.flatMap(FocusFilterState.read(from:))
                     print("FOCUS-PROBE-DEACTIVATED: state=\(cleared == nil ? "cleared" : "STILL PRESENT")")

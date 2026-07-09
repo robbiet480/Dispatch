@@ -134,6 +134,11 @@ prompting behavior:
 Setup (per Focus mode, in the system Settings app — Apple provides no
 in-app enrollment): **Settings → Focus → choose a mode → Focus Filters →
 Add Filter → Dispatch**, then name the filter and select prompt groups.
+Leaving the prompt-groups row untouched means "no restriction" — a
+name-only filter records the Focus name without muting anything; to
+mute all group prompts, open the row and explicitly clear the
+selection. Snoozed prompts always fire, even for muted groups — a
+snooze is an explicit "remind me" that outranks the filter.
 When the Focus turns off or switches, the full schedule resumes
 automatically. Persistent reminders remain Time Sensitive, so they can
 still break through the Focus itself for prompts that do fire.

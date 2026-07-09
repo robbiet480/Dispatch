@@ -17,9 +17,13 @@ public struct FocusFilterState: Codable, Equatable, Sendable {
     /// exposes no API for the actual Focus mode name).
     public var label: String
     /// PromptGroup uniqueIdentifiers allowed to fire while this filter is
-    /// active. Groups not listed are muted (their pending prompts removed on
-    /// replan). Dangling IDs are harmless — they simply match no group.
-    public var allowedGroupIDs: [String]
+    /// active. nil means "no group restriction" — every group keeps firing
+    /// (a name-only filter: named Focus capture without muting). An empty
+    /// array is distinct and means the user explicitly cleared the
+    /// selection: every group is muted. Groups not listed are muted (their
+    /// pending prompts removed on replan). Dangling IDs are harmless — they
+    /// simply match no group.
+    public var allowedGroupIDs: [String]?
     /// When true, the ungrouped/global schedule is paused while this filter
     /// is active; only the allowed groups fire.
     public var pauseGlobal: Bool
@@ -27,7 +31,7 @@ public struct FocusFilterState: Codable, Equatable, Sendable {
     /// scheduling arithmetic.
     public var activatedAt: Date
 
-    public init(label: String, allowedGroupIDs: [String], pauseGlobal: Bool, activatedAt: Date = Date()) {
+    public init(label: String, allowedGroupIDs: [String]?, pauseGlobal: Bool, activatedAt: Date = Date()) {
         self.label = label
         self.allowedGroupIDs = allowedGroupIDs
         self.pauseGlobal = pauseGlobal
@@ -35,8 +39,9 @@ public struct FocusFilterState: Codable, Equatable, Sendable {
     }
 
     /// Whether prompts for `groupID` may fire while this filter is active.
+    /// A nil allowed set restricts nothing — every group fires.
     public func allows(groupID: String) -> Bool {
-        allowedGroupIDs.contains(groupID)
+        allowedGroupIDs?.contains(groupID) ?? true
     }
 
     /// Whether the ungrouped/global schedule keeps firing under this filter.
@@ -82,8 +87,10 @@ public struct FocusFilterState: Codable, Equatable, Sendable {
     /// out in the existing remove-before-add replan.
     ///
     /// - nil state → (all groups, global on): no filter active.
-    /// - active state → (allowed subset, `allowsGlobal`); an empty allowed
-    ///   set mutes every group while global still follows `pauseGlobal`.
+    /// - active state → (allowed subset, `allowsGlobal`); a nil allowed
+    ///   set restricts nothing (name-only filter, all groups planned)
+    ///   while an EMPTY allowed set mutes every group; global follows
+    ///   `pauseGlobal` in both cases.
     public static func filterPlan(
         groups: [PromptGroup], state: FocusFilterState?
     ) -> (groups: [PromptGroup], planGlobal: Bool) {

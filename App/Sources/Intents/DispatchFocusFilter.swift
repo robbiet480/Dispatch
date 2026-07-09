@@ -114,7 +114,12 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
     var displayName: String?
 
     /// Groups allowed to fire while this Focus is active. Unconfigured
-    /// (nil) is distinct from an explicitly empty selection.
+    /// (nil) is distinct from an explicitly empty selection, and the two
+    /// mean different things: nil ⇒ no restriction (a name-only filter —
+    /// named Focus capture without muting anything), empty ⇒ every group
+    /// muted. The probe (`--probe-focus-filter`) verifies the framework
+    /// preserves the distinction: `Self.current` materializes the unset
+    /// parameter as nil, not [].
     @Parameter(title: "Prompt Groups")
     var allowedGroups: [PromptGroupEntity]?
 
@@ -123,8 +128,9 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
 
     var displayRepresentation: DisplayRepresentation {
         let title = displayName?.isEmpty == false ? displayName! : "Dispatch"
-        let groupCount = allowedGroups?.count ?? 0
-        let subtitle = "\(groupCount) group\(groupCount == 1 ? "" : "s")"
+        let groupsText = allowedGroups.map { "\($0.count) group\($0.count == 1 ? "" : "s")" }
+            ?? "all groups"
+        let subtitle = groupsText
             + (pauseGlobalPrompts ? ", other prompts paused" : "")
         return DisplayRepresentation(
             title: "\(title)", subtitle: "\(subtitle)"
@@ -136,6 +142,15 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
     /// APP process — the system launches the app in the background when
     /// needed — so this hook is available to trigger an immediate replan.
     @MainActor static var replanInApp: (@MainActor () -> Void)?
+
+    /// Set by DispatchApp alongside `replanInApp`: invoked on the state-
+    /// clear path (deactivation / never-configured delivery) BEFORE the
+    /// replan, so the scheduler can floor past-parent nag computation
+    /// (`NotificationScheduler.focusFilterCleared`) — prompts suppressed
+    /// while the filter was active were never delivered, and without the
+    /// floor the deactivation replan would resurrect nag chains for those
+    /// phantom parents.
+    @MainActor static var filterClearedInApp: (@MainActor () -> Void)?
 
     func perform() async throws -> some IntentResult {
         focusLog.info("""
@@ -151,18 +166,25 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
             return .result()
         }
 
+        let cleared: Bool
         if let state = Self.state(from: self) {
             state.write(to: defaults)
             focusLog.info("focus filter state written: \(state.label, privacy: .public)")
+            cleared = false
         } else {
             // All parameters at their defaults ⇒ deactivation delivery
             // (see the lifecycle comment above) or a never-configured
             // filter; either way, stop filtering.
             FocusFilterState.clear(in: defaults)
             focusLog.info("focus filter state cleared")
+            cleared = true
         }
 
         await MainActor.run {
+            if cleared {
+                // Floor nag parents BEFORE the replan reads lastActedAt.
+                Self.filterClearedInApp?()
+            }
             Self.replanInApp?()
         }
         return .result()
@@ -177,9 +199,15 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
         let hasLabel = label?.isEmpty == false
         let isConfigured = hasLabel || intent.allowedGroups != nil || intent.pauseGlobalPrompts
         guard isConfigured else { return nil }
+        // nil groups (parameter untouched) maps to nil allowedGroupIDs —
+        // "no restriction": a name-only filter captures the Focus label
+        // without muting any group. An explicitly emptied selection stays
+        // [] — "mute every group". The AppIntents framework preserves the
+        // nil-vs-empty distinction (verified in the --probe-focus-filter
+        // harness: Self.current materializes the unset parameter as nil).
         return FocusFilterState(
             label: hasLabel ? label! : "Focus",
-            allowedGroupIDs: intent.allowedGroups?.map(\.id) ?? [],
+            allowedGroupIDs: intent.allowedGroups.map { $0.map(\.id) },
             pauseGlobal: intent.pauseGlobalPrompts
         )
     }

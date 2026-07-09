@@ -1,5 +1,6 @@
 import DispatchKit
 import Foundation
+import Intents
 import Observation
 import os
 import SwiftData
@@ -75,8 +76,47 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// The active Dispatch Focus Filter's state, or nil when no filter is
     /// active. Read fresh on every access — the intent's perform() may have
     /// rewritten it from a background launch since the last read.
+    ///
+    /// Liveness gate: the persisted blob is only trusted while a Focus is
+    /// actually on. If the app never received the deactivation perform()
+    /// (e.g. it was terminated and the background launch failed), the blob
+    /// would otherwise mute the schedule forever. Mirroring FocusProvider's
+    /// gate: when Focus status is authorized AND the system says no Focus
+    /// is active, the state is stale — clear it (flooring nag parents, see
+    /// `focusFilterCleared`) and plan the full schedule. When Focus status
+    /// is unauthorized or unavailable there is no signal to check against,
+    /// so the blob is trusted as before. Test environments skip the
+    /// INFocusStatusCenter check entirely so injected state (the
+    /// FOCUS_FILTER_STATE launch hook) stays deterministic.
     var activeFocusFilter: FocusFilterState? {
-        FocusFilterState.read(from: focusFilterDefaults)
+        guard let state = FocusFilterState.read(from: focusFilterDefaults) else { return nil }
+        if !isTestEnvironment,
+           INFocusStatusCenter.default.authorizationStatus == .authorized,
+           INFocusStatusCenter.default.focusStatus.isFocused == false {
+            notificationLog.info("focus filter state (\(state.label, privacy: .public)) is stale — no Focus active; clearing and planning the full schedule")
+            FocusFilterState.clear(in: focusFilterDefaults)
+            focusFilterCleared()
+            return nil
+        }
+        return state
+    }
+
+    /// Called on EVERY Focus-filter state-clear path (the intent's
+    /// all-defaults deactivation delivery via DispatchApp's hook, and the
+    /// liveness-gate clear above): floors past-parent nag computation by
+    /// advancing `lastActedAt` to now when it's older.
+    ///
+    /// Why: prompts suppressed while the filter was active were never
+    /// delivered, but their planned dates are recomputed deterministically
+    /// from the day seed — without the floor, the deactivation replan would
+    /// treat those phantom parents as delivered-but-unanswered prompts and
+    /// resurrect nag chains for notifications the user never saw.
+    /// `lastActedAt` is already cross-family by doctrine (one act quiets
+    /// both global and group nags), so advancing it here is consistent.
+    func focusFilterCleared(now: Date = Date()) {
+        guard (prefs.lastActedAt ?? .distantPast) < now else { return }
+        prefs.lastActedAt = now
+        notificationLog.info("focus filter cleared — floored lastActedAt to now so suppressed prompts can't resurrect nag chains")
     }
 
     // MARK: - Setup
@@ -201,6 +241,11 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                     || $0.hasPrefix(NotificationIdentifiers.digestPrefix)
             }
 
+        // Snoozes survive replans while awake — including replans while a
+        // Focus filter is active. A snooze is an explicit user request
+        // ("remind me in 15 minutes") that outranks the filter, so snoozed
+        // prompts keep firing even for groups the filter mutes; only the
+        // quiet-hours (asleep) path below removes them.
         if !awakeStore.isAwake {
             let snoozeIdentifiers = pending
                 .map(\.identifier)
@@ -254,7 +299,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         // from the day seed.
         let focusFilter = activeFocusFilter
         if let focusFilter {
-            notificationLog.info("focus filter active (\(focusFilter.label, privacy: .public)): \(focusFilter.allowedGroupIDs.count, privacy: .public) groups allowed, global \(focusFilter.allowsGlobal ? "on" : "paused", privacy: .public)")
+            let groupsSummary = focusFilter.allowedGroupIDs.map { "\($0.count) groups allowed" } ?? "all groups allowed"
+            notificationLog.info("focus filter active (\(focusFilter.label, privacy: .public)): \(groupsSummary, privacy: .public), global \(focusFilter.allowsGlobal ? "on" : "paused", privacy: .public)")
         }
 
         let (groups, planGlobal) = FocusFilterState.filterPlan(

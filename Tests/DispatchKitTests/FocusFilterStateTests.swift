@@ -53,6 +53,24 @@ private func group(id: String) -> PromptGroup {
     #expect(!state.allows(groupID: "b"))
 }
 
+// nil allowedGroupIDs = name-only filter (named Focus capture with no
+// group restriction) — distinct from [] (mute every group).
+@Test func nilAllowedSetRestrictsNothing() {
+    let groups = [group(id: "a"), group(id: "b")]
+    let nameOnly = FocusFilterState(label: "Work", allowedGroupIDs: nil, pauseGlobal: false)
+    #expect(nameOnly.allows(groupID: "a"))
+    #expect(nameOnly.allows(groupID: "anything"))
+    let result = FocusFilterState.filterPlan(groups: groups, state: nameOnly)
+    #expect(result.groups.map(\.uniqueIdentifier) == ["a", "b"])
+    #expect(result.planGlobal)
+
+    // Global pause still applies independently of the nil allowed set.
+    let paused = FocusFilterState(label: "Work", allowedGroupIDs: nil, pauseGlobal: true)
+    let pausedResult = FocusFilterState.filterPlan(groups: groups, state: paused)
+    #expect(pausedResult.groups.map(\.uniqueIdentifier) == ["a", "b"])
+    #expect(!pausedResult.planGlobal)
+}
+
 // MARK: - Persistence
 
 @Test func roundTripsThroughDefaults() throws {
@@ -75,6 +93,17 @@ private func group(id: String) -> PromptGroup {
     FocusFilterState.clear(in: defaults)
     #expect(FocusFilterState.read(from: defaults) == nil)
     #expect(!FocusFilterState.isActive(in: defaults))
+
+    // nil allowedGroupIDs survives the round trip (nil-vs-empty is
+    // load-bearing: nil ⇒ all groups allowed, [] ⇒ mute all).
+    let nameOnly = FocusFilterState(
+        label: "Gym", allowedGroupIDs: nil, pauseGlobal: false, activatedAt: activatedAt
+    )
+    nameOnly.write(to: defaults)
+    let readBack = FocusFilterState.read(from: defaults)
+    #expect(readBack == nameOnly)
+    #expect(readBack?.allowedGroupIDs == nil)
+    FocusFilterState.clear(in: defaults)
 }
 
 @Test func corruptBlobFailsOpenToNoFilter() throws {

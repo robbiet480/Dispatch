@@ -92,15 +92,21 @@ struct NotificationSettingsView: View {
     /// navigation, which is enough for a passive indicator.
     @ViewBuilder private var focusFilterSection: some View {
         if let filter = scheduler.activeFocusFilter {
+            // nil allowedGroupIDs = name-only filter: no group restriction.
+            let groupsText = filter.allowedGroupIDs
+                .map { "\($0.count) group\($0.count == 1 ? "" : "s")" } ?? "all groups"
+            let scopeText = filter.allowedGroupIDs == nil
+                ? "All prompt groups are firing"
+                : "Only these prompt groups are firing"
             Section {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Focus filter: \(filter.label) — \(filter.allowedGroupIDs.count) group\(filter.allowedGroupIDs.count == 1 ? "" : "s")")
+                    Text("Focus filter: \(filter.label) — \(groupsText)")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                     Text(filter.allowsGlobal
-                         ? "Only these prompt groups are firing; ungrouped prompts continue."
-                         : "Only these prompt groups are firing; ungrouped prompts are paused.")
+                         ? "\(scopeText); ungrouped prompts continue."
+                         : "\(scopeText); ungrouped prompts are paused.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.7))
                 }
