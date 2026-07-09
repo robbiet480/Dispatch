@@ -605,7 +605,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             guard group.isEnabled else { return false }
             switch group.schedule {
             case .everyNHours, .timesPerDay, .dailyAt: return true
-            case .workoutEnd, .disabled: return false
+            case .workoutEnd, .visitArrival, .disabled: return false
             }
         }
     }

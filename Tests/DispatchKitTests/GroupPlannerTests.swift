@@ -90,6 +90,8 @@ private func group(schedule: GroupSchedule, id: String = "pg-test") -> PromptGro
     let start = date(2026, 7, 8, 8), end = date(2026, 7, 9, 0)
     #expect(GroupPlanner.plan(group: group(schedule: .workoutEnd),
                               awakeStart: start, awakeEnd: end, seed: 1, calendar: calendar).isEmpty)
+    #expect(GroupPlanner.plan(group: group(schedule: .visitArrival),
+                              awakeStart: start, awakeEnd: end, seed: 1, calendar: calendar).isEmpty)
     let unknown = PromptGroup()
     unknown.scheduleKindRaw = "someFutureKind"
     #expect(GroupPlanner.plan(group: unknown,

@@ -23,6 +23,10 @@ import Testing
 
     group.schedule = .workoutEnd
     #expect(group.schedule == .workoutEnd)
+
+    group.schedule = .visitArrival
+    #expect(group.schedule == .visitArrival)
+    #expect(group.scheduleKindRaw == "visitArrival")
 }
 
 @Test func promptGroupUnknownScheduleKindResolvesDisabledAndPreservesRaw() throws {
@@ -169,6 +173,68 @@ import Testing
     let json = try #require(String(data: try V2Exporter.exportData(from: context), encoding: .utf8))
     #expect(!json.contains("\"promptGroups\""))
     #expect(!json.contains("\"promptGroupID\""))
+}
+
+/// A visit-arrival group and a `.visitArrival`-triggered report round-trip
+/// through v2 byte-identically (plan 16).
+@Test func visitArrivalGroupAndTriggerRoundTripThroughV2() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+
+    let group = PromptGroup()
+    group.uniqueIdentifier = "pg-visit"
+    group.name = "Arrivals"
+    group.schedule = .visitArrival
+    contextA.insert(group)
+
+    let report = Report()
+    report.uniqueIdentifier = "r-visit"
+    report.date = Date(timeIntervalSince1970: 1_700_000_000)
+    report.trigger = .visitArrival
+    report.promptGroupID = "pg-visit"
+    contextA.insert(report)
+    try contextA.save()
+
+    let exportA = try V2Exporter.exportData(from: contextA)
+    let json = try #require(String(data: exportA, encoding: .utf8))
+    #expect(json.contains("\"visitArrival\""))
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(exportA, into: contextB)
+
+    let imported = try #require(try contextB.fetch(FetchDescriptor<PromptGroup>()).first)
+    #expect(imported.schedule == .visitArrival)
+    let importedReport = try #require(try contextB.fetch(FetchDescriptor<Report>()).first)
+    #expect(importedReport.trigger == .visitArrival)
+
+    let exportB = try V2Exporter.exportData(from: contextB)
+    #expect(exportA == exportB)
+}
+
+/// A v2 file authored by a newer build carrying the visitArrival trigger and
+/// scheduleKind as plain strings imports on this build; the raw strings map
+/// to the typed cases (forward-written fixture, hand-rolled JSON).
+@Test func v2ImportAcceptsVisitArrivalRawStrings() throws {
+    let fixture = Data("""
+    {"schemaVersion": 2, "questions": [], "reports": [{
+        "uniqueIdentifier": "r-v", "date": "2026-07-09T12:00:00.000Z",
+        "timeZone": "GMT", "kind": "regular", "trigger": "visitArrival",
+        "isBackdated": false, "isDraft": false, "wasInBackground": false
+    }], "promptGroups": [{
+        "uniqueIdentifier": "pg-v", "name": "Arrivals",
+        "scheduleKind": "visitArrival", "isEnabled": true, "sortOrder": 0
+    }]}
+    """.utf8)
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let summary = try V2Importer.importExport(fixture, into: context)
+    #expect(summary.reportsImported == 1)
+    #expect(summary.promptGroupsImported == 1)
+    let report = try #require(try context.fetch(FetchDescriptor<Report>()).first)
+    #expect(report.trigger == .visitArrival)
+    let group = try #require(try context.fetch(FetchDescriptor<PromptGroup>()).first)
+    #expect(group.schedule == .visitArrival)
 }
 
 /// Older v2 files (no promptGroups key, no report promptGroupID) import

@@ -16,7 +16,7 @@ public enum GroupPlanner {
     /// - `dailyAt`: materializes each time within the window, retrying on
     ///   the next calendar day for windows that cross midnight (same
     ///   semantics as the global scheduledTimes).
-    /// - `workoutEnd` / `disabled`: [] — event-driven or inert.
+    /// - `workoutEnd` / `visitArrival` / `disabled`: [] — event-driven or inert.
     public static func plan(
         group: PromptGroup,
         awakeStart: Date,
@@ -48,7 +48,7 @@ public enum GroupPlanner {
                 awakeStart: awakeStart, awakeEnd: awakeEnd,
                 seed: seed, calendar: calendar)
 
-        case .workoutEnd, .disabled:
+        case .workoutEnd, .visitArrival, .disabled:
             return []
         }
     }

@@ -8,6 +8,7 @@ public enum GroupScheduleKind: String, Codable, CaseIterable, Sendable {
     case timesPerDay
     case dailyAt
     case workoutEnd
+    case visitArrival
 }
 
 /// A prompt group's resolved schedule. `disabled` is the fallback for an
@@ -18,6 +19,7 @@ public enum GroupSchedule: Equatable, Sendable {
     case timesPerDay(count: Int, distribution: PromptDistribution)
     case dailyAt([DateComponents])
     case workoutEnd
+    case visitArrival
     case disabled
 }
 
@@ -60,6 +62,8 @@ public final class PromptGroup {
                 return .dailyAt(Self.timeComponents(fromJSON: scheduledTimesJSON))
             case .workoutEnd:
                 return .workoutEnd
+            case .visitArrival:
+                return .visitArrival
             case nil:
                 return .disabled
             }
@@ -78,6 +82,8 @@ public final class PromptGroup {
                 scheduledTimesJSON = Self.json(fromTimeComponents: times)
             case .workoutEnd:
                 scheduleKindRaw = GroupScheduleKind.workoutEnd.rawValue
+            case .visitArrival:
+                scheduleKindRaw = GroupScheduleKind.visitArrival.rawValue
             case .disabled:
                 // Not a storable kind: `.disabled` only arises from an
                 // unknown raw value, so writing it back preserves the

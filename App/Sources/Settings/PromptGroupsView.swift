@@ -150,6 +150,8 @@ extension GroupSchedule {
                 : "Daily at " + times.map(PromptGroup.timeString(fromComponents:)).joined(separator: ", ")
         case .workoutEnd:
             "When a workout ends"
+        case .visitArrival:
+            "When I arrive somewhere"
         case .disabled:
             "Unknown schedule"
         }
@@ -224,7 +226,9 @@ struct PromptGroupEditorView: View {
             times = components.map(PromptGroup.timeString(fromComponents:))
         case .workoutEnd:
             kind = .workoutEnd
-        case .disabled, nil:
+        // .visitArrival gains an editor row in plan 16 task 2; until then it
+        // behaves like an unknown kind in the editor (picker defaults).
+        case .visitArrival, .disabled, nil:
             break
         }
         _scheduleKind = State(initialValue: kind)
