@@ -172,6 +172,57 @@ private func freshDefaults() -> UserDefaults {
     #expect(!WidgetQuickAnswerMarker.filedRecently(in: freshDefaults(), now: filed))
 }
 
+@Test func markerDoubleFireSuppressionWindow() {
+    let filed = Date(timeIntervalSince1970: 1_780_000_000)
+    // No prior filing: never suppress.
+    #expect(!WidgetQuickAnswerMarker.shouldSuppressDoubleFire(lastFiledAt: nil, now: filed))
+    // Within the window: suppress (including the same instant).
+    #expect(WidgetQuickAnswerMarker.shouldSuppressDoubleFire(lastFiledAt: filed, now: filed))
+    #expect(WidgetQuickAnswerMarker.shouldSuppressDoubleFire(
+        lastFiledAt: filed,
+        now: filed.addingTimeInterval(WidgetQuickAnswerMarker.doubleFireSuppressionWindow - 0.5)))
+    // At/after the window: a new answer, not a double-fire.
+    #expect(!WidgetQuickAnswerMarker.shouldSuppressDoubleFire(
+        lastFiledAt: filed,
+        now: filed.addingTimeInterval(WidgetQuickAnswerMarker.doubleFireSuppressionWindow)))
+    // Clock rolled back before the marker: not suppressed.
+    #expect(!WidgetQuickAnswerMarker.shouldSuppressDoubleFire(
+        lastFiledAt: filed, now: filed.addingTimeInterval(-1)))
+}
+
+/// Simulates a widget-extension `recordFiled` racing with the app's drain:
+/// injects a concurrent pending write immediately after the drain's
+/// `removeObject`, at the only interleaving point the take can observe.
+private final class RacingDefaults: UserDefaults {
+    var concurrentWrite: Date?
+
+    override func removeObject(forKey defaultName: String) {
+        super.removeObject(forKey: defaultName)
+        if defaultName == WidgetQuickAnswerMarker.pendingActedAtKey, let concurrentWrite {
+            super.set(concurrentWrite.timeIntervalSince1970, forKey: defaultName)
+            self.concurrentWrite = nil
+        }
+    }
+}
+
+@Test func markerTakePreservesNewerConcurrentWrite() {
+    let suite = "quick-answer-marker-tests-\(UUID().uuidString)"
+    let defaults = RacingDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    let filed = Date(timeIntervalSince1970: 1_780_000_000)
+    let newer = filed.addingTimeInterval(3)
+
+    WidgetQuickAnswerMarker.recordFiled(at: filed, in: defaults)
+    defaults.concurrentWrite = newer
+
+    // The take returns the marker it read; the newer concurrent filing
+    // stays pending for the next drain rather than being lost.
+    #expect(WidgetQuickAnswerMarker.takePendingActedAt(in: defaults) == filed)
+    #expect(WidgetQuickAnswerMarker.pendingActedAt(in: defaults) == newer)
+    #expect(WidgetQuickAnswerMarker.takePendingActedAt(in: defaults) == newer)
+    #expect(WidgetQuickAnswerMarker.pendingActedAt(in: defaults) == nil)
+}
+
 // MARK: - v2 export tolerance for the .widget trigger
 
 @Test func v2RoundTripsWidgetTriggeredReport() throws {

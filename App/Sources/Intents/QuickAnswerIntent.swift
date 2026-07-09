@@ -62,6 +62,21 @@ struct QuickAnswerIntent: AppIntent {
         // the process contract this file's behavior depends on.
         quickAnswerLog.info("perform() in process \(ProcessInfo.processInfo.processName, privacy: .public) pid \(ProcessInfo.processInfo.processIdentifier)")
 
+        // Double-fire guard (build-14 review): two rapid taps on a widget
+        // button each invoke perform() before the first filing's reload
+        // replaces the buttons with "Filed ✓" — without this, each tap files
+        // a report. A filing within the suppression window means this
+        // invocation is the same tap burst: reload (in case the first tap's
+        // reload raced) and return without filing.
+        if let defaults = UserDefaults(suiteName: StoreLocation.appGroupID),
+           WidgetQuickAnswerMarker.shouldSuppressDoubleFire(
+               lastFiledAt: WidgetQuickAnswerMarker.filedAt(in: defaults)
+           ) {
+            quickAnswerLog.info("suppressed double-fire for \(questionID, privacy: .public) — filed within the last \(Int(WidgetQuickAnswerMarker.doubleFireSuppressionWindow))s")
+            WidgetCenter.shared.reloadAllTimelines()
+            return .result()
+        }
+
         guard let storeURL = StoreLocation.appGroupURL(),
               FileManager.default.fileExists(atPath: storeURL.path) else {
             quickAnswerLog.error("no shared store — cannot file quick answer")
@@ -82,8 +97,12 @@ struct QuickAnswerIntent: AppIntent {
                 predicate: #Predicate { $0.uniqueIdentifier == targetID }
             )
             descriptor.fetchLimit = 1
+            // Eligibility mirrors QuickAnswerFiler.firstEnabledYesNoQuestion
+            // exactly — including the regular-kind check, so a question
+            // re-scoped to wake-only since the timeline rendered can't file.
             guard let question = try context.fetch(descriptor).first,
-                  question.isEnabled, question.type == .yesNo else {
+                  question.isEnabled, question.type == .yesNo,
+                  question.reportKinds.contains(.regular) else {
                 quickAnswerLog.error("question \(targetID, privacy: .public) missing or no longer quick-answerable — reloading timelines instead")
                 WidgetCenter.shared.reloadAllTimelines()
                 return .result()
@@ -91,6 +110,10 @@ struct QuickAnswerIntent: AppIntent {
             try QuickAnswerFiler.file(
                 question: question, choiceIndex: choiceIndex, trigger: .widget, in: context
             )
+            // KNOWN WINDOW (accepted, build-14 review minor): a crash between
+            // the save above and this marker write loses the marker, not the
+            // report — fail-safe direction is a lost nag-cancel (one extra
+            // nag, self-healing), never a duplicate report.
             if let defaults = UserDefaults(suiteName: StoreLocation.appGroupID) {
                 WidgetQuickAnswerMarker.recordFiled(at: Date(), in: defaults)
             }

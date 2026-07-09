@@ -51,6 +51,21 @@ public enum WidgetQuickAnswerMarker {
     /// How long the widget shows "Filed ✓" instead of the answer buttons.
     public static let filedDisplayDuration: TimeInterval = 10 * 60
 
+    /// How long after a widget filing a second intent invocation is treated
+    /// as a double-fire of the same tap burst rather than a new answer
+    /// (build-14 review: two rapid taps each ran `perform()` and filed two
+    /// reports before the first reload replaced the buttons with "Filed ✓").
+    public static let doubleFireSuppressionWindow: TimeInterval = 8
+
+    /// Whether a quick-answer filing at `now` should be suppressed as a
+    /// double-fire, given the last widget filing (`filedAt` marker). Also
+    /// tolerates clock rollback: a future-dated marker does not suppress.
+    public static func shouldSuppressDoubleFire(lastFiledAt: Date?, now: Date = Date()) -> Bool {
+        guard let lastFiledAt else { return false }
+        let elapsed = now.timeIntervalSince(lastFiledAt)
+        return elapsed >= 0 && elapsed < doubleFireSuppressionWindow
+    }
+
     /// Records a widget-filed answer (both markers). `pendingActedAt` only
     /// ever moves forward so an undrained older marker can't regress.
     public static func recordFiled(at date: Date, in defaults: UserDefaults) {
@@ -72,6 +87,13 @@ public enum WidgetQuickAnswerMarker {
     public static func takePendingActedAt(in defaults: UserDefaults) -> Date? {
         guard let date = pendingActedAt(in: defaults) else { return nil }
         defaults.removeObject(forKey: pendingActedAtKey)
+        // The read-remove pair above is not atomic: the widget extension can
+        // record a newer filing concurrently. Re-check after the remove —
+        // if a newer marker is visible now, put it back so the next drain
+        // applies it instead of losing that filing's nag-cancel.
+        if let newer = pendingActedAt(in: defaults), newer > date {
+            defaults.set(newer.timeIntervalSince1970, forKey: pendingActedAtKey)
+        }
         return date
     }
 
