@@ -153,7 +153,7 @@ struct ReportDetailView: View {
 
     @ViewBuilder
     private var responseSections: some View {
-        let answered = report.responses.filter { answerText(for: $0) != nil }
+        let answered = (report.responses ?? []).filter { answerText(for: $0) != nil }
         if !answered.isEmpty {
             Section {
                 ForEach(answered, id: \.uniqueIdentifier) { response in

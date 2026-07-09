@@ -91,6 +91,31 @@ import Testing
     #expect(old.allowsMultipleSelectionRaw == nil)
 }
 
+/// A report with no responses must export with the "responses" key OMITTED —
+/// whether the (now CloudKit-optional) relationship is nil or an empty array —
+/// so exports stay byte-identical to the pre-optional-relationship shape.
+@Test func reportWithNoResponsesOmitsResponsesKey() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let nilReport = Report()
+    nilReport.uniqueIdentifier = "r-nil-responses"
+    nilReport.responses = nil
+    context.insert(nilReport)
+    let emptyReport = Report()
+    emptyReport.uniqueIdentifier = "r-empty-responses"
+    emptyReport.responses = []
+    context.insert(emptyReport)
+    try context.save()
+
+    let data = try V2Exporter.exportData(from: context)
+    let json = try #require(String(data: data, encoding: .utf8))
+    #expect(!json.contains("\"responses\""))
+
+    let decoded = try JSONDecoder.v2.decode(V2Export.self, from: data)
+    #expect(decoded.reports.count == 2)
+    #expect(decoded.reports.allSatisfy { $0.responses == nil })
+}
+
 @Test func exportIsDeterministic() throws {
     let container = try DispatchStore.inMemoryContainer()
     let context = ModelContext(container)

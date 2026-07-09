@@ -39,8 +39,8 @@ import Testing
     #expect(fetched.audio?.avg == -43.57)
     #expect(fetched.health.first?.value == 481)
     #expect(fetched.focus?.label == "Work")
-    #expect(fetched.responses.count == 1)
-    #expect(fetched.responses.first?.answeredOptions == ["Yes"])
+    #expect(fetched.responses?.count == 1)
+    #expect(fetched.responses?.first?.answeredOptions == ["Yes"])
 
     let questions = try context.fetch(FetchDescriptor<Question>())
     #expect(questions.first?.type == .yesNo)

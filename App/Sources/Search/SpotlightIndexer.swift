@@ -156,7 +156,7 @@ enum SpotlightIndexer {
 
     private static func contentDescription(for report: Report) -> String {
         var snippets: [String] = []
-        for response in report.responses {
+        for response in report.responses ?? [] {
             if let textResponses = response.textResponses {
                 snippets.append(contentsOf: textResponses.map(\.text))
             }

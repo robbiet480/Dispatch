@@ -80,7 +80,7 @@ private func makeQuestion(id: String, prompt: String, in context: ModelContext) 
         report.uniqueIdentifier = "r-dup"
         let response = Response()
         response.questionPrompt = "What are you doing?"
-        report.responses.append(response)
+        report.responses = [response]
         context.insert(report)
     }
     try context.save()

@@ -75,7 +75,7 @@ public enum VisualizationData {
     }
 
     private static func matchingResponses(for question: Question, reports: [Report]) -> [Response] {
-        reports.flatMap(\.responses).filter { response in
+        reports.flatMap { $0.responses ?? [] }.filter { response in
             if let responseQuestionIdentifier = response.questionIdentifier {
                 return responseQuestionIdentifier == question.uniqueIdentifier
             }
@@ -126,7 +126,7 @@ public enum VisualizationData {
 
     private static func buildNumericSeries(responses: [Response], reports: [Report]) -> QuestionVisualization {
         let responseToReport = Dictionary(uniqueKeysWithValues: reports.flatMap { report in
-            report.responses.map { (ObjectIdentifier($0), report) }
+            (report.responses ?? []).map { (ObjectIdentifier($0), report) }
         })
 
         var points: [(date: Date, value: Double)] = []
@@ -212,7 +212,7 @@ public enum VisualizationData {
 
     private static func buildRecentNotes(responses: [Response], reports: [Report]) -> QuestionVisualization {
         let responseToReport = Dictionary(uniqueKeysWithValues: reports.flatMap { report in
-            report.responses.map { (ObjectIdentifier($0), report) }
+            (report.responses ?? []).map { (ObjectIdentifier($0), report) }
         })
 
         var notes: [(date: Date, text: String)] = []

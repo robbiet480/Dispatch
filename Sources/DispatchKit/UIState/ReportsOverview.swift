@@ -51,7 +51,7 @@ public enum ReportsOverview {
         -> (tokens: Int, locations: Int, people: Int) {
         var places = Set<String>()
         for report in reports {
-            for response in report.responses {
+            for response in report.responses ?? [] {
                 if let location = response.locationResponse {
                     if let venue = location.foursquareVenueId {
                         places.insert("venue:\(venue)")

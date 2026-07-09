@@ -166,7 +166,7 @@ struct VisualizationFilterView: View {
             if let sensed = report.location?.placemark?.name, !sensed.isEmpty {
                 names.insert(sensed)
             }
-            for response in report.responses {
+            for response in report.responses ?? [] {
                 if let answered = response.locationResponse?.text, !answered.isEmpty {
                     names.insert(answered)
                 }

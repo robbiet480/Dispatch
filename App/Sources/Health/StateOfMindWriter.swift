@@ -42,7 +42,7 @@ enum StateOfMindWriter {
         var newSampleIDs: [String] = []
 
         for question in moodQuestions {
-            guard let response = report.responses.first(where: { response in
+            guard let response = (report.responses ?? []).first(where: { response in
                 if let questionIdentifier = response.questionIdentifier {
                     return questionIdentifier == question.uniqueIdentifier
                 }

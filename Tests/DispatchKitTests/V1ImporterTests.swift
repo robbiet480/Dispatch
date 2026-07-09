@@ -27,7 +27,7 @@ import Testing
     #expect(snap2.photos.count == 1)
     #expect(snap2.trigger == .notification) // impetus 2 = notification-initiated
     #expect(snap2.connectionType == .wifi)  // connection 1
-    #expect(snap2.responses.count == 3)
+    #expect(snap2.responses?.count == 3)
 
     // impetus 4 = wake report: kind and trigger recovered from v1 data.
     let snap3 = try #require(reports.first { $0.uniqueIdentifier == "snap-3" })

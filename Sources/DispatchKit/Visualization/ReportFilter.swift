@@ -107,7 +107,7 @@ public enum ReportFilter {
                                 peopleQuestionIDs: Set<String>) -> Bool {
         switch criterion {
         case .person(let name):
-            return report.responses.contains { response in
+            return (report.responses ?? []).contains { response in
                 guard peopleQuestionIDs.isEmpty
                         || response.questionIdentifier.map(peopleQuestionIDs.contains) == true else { return false }
                 return (response.tokens ?? []).contains { $0.text.caseInsensitiveCompare(name) == .orderedSame }
@@ -116,7 +116,7 @@ public enum ReportFilter {
             // Mirror of the person criterion: when people questions are
             // known, their responses are EXCLUDED here so a name filed under
             // "Who are you with?" doesn't satisfy a token filter.
-            return report.responses.contains { response in
+            return (report.responses ?? []).contains { response in
                 if !peopleQuestionIDs.isEmpty,
                    let questionID = response.questionIdentifier,
                    peopleQuestionIDs.contains(questionID) {
@@ -125,7 +125,7 @@ public enum ReportFilter {
                 return (response.tokens ?? []).contains { $0.text.caseInsensitiveCompare(text) == .orderedSame }
             }
         case .place(let name):
-            let answered = report.responses.contains { response in
+            let answered = (report.responses ?? []).contains { response in
                 response.locationResponse?.text?.caseInsensitiveCompare(name) == .orderedSame
             }
             let sensed = report.location?.placemark?.name?.caseInsensitiveCompare(name) == .orderedSame

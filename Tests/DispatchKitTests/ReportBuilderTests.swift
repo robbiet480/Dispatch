@@ -48,8 +48,8 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
     #expect(report.timeZoneIdentifier == "America/New_York")
 
     // Skipped answers still record a Response with no payload (v1 semantics).
-    #expect(report.responses.count == 6)
-    let byPrompt = Dictionary(uniqueKeysWithValues: report.responses.map { ($0.questionPrompt, $0) })
+    #expect(report.responses?.count == 6)
+    let byPrompt = Dictionary(uniqueKeysWithValues: (report.responses ?? []).map { ($0.questionPrompt, $0) })
     #expect(byPrompt["Are you working?"]?.answeredOptions == ["Yes"])
     #expect(byPrompt["What are you doing?"]?.tokens?.map(\.text) == ["Testing", "Coding"])
     #expect(byPrompt["How many coffees did you have today?"]?.numericResponse == "2")
@@ -74,8 +74,8 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
     let report = try ReportBuilder.save(kind: .regular, trigger: .manual, date: Date(),
                                         timeZone: .current, outcomes: [:],
                                         answers: answers, in: context)
-    #expect(report.responses.count == 2)
-    for response in report.responses {
+    #expect(report.responses?.count == 2)
+    for response in report.responses ?? [] {
         #expect(response.answeredOptions == nil)
         #expect(response.tokens == nil)
     }

@@ -139,7 +139,7 @@ import Testing
 
     let filtered = ReportSearch.filter(reports, query: "coffee")
     #expect(filtered.count == 1)
-    #expect(filtered.first?.responses.first?.textResponses?.first?.text == "Coffee")
+    #expect(filtered.first?.responses?.first?.textResponses?.first?.text == "Coffee")
 }
 
 @Test func filterWithEmptyQueryReturnsAll() throws {

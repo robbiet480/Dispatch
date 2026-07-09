@@ -19,7 +19,7 @@ public enum CSVExporter {
 
         let dateFormatter = ISO8601DateFormatter()
         for report in reports {
-            let byPrompt = Dictionary(report.responses.map { ($0.questionPrompt, $0) },
+            let byPrompt = Dictionary((report.responses ?? []).map { ($0.questionPrompt, $0) },
                                       uniquingKeysWith: { first, _ in first })
             var fields: [String] = [
                 dateFormatter.string(from: report.date),

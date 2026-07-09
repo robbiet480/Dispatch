@@ -15,7 +15,7 @@ private func attachTokens(_ texts: [String], questionIdentifier: String? = nil, 
     response.questionIdentifier = questionIdentifier
     response.tokens = texts.map { TokenValue(text: $0) }
     response.report = report
-    report.responses.append(response)
+    report.responses = (report.responses ?? []) + [response]
 }
 
 @Test func personCriterionMatchesPeopleResponses() {
@@ -48,7 +48,7 @@ private func attachTokens(_ texts: [String], questionIdentifier: String? = nil, 
     locationAnswer.text = "Office"
     response.locationResponse = locationAnswer
     response.report = answered
-    answered.responses.append(response)
+    answered.responses = (answered.responses ?? []) + [response]
     #expect(ReportFilter.matches(report: answered, criteria: [.place("Office")]))
     #expect(!ReportFilter.matches(report: answered, criteria: [.place("Home")]))
 

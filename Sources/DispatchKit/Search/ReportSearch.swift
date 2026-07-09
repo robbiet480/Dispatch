@@ -14,7 +14,7 @@ public enum ReportSearch {
         let normalizedQuery = normalize(trimmed)
 
         // Search note text (textResponses)
-        for response in report.responses {
+        for response in report.responses ?? [] {
             if let textResponses = response.textResponses {
                 for token in textResponses {
                     if normalize(token.text).contains(normalizedQuery) {

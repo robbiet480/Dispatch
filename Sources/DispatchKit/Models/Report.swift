@@ -29,8 +29,10 @@ public final class Report {
     /// nil for ordinary global reports. Additive, plan 12.
     public var promptGroupID: String?
 
+    /// Optional because CloudKit mirroring requires every relationship to be
+    /// optional; relaxing optionality (same name/config) is lightweight-migration-safe.
     @Relationship(deleteRule: .cascade, inverse: \Response.report)
-    public var responses: [Response] = []
+    public var responses: [Response]?
 
     public init() {}
 
