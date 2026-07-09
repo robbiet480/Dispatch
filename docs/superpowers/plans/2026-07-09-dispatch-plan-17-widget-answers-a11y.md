@@ -45,3 +45,15 @@ Verify: build, kit suite, UI suite. Commit `feat: VoiceOver and Dynamic Type pas
 **Contract:** per hygiene list above; the POSIX one-time replan is guarded by a defaults version marker (fires exactly once per install, logged). Wrap: full suites; completion note here.
 
 Verify: build (warning-free), kit suite, UI suite. Commit `chore: stamp locale pin, launch I/O, review minors` → push. Whole-branch review follows (controller-driven).
+
+---
+
+**COMPLETED 2026-07-09** — Task 1 `296ff34`, Task 2 `5035f6d`, Task 3
+`ea3f308`. Suites 273→285 kit, 12→13 UI, green before every commit; no
+new entitlements (archive-verified); build number untouched. Probe
+finding: the widget button's `QuickAnswerIntent.perform()` runs in the
+**widget extension process** (`DispatchWidgets` — unified-log verified),
+so report save goes through the shared App Group store and
+lastActedAt/nag cancellation go through a pending-action marker the app
+drains at foreground. Full report:
+`.superpowers/sdd/plan-17-report.md`.
