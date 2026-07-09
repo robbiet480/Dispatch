@@ -13,6 +13,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      # Cache keys are prefixed with the selected Xcode's build version so a
+      # runner-image toolchain bump can't serve module caches built by an
+      # older compiler (stale exact-key hits are never re-saved and would
+      # self-perpetuate otherwise).
+      - name: Capture Xcode version for cache keys
+        id: xcode
+        run: echo "v=$(xcodebuild -version | tr '\n' '-' | tr -d ' ')" >> "$GITHUB_OUTPUT"
       # DispatchKit has no external dependencies (no Package.resolved), so
       # the win here is incremental-build reuse of .build across runs: the
       # exact key matches only identical sources, and restore-keys fall back
@@ -21,9 +28,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.swift', 'Sources/**', 'Tests/**') }}
+          key: spm-${{ runner.os }}-${{ steps.xcode.outputs.v }}-${{ hashFiles('Package.swift', 'Sources/**', 'Tests/**') }}
           restore-keys: |
-            spm-${{ runner.os }}-
+            spm-${{ runner.os }}-${{ steps.xcode.outputs.v }}-
       - name: Run DispatchKit tests
         run: swift test
   build-app:
@@ -51,6 +58,10 @@ jobs:
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
+      # Same Xcode-version prefixing rationale as the SwiftPM cache above.
+      - name: Capture Xcode version for cache keys
+        id: xcode
+        run: echo "v=$(xcodebuild -version | tr '\n' '-' | tr -d ' ')" >> "$GITHUB_OUTPUT"
       # DerivedData reuse between runs (pinned via -derivedDataPath so the
       # path is cacheable): the exact key matches only identical inputs;
       # restore-keys fall back to the newest previous cache so xcodebuild's
@@ -59,9 +70,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: DerivedData
-          key: dd-${{ runner.os }}-${{ hashFiles('project.yml', 'Package.swift', 'App/**', 'Widgets/**', 'Sources/**') }}
+          key: dd-${{ runner.os }}-${{ steps.xcode.outputs.v }}-${{ hashFiles('project.yml', 'Package.swift', 'App/**', 'Widgets/**', 'Sources/**') }}
           restore-keys: |
-            dd-${{ runner.os }}-
+            dd-${{ runner.os }}-${{ steps.xcode.outputs.v }}-
       - name: Build app
         # generic simulator destination: compiles against the SDK without
         # requiring a concrete simulator runtime to be installed on the image.
