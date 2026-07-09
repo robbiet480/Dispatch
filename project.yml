@@ -38,6 +38,10 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Dispatch counts how many photos you took since your last report."
         CODE_SIGN_ENTITLEMENTS: App/Dispatch.entitlements
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Dispatch records where you are when you file a report."
+        # Purpose string only, NOT an entitlement (plan 16 hard constraint) —
+        # required alongside the when-in-use string for the editor-contextual
+        # requestAlwaysAuthorization() upgrade that visit-arrival groups use.
+        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "Dispatch uses Apple's power-efficient visit detection to prompt you when you arrive somewhere, even when the app is closed. Only used if a prompt group is scheduled on arrivals."
         INFOPLIST_KEY_NSHealthShareUsageDescription: "Dispatch reads steps, flights, heart rate, HRV, sleep, workouts, and caffeine to add context to your reports, and can also log State of Mind entries you choose to record."
         INFOPLIST_KEY_NSHealthUpdateUsageDescription: "Dispatch logs State of Mind entries to Apple Health when you answer questions you've marked to track your mood."
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"

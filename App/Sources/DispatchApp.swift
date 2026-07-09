@@ -23,6 +23,7 @@ struct DispatchApp: App {
     let privacyCoverWindow: PrivacyCoverWindow
     let permissionCascade: PermissionCascade
     let workoutEndObserver: WorkoutEndObserver
+    let visitObserver: VisitObserver
     let remoteChangeObserver: RemoteChangeObserver
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
@@ -108,12 +109,21 @@ struct DispatchApp: App {
         )
         workoutEndObserver = workoutObserver
 
+        // Visit-arrival observer (plan 16): same lifecycle contract as the
+        // workout-end observer — launch registration, refresh on group
+        // edits and remote-change sync, test-gated internally.
+        let madeVisitObserver = VisitObserver(
+            container: container, awakeStore: awakeStore, defaults: appDefaults,
+            focusFilterDefaults: focusFilterDefaults, isTestEnvironment: isTestEnvironment
+        )
+        visitObserver = madeVisitObserver
+
         // Remote-change reactions: dedupe/vocabulary/Spotlight run on a
         // background context inside the observer; the callback re-plans
         // notifications (which also re-registers the quick-answer category)
-        // and refreshes the workout-end observer — a workout-end group
-        // created or deleted on another device must arm/disarm the
-        // HKObserverQuery without a relaunch (refresh() is idempotent).
+        // and refreshes the event observers — a workout-end or visit-arrival
+        // group created or deleted on another device must arm/disarm its
+        // monitoring without a relaunch (refresh() is idempotent).
         // Locals (not self) captured — self isn't fully initialized yet.
         let prefsForReplan = notificationPrefs
         let awakeForReplan = awakeStore
@@ -124,6 +134,7 @@ struct DispatchApp: App {
         ) {
             scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
             workoutObserver.refresh()
+            madeVisitObserver.refresh()
         }
 
         seedDefaultQuestionsIfNeeded()
@@ -171,6 +182,14 @@ struct DispatchApp: App {
         // and the no-groups case; the onAppear call stays for group edits.
         workoutEndObserver.refresh()
 
+        // Visit monitoring must likewise restart at LAUNCH: per Apple's
+        // startMonitoringVisits() docs the system relaunches a terminated
+        // app to deliver visit events, and "upon relaunch, recreate your
+        // location manager object and assign a delegate" — this refresh is
+        // that re-registration (self-gating for tests / no visit groups /
+        // missing Always authorization).
+        visitObserver.refresh()
+
         // Subscribe to remote-change notifications and schedule the launch
         // SyncDedupe pass (debounced with the observer's first fire).
         // Test-gated internally.
@@ -188,6 +207,7 @@ struct DispatchApp: App {
                 .environment(appLockStore)
                 .environment(permissionCascade)
                 .environment(workoutEndObserver)
+                .environment(visitObserver)
                 .environment(remoteChangeObserver)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
@@ -206,9 +226,10 @@ struct DispatchApp: App {
                     if appDefaults.bool(forKey: OnboardingFlag.key) {
                         notificationScheduler.requestPermissionIfNeeded(prefs: notificationPrefs, awakeStore: awakeStore)
                     }
-                    // Start (or stop) the workout-end observer according to
-                    // the current groups; test-gated internally.
+                    // Start (or stop) the event observers according to the
+                    // current groups; test-gated internally.
                     workoutEndObserver.refresh()
+                    visitObserver.refresh()
                     // Cold launch with lock enabled (or the --enable-app-lock
                     // forced-lock UI-test path): the window scene is connected
                     // by now, so raise the lock window before content is seen.

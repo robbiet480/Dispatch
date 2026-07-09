@@ -32,6 +32,9 @@ enum NotificationIdentifiers {
     /// userInfo key carrying the UUID of the HKWorkout that fired a
     /// workout-end prompt (plan 12 amendment).
     static let triggeringWorkoutIDKey = "triggeringWorkoutID"
+    /// userInfo marker ("1") on prompts fired by a visit arrival (plan 16) —
+    /// tap-through reports get the `.visitArrival` trigger.
+    static let visitArrivalKey = "triggeredByVisitArrival"
 }
 
 /// Owns UNUserNotificationCenter: permission, request building/re-planning,
@@ -639,6 +642,28 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         return content
     }
 
+    /// Immediate (nil-trigger ⇒ deliver now) group prompt for the EVENT
+    /// observers (workout end, visit arrival). The identifier is
+    /// content-addressed from the event date — `gprompt-<groupID>-<stamp>`,
+    /// the same shape the replan/nag stamp parsers already handle — so
+    /// duplicate deliveries of the same event collide instead of
+    /// double-bannering.
+    static func makeImmediateGroupPromptRequest(
+        group: PromptGroup, in context: ModelContext, eventDate: Date,
+        extraUserInfo: [String: String] = [:]
+    ) -> UNNotificationRequest {
+        let content = makeGroupContent(
+            groupID: group.uniqueIdentifier, body: groupBody(for: group, in: context))
+        if !extraUserInfo.isEmpty {
+            var userInfo = content.userInfo
+            for (key, value) in extraUserInfo { userInfo[key] = value }
+            content.userInfo = userInfo
+        }
+        let stamp = groupStamp(groupID: group.uniqueIdentifier, date: eventDate)
+        let identifier = "\(NotificationIdentifiers.groupPromptPrefix)\(stamp)"
+        return UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+    }
+
     // MARK: - Next alert readout
 
     /// Reads the soonest pending DISPATCH_PROMPT (or snooze) trigger date,
@@ -681,6 +706,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             .userInfo[NotificationIdentifiers.promptGroupIDKey] as? String
         let triggeringWorkoutID = response.notification.request.content
             .userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] as? String
+        let firedByVisitArrival = response.notification.request.content
+            .userInfo[NotificationIdentifiers.visitArrivalKey] != nil
         Task { @MainActor in
             // Digest taps deep-link to the digest screen — no survey, no
             // lastActedAt marker (the digest is not a prompt).
@@ -711,10 +738,17 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 // Default tap (including UNNotificationDefaultActionIdentifier)
                 // opens the app into a new regular survey — scoped to the
                 // prompt's group when the notification carries one, and
-                // recorded as workout-triggered when a workout fired it.
+                // recorded as workout-/visit-triggered when an event fired it.
+                let trigger: ReportTrigger = if triggeringWorkoutID != nil {
+                    .workoutEnd
+                } else if firedByVisitArrival {
+                    .visitArrival
+                } else {
+                    .notification
+                }
                 pendingSurveyRequest = SurveyRequest(
                     kind: .regular,
-                    trigger: triggeringWorkoutID == nil ? .notification : .workoutEnd,
+                    trigger: trigger,
                     promptGroupID: promptGroupID,
                     triggeringWorkoutID: triggeringWorkoutID)
             }

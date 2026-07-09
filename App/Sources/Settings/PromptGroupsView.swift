@@ -12,6 +12,7 @@ struct PromptGroupsView: View {
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(ThemeStore.self) private var themeStore
     @Environment(WorkoutEndObserver.self) private var workoutEndObserver
+    @Environment(VisitObserver.self) private var visitObserver
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
     private var theme: Theme { themeStore.theme }
@@ -24,7 +25,8 @@ struct PromptGroupsView: View {
             List {
                 if groups.isEmpty {
                     Text("Group questions together and give each group its own schedule — "
-                        + "every few hours, a few times a day, at set times, or when a workout ends. "
+                        + "every few hours, a few times a day, at set times, when a workout ends, "
+                        + "or when you arrive somewhere. "
                         + "Ungrouped questions keep using the main notification schedule.")
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.8))
@@ -84,10 +86,12 @@ struct PromptGroupsView: View {
     private func replan() {
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
         workoutEndObserver.refresh()
+        visitObserver.refresh()
     }
 }
 
 struct PromptGroupRowView: View {
+    @Environment(VisitObserver.self) private var visitObserver
     let group: PromptGroup
     let onChange: () -> Void
 
@@ -103,6 +107,14 @@ struct PromptGroupRowView: View {
                     Text("\(group.schedule.summary) – \(questionCountText)")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.7))
+                    // A visit group without Always location simply doesn't
+                    // fire (plan 16) — say so where the user will look.
+                    if group.schedule == .visitArrival, !visitObserver.hasAlwaysAuthorization {
+                        Text("Needs “Always” location — won't fire")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                            .accessibilityIdentifier("group-row-needs-always")
+                    }
                 }
 
                 Spacer()
@@ -164,7 +176,7 @@ extension GroupSchedule {
 /// deliberately not offered; editing such a group defaults the picker to
 /// timesPerDay and saving overwrites the unknown kind.
 private enum EditableScheduleKind: String, CaseIterable, Identifiable {
-    case everyNHours, timesPerDay, dailyAt, workoutEnd
+    case everyNHours, timesPerDay, dailyAt, workoutEnd, visitArrival
     var id: String { rawValue }
 
     var displayName: String {
@@ -173,6 +185,7 @@ private enum EditableScheduleKind: String, CaseIterable, Identifiable {
         case .timesPerDay: "Times per day"
         case .dailyAt: "Daily at times"
         case .workoutEnd: "When a workout ends"
+        case .visitArrival: "When I arrive somewhere"
         }
     }
 }
@@ -185,6 +198,7 @@ struct PromptGroupEditorView: View {
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(ThemeStore.self) private var themeStore
     @Environment(WorkoutEndObserver.self) private var workoutEndObserver
+    @Environment(VisitObserver.self) private var visitObserver
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
@@ -226,9 +240,9 @@ struct PromptGroupEditorView: View {
             times = components.map(PromptGroup.timeString(fromComponents:))
         case .workoutEnd:
             kind = .workoutEnd
-        // .visitArrival gains an editor row in plan 16 task 2; until then it
-        // behaves like an unknown kind in the editor (picker defaults).
-        case .visitArrival, .disabled, nil:
+        case .visitArrival:
+            kind = .visitArrival
+        case .disabled, nil:
             break
         }
         _scheduleKind = State(initialValue: kind)
@@ -362,11 +376,53 @@ struct PromptGroupEditorView: View {
                 Text("Fires a prompt shortly after a workout ends.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.7))
+            case .visitArrival:
+                Text("Fires a prompt when you arrive somewhere and settle in — "
+                    + "Apple's power-efficient visit detection, so arrivals are "
+                    + "noticed after you've been in a place a little while. "
+                    + "Needs “Always” location access to work when Dispatch is closed.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                if !visitObserver.hasAlwaysAuthorization {
+                    visitAuthorizationHint
+                }
             }
         } header: {
             sectionHeader("SCHEDULE")
         }
         .listRowBackground(Color.white.opacity(0.12))
+        // Editor-contextual Always upgrade (plan 16): the ONLY place the app
+        // ever asks — picking the visit schedule is the moment the section
+        // text above has just explained why. Never part of onboarding.
+        .onChange(of: scheduleKind) { _, newKind in
+            if newKind == .visitArrival, !visitObserver.hasAlwaysAuthorization {
+                Task { await visitObserver.requestAlwaysAuthorization() }
+            }
+        }
+    }
+
+    /// Inline "needs Always" state while the visit schedule is selected:
+    /// denied/restricted points at Settings; anything else re-offers the
+    /// system prompt.
+    @ViewBuilder
+    private var visitAuthorizationHint: some View {
+        switch visitObserver.authorizationStatus {
+        case .denied, .restricted:
+            Text("Location access is off — allow “Always” in Settings → Privacy "
+                + "& Security → Location Services → Dispatch, or this group won't fire.")
+                .font(.footnote)
+                .foregroundStyle(.yellow)
+                .accessibilityIdentifier("group-visit-needs-always")
+        default:
+            Button {
+                Task { await visitObserver.requestAlwaysAuthorization() }
+            } label: {
+                Text("Needs “Always” location — tap to allow")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.yellow)
+            }
+            .accessibilityIdentifier("group-visit-needs-always")
+        }
     }
 
     private func toggleMembership(of questionID: String) {
@@ -397,6 +453,8 @@ struct PromptGroupEditorView: View {
             .dailyAt(dailyTimes.compactMap(PromptGroup.timeComponents(fromString:)))
         case .workoutEnd:
             .workoutEnd
+        case .visitArrival:
+            .visitArrival
         }
     }
 
@@ -414,6 +472,7 @@ struct PromptGroupEditorView: View {
         try? context.save()
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
         workoutEndObserver.refresh()
+        visitObserver.refresh()
         dismiss()
     }
 

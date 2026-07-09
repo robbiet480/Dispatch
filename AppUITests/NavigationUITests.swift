@@ -205,4 +205,66 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["4× per day – 1 question"].exists)
         XCTAssertFalse(app.staticTexts["prompt-groups-empty"].exists)
     }
+
+    /// Plan 16: a visit-arrival group can be created entirely through the
+    /// editor under --mock-sensors (the observer and the Always-location
+    /// request are test-gated — no system dialog) and lands in the list
+    /// with its schedule label.
+    @MainActor
+    func testCreateVisitArrivalGroupShowsScheduleLabel() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        let settingsButton = app.buttons["settings-button"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
+        settingsButton.tap()
+
+        let groupsLink = app.buttons["prompt-groups-link"]
+        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
+        groupsLink.tap()
+
+        let addButton = app.buttons["group-add"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+        var scrollsRemaining = 8
+        while !addButton.isHittable, scrollsRemaining > 0 {
+            app.swipeUp()
+            scrollsRemaining -= 1
+        }
+        addButton.tap()
+
+        let groupName = "Arrivals \(Int(Date().timeIntervalSince1970) % 100_000)"
+        addTeardownBlock { @MainActor in
+            let row = app.staticTexts[groupName.uppercased()]
+            guard row.exists else { return }
+            row.swipeLeft()
+            let deleteButton = app.buttons["Delete"]
+            if deleteButton.waitForExistence(timeout: 5) {
+                deleteButton.tap()
+            }
+        }
+
+        let nameField = app.textFields["group-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
+        nameField.tap()
+        nameField.typeText(groupName)
+
+        let questionRow = app.buttons["Are you working?"]
+        XCTAssertTrue(questionRow.waitForExistence(timeout: 10))
+        questionRow.tap()
+
+        // Form pickers render as a menu: open it, choose the visit schedule.
+        let schedulePicker = app.buttons["group-schedule-kind"]
+        XCTAssertTrue(schedulePicker.waitForExistence(timeout: 10))
+        schedulePicker.tap()
+        let visitOption = app.buttons["When I arrive somewhere"]
+        XCTAssertTrue(visitOption.waitForExistence(timeout: 10))
+        visitOption.tap()
+
+        app.buttons["group-save"].tap()
+
+        // Back on the list: the visit group shows with its schedule label.
+        XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["When I arrive somewhere – 1 question"].waitForExistence(timeout: 10))
+    }
 }

@@ -151,21 +151,16 @@ final class WorkoutEndObserver {
         for workout in workouts {
             observerLog.info("handling workout \(workout.uuid, privacy: .public) ended \(workout.endDate, privacy: .public)")
             for group in groups {
-                let content = NotificationScheduler.makeGroupContent(
-                    groupID: group.uniqueIdentifier,
-                    body: NotificationScheduler.groupBody(for: group, in: context))
-                var userInfo = content.userInfo
-                userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] = workout.uuid.uuidString
-                content.userInfo = userInfo
-                let stamp = Self.stampFormatter.string(from: workout.endDate)
-                let identifier = "\(NotificationIdentifiers.groupPromptPrefix)\(group.uniqueIdentifier)-\(stamp)"
-                // nil trigger ⇒ deliver immediately.
-                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+                // Shared immediate-gprompt path (plan 16): content-addressed
+                // identifier from the workout end date, delivered now.
+                let request = NotificationScheduler.makeImmediateGroupPromptRequest(
+                    group: group, in: context, eventDate: workout.endDate,
+                    extraUserInfo: [NotificationIdentifiers.triggeringWorkoutIDKey: workout.uuid.uuidString])
                 do {
                     try await center.add(request)
-                    observerLog.info("posted workout-end prompt \(identifier, privacy: .public)")
+                    observerLog.info("posted workout-end prompt \(request.identifier, privacy: .public)")
                 } catch {
-                    observerLog.error("failed to post workout-end prompt \(identifier, privacy: .public): \(error, privacy: .public)")
+                    observerLog.error("failed to post workout-end prompt \(request.identifier, privacy: .public): \(error, privacy: .public)")
                 }
             }
         }
@@ -193,14 +188,4 @@ final class WorkoutEndObserver {
             store.execute(query)
         }
     }
-
-    /// Same `yyyyMMdd-HHmm` shape as the scheduler's prompt stamps so the
-    /// nag/stamp parsing helpers treat these identifiers uniformly.
-    private static let stampFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmm"
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .current
-        return formatter
-    }()
 }
