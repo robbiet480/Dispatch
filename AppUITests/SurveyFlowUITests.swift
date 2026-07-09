@@ -136,4 +136,66 @@ final class SurveyFlowUITests: XCTestCase {
         XCTAssertTrue(savedText.waitForExistence(timeout: 10),
                        "typed text '\(flushProbeText)' was not found in the saved report — debounced flush was lost")
     }
+
+    /// Regression test for issue #1: text typed into a token/people field
+    /// only tokenized on Return (`onSubmit`), so tapping NEXT/DONE (or
+    /// swiping) without pressing Return silently dropped the entry and the
+    /// report saved an empty token answer. Types into the tokens question
+    /// WITHOUT pressing Return, advances with NEXT/DONE, then asserts the
+    /// token is present in the persisted report's detail view.
+    @MainActor
+    func testAdvancingWithoutReturnTokenizesPendingTokenText() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        let countLabel = app.staticTexts["report-count"]
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        let before = countLabel.label
+
+        app.buttons["report-button"].tap()
+        XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
+                      || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
+
+        let next = app.buttons["survey-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+        if app.buttons["Yes"].exists { app.buttons["Yes"].tap() }
+
+        // Navigate to the tokens question ("What are you doing?").
+        let tokenField = app.textFields["token-field"]
+        while !tokenField.exists && next.label == "NEXT" {
+            next.tap()
+        }
+        XCTAssertTrue(tokenField.waitForExistence(timeout: 10))
+        tokenField.tap()
+
+        let tokenText = "tokenprobe\(Int(Date().timeIntervalSince1970))"
+        tokenField.typeText(tokenText)
+
+        // Deliberately NO Return here — advancing must tokenize the draft.
+        for _ in 0..<12 where next.label == "NEXT" {
+            next.tap()
+        }
+        XCTAssertEqual(next.label, "DONE")
+        next.tap()
+
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        XCTAssertNotEqual(countLabel.label, before, "report count did not increment")
+
+        // Open the freshly saved report and assert the token persisted.
+        app.buttons["reports-list-button"].tap()
+        let reportsList = app.collectionViews["reports-list"].exists
+            ? app.collectionViews["reports-list"]
+            : app.tables["reports-list"]
+        XCTAssertTrue(reportsList.waitForExistence(timeout: 10))
+        let firstRow = app.buttons["report-row"].firstMatch.exists
+            ? app.buttons["report-row"].firstMatch
+            : app.cells["report-row"].firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
+        firstRow.tap()
+
+        let savedToken = app.staticTexts[tokenText]
+        XCTAssertTrue(savedToken.waitForExistence(timeout: 10),
+                      "token '\(tokenText)' was not found in the saved report — draft was dropped by NEXT/DONE")
+    }
 }

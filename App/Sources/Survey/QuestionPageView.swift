@@ -59,7 +59,9 @@ struct QuestionPageView: View {
             TokenEntryView(placeholder: page.placeholder ?? "Add…",
                            tokens: currentTokens,
                            isPeople: page.question.type == .people,
-                           onChange: { onAnswer(.tokens($0)) })
+                           identifier: "\(page.id)-token-field",
+                           onChange: { onAnswer(.tokens($0)) },
+                           flushRegistry: flushRegistry)
         case .number:
             LocalTextEditorField(
                 initialText: { if case .number(let number) = value { number } else { "" } }(),
@@ -250,7 +252,12 @@ struct TokenEntryView: View {
     /// Whether this page is a people question — selects which vocabulary
     /// entity (`PersonEntity` vs `TokenEntity`) backs autocomplete.
     let isPeople: Bool
+    /// Unique per-page registry key (page id + field kind). Must be
+    /// distinct across pages so registrations from different token/people
+    /// pages never collide or clobber each other in the shared registry.
+    let identifier: String
     let onChange: ([String]) -> Void
+    let flushRegistry: PendingFlushRegistry
 
     @Environment(\.modelContext) private var modelContext
     @SwiftUI.FocusState private var fieldFocused: Bool
@@ -272,12 +279,7 @@ struct TokenEntryView: View {
             TextField(placeholder, text: $draft)
                 .font(.title3)
                 .focused($fieldFocused)
-                .onSubmit {
-                    let trimmed = draft.trimmingCharacters(in: .whitespaces)
-                    guard !trimmed.isEmpty else { return }
-                    onChange(tokens + [trimmed])
-                    draft = ""
-                }
+                .onSubmit(commitDraft)
                 .accessibilityIdentifier("token-field")
             if fieldFocused, !suggestions.isEmpty {
                 suggestionsRow
@@ -287,6 +289,33 @@ struct TokenEntryView: View {
         .task {
             loadCandidates()
         }
+        .onAppear {
+            flushRegistry.register(identifier, flush: commitDraft)
+        }
+        .onChange(of: fieldFocused) { _, focused in
+            // Reporter parity: losing focus tokenizes the pending text, just
+            // like pressing Return.
+            if !focused { commitDraft() }
+        }
+        .onDisappear {
+            commitDraft()
+            flushRegistry.unregister(identifier)
+        }
+    }
+
+    /// Tokenizes any pending draft text. Called from Return (`onSubmit`),
+    /// focus loss, disappearance, and the forced flush an ancestor runs
+    /// before NEXT/DONE/page-swipe — so text typed into the field is never
+    /// lost by advancing without pressing Return. Idempotent: an empty
+    /// (already-committed) draft is a no-op, and a draft matching the
+    /// last-added token is skipped so overlapping triggers can't
+    /// double-append.
+    private func commitDraft() {
+        let trimmed = draft.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        draft = ""
+        guard tokens.last != trimmed else { return }
+        onChange(tokens + [trimmed])
     }
 
     private var suggestions: [String] {
