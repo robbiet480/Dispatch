@@ -20,3 +20,4 @@ xcuserdata/
 .DS_Store
 .superpowers/
 Dispatch.xcodeproj/
+scripts/asc-config.local
