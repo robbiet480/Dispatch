@@ -29,7 +29,7 @@ targets:
         # "Dispatch" was taken on the App Store).
         INFOPLIST_KEY_CFBundleDisplayName: Dispatch
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        CURRENT_PROJECT_VERSION: 10
+        CURRENT_PROJECT_VERSION: 11
         MARKETING_VERSION: 0.1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -71,7 +71,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         # Extension CFBundleShortVersionString/CFBundleVersion must match the
         # host app's or App Store validation rejects the archive.
-        CURRENT_PROJECT_VERSION: 10
+        CURRENT_PROJECT_VERSION: 11
         MARKETING_VERSION: 0.1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         SWIFT_VERSION: 6.0
