@@ -7,7 +7,20 @@ at commit `7ab0a94` on `main`.*
 
 ---
 
-## 1. Priority finding: HealthKit data in iCloud (Guideline 5.1.3(ii)) — BLOCKER
+## 1. Priority finding: HealthKit data in iCloud (Guideline 5.1.3(ii)) — RISK ACCEPTED (owner decision, 2026-07-09)
+
+> **Decision (Robbie, 2026-07-09):** ship as-is and contest if rejected. Rationale: the
+> guideline's "personal health information" is undefined and plausibly targets wholesale
+> copying of Health data to iCloud, not contextual snapshot readings attached to
+> self-tracking reports in the user's own CloudKit **private** database; the clause reads
+> as a discretionary catch-all. Escalation ladder: (1) submit as-is with reviewer notes
+> framing the snapshot/context distinction, (2) if rejected, respond/appeal with the same
+> framing, (3) if still rejected, implement Mitigation A (local-only health sidecar,
+> 2–4 days, designed below) as the fallback. Consequences accepted: possible launch
+> delay at 1.0 submission time; privacy labels/policy will DISCLOSE health data syncing
+> to the user's private iCloud database (transparency aligned with this position).
+> The iCloud-Drive backup variant (if ever built) inherits this same accepted risk.
+> The analysis below is preserved unedited as the basis for the fallback.
 
 ### Current guideline text (fetched 2026-07-09)
 
