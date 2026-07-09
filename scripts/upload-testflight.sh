@@ -46,3 +46,10 @@ xcodebuild -exportArchive \
   | tail -5
 
 echo "Uploaded. The build appears in TestFlight after App Store Connect finishes processing (usually 5-15 minutes)."
+
+# Optional: pass a what-to-test notes file as $1 — waits for processing,
+# then sets the TestFlight "What to Test" text via the ASC API.
+if [[ $# -ge 1 && -f "$1" ]]; then
+  BUILD_NUMBER=$(grep -m1 "CURRENT_PROJECT_VERSION" project.yml | awk '{print $2}')
+  swift scripts/tf-notes.swift "$BUILD_NUMBER" "$1"
+fi
