@@ -27,14 +27,18 @@ enum PedometerReader {
             return nil
         }
         let pedometer = CMPedometer()
+        // CMPedometer's completion handler can fire more than once (observed
+        // on iOS 27 beta in PermissionCascade.requestMotion, build 8) — the
+        // one-shot guard prevents a double-resume trap here too.
+        let resumeGate = OneShotResumeGuard()
         return await withCheckedContinuation { continuation in
             pedometer.queryPedometerData(from: start, to: end) { data, error in
                 if let error {
                     pedometerLog.info("pedometer query failed (degrading to climbed-only): \(error, privacy: .public)")
-                    continuation.resume(returning: nil)
+                    if resumeGate.claim() { continuation.resume(returning: nil) }
                     return
                 }
-                continuation.resume(returning: data?.floorsDescended?.doubleValue)
+                if resumeGate.claim() { continuation.resume(returning: data?.floorsDescended?.doubleValue) }
             }
         }
     }

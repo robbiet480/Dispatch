@@ -74,6 +74,12 @@ final class PermissionCascade {
         isRequesting = true
         defer { isRequesting = false }
 
+        // Full cascade covers the post-build-7 Motion/medications steps, so
+        // the upgrade top-up must never re-run them. Written BEFORE the steps
+        // run (crash tolerance, cf. runUpgradeTopUpIfNeeded): if a step traps
+        // mid-cascade the next launch must not retry into the same crash.
+        defaults.set(true, forKey: Self.motionMedicationsRequestedKey)
+
         await requestLocation()
         await requestHealth()
         await requestMedications()
@@ -82,9 +88,6 @@ final class PermissionCascade {
         await requestPhotos()
         await requestFocus()
         requestNotifications()
-        // Full cascade covers the post-build-7 Motion/medications steps, so
-        // the upgrade top-up below must never re-run them.
-        defaults.set(true, forKey: Self.motionMedicationsRequestedKey)
     }
 
     /// One-time top-up for installs that completed onboarding BEFORE the
@@ -102,9 +105,16 @@ final class PermissionCascade {
         isRequesting = true
         defer { isRequesting = false }
 
+        // Flag is written BEFORE the steps run, deliberately: this top-up
+        // executes AT LAUNCH, so if a step crashes mid-way (the build-8
+        // CMPedometer double-resume trap) a flag-written-after design retries
+        // the crashing step every launch — a crash loop. One attempt is the
+        // right semantics; a user who missed a dialog can always re-request
+        // via Settings -> Request Sensor Access.
+        defaults.set(true, forKey: Self.motionMedicationsRequestedKey)
+
         await requestMotion()
         await requestMedications()
-        defaults.set(true, forKey: Self.motionMedicationsRequestedKey)
     }
 
     private func requestLocation() async {
@@ -147,9 +157,14 @@ final class PermissionCascade {
               CMPedometer.authorizationStatus() == .notDetermined else { return }
         let now = Date()
         let pedometer = CMPedometer()
+        // CMPedometer's completion handler can fire MORE THAN ONCE (observed
+        // on iOS 27 beta, TestFlight build 8): the second resume of the
+        // checked continuation trapped at launch. The one-shot guard makes
+        // the handler safe to call any number of times, on any queue.
+        let resumeGate = OneShotResumeGuard()
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             pedometer.queryPedometerData(from: now.addingTimeInterval(-60), to: now) { _, _ in
-                continuation.resume()
+                if resumeGate.claim() { continuation.resume() }
             }
         }
     }
@@ -163,9 +178,13 @@ final class PermissionCascade {
     }
 
     private func requestFocus() async {
+        // Same one-shot defense as requestMotion: this also runs on the
+        // launch path, where a double-fired completion handler (see the
+        // build-8 CMPedometer crash) would trap and crash-loop the app.
+        let resumeGate = OneShotResumeGuard()
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             INFocusStatusCenter.default.requestAuthorization { _ in
-                continuation.resume()
+                if resumeGate.claim() { continuation.resume() }
             }
         }
     }
