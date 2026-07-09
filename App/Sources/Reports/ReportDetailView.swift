@@ -78,7 +78,12 @@ struct ReportDetailView: View {
             append("figure.walk", "Steps", String(format: "%.0f", steps))
         }
         if let flights = healthValue("flightsClimbed") {
-            append("figure.stairs", "Flights climbed", String(format: "%.0f", flights))
+            if let descended = healthValue("flightsDescended") {
+                append("figure.stairs", "Stairs",
+                       String(format: "%.0f up · %.0f down", flights, descended))
+            } else {
+                append("figure.stairs", "Flights climbed", String(format: "%.0f", flights))
+            }
         }
         for (index, workout) in workoutRows.enumerated() {
             append("figure.run", "Workout", workout.text, id: "Workout-\(workout.type)-\(index)")

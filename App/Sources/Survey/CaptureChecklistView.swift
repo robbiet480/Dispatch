@@ -98,6 +98,11 @@ struct CaptureChecklistView: View {
                 return "\(Int(steps.value).formatted()) STEPS TAKEN"
             }
             if let flights = readings.first(where: { $0.type == "flightsClimbed" }) {
+                // Original Reporter parity: "7 STAIRCASES UP · 2 DOWN" when
+                // the pedometer supplied a descended count.
+                if let descended = readings.first(where: { $0.type == "flightsDescended" }) {
+                    return "\(Int(flights.value)) STAIRCASES UP · \(Int(descended.value)) DOWN"
+                }
                 return "\(Int(flights.value)) STAIRCASES"
             }
             if let rings = ActivityRingsFormatter.checklistLine(from: readings) {

@@ -267,8 +267,16 @@ struct HealthMetricProvider: SensorProvider {
                                           startDate: window, endDate: now)])
         case .healthFlights:
             let flights = try await reader.sum(.flightsClimbed, unit: .count(), since: window)
-            return .health([HealthReading(type: "flightsClimbed", value: flights, unit: "count",
-                                          startDate: window, endDate: now)])
+            var readings = [HealthReading(type: "flightsClimbed", value: flights, unit: "count",
+                                          startDate: window, endDate: now)]
+            // Descended comes from CMPedometer (HealthKit has no descended
+            // metric) over the SAME window; nil (no hardware, Motion denied,
+            // query error) degrades to climbed-only with unchanged display.
+            if let descended = await PedometerReader.floorsDescended(from: window, to: now) {
+                readings.append(HealthReading(type: "flightsDescended", value: descended,
+                                              unit: "count", startDate: window, endDate: now))
+            }
+            return .health(readings)
         case .healthHeart:
             var readings: [HealthReading] = []
             let bpm = HKUnit.count().unitDivided(by: .minute())

@@ -23,14 +23,20 @@ Reporter exports.
   fixed-schedule check-ins.
 - **Sensor context capture** — each report can be enriched with
   location, weather, steps/heart rate/HRV/sleep/workouts from Apple
-  Health, ambient sound level, recent photo count, and Focus state,
-  depending on what you grant access to.
+  Health, stairs climbed and descended, ambient sound level, recent
+  photo count, and Focus state, depending on what you grant access to.
 - **Rich question types** — scales, choices, free text, and more, with
   per-question Health "State of Mind" logging when you opt in. Author
   question sets in the app.
 - **Search** — full-text and Spotlight-indexed search across your
   reports.
 - **Visualizations** — charts and summaries of your answers over time.
+- **Home & lock screen widgets** — time since your last report, today's
+  count, and your streak, plus a Control Center control that starts a
+  new report with one tap.
+- **Weekly digest** — an on-device (Apple Intelligence) narrative recap
+  of your week, with a deterministic summary fallback and an optional
+  Sunday-evening reminder.
 - **Face ID app lock** — optional biometric lock on launch.
 - **Import & export** — bring in an original Reporter export or a
   Dispatch export, and export your data back out as JSON or CSV at any

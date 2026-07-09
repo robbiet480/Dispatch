@@ -22,14 +22,28 @@ final class PrivacyCoverWindow {
         self.themeStore = themeStore
     }
 
-    /// Shows the cover window immediately. No-op if already showing or no
-    /// window scene exists yet (e.g. before the scene connects at launch).
+    /// Shows the cover window immediately. No-op when no window scene exists
+    /// yet (e.g. before the scene connects at launch).
+    ///
+    /// Rebinds to the CURRENT foreground scene on EVERY show rather than
+    /// keeping a window created against whatever scene existed first: on
+    /// iPad (and any future multi-scene support) the scene a previous cover
+    /// was attached to can be backgrounded or disconnected while a different
+    /// scene is what the user actually sees — reusing the old window would
+    /// leave the visible scene uncovered. Reuse is only safe when the
+    /// existing cover is already on the scene being shown.
     func show() {
-        guard window == nil else { return }
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         guard let scene = scenes.first(where: {
             $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive
         }) ?? scenes.first else { return }
+
+        if let window {
+            if window.windowScene === scene { return }
+            // Stale scene — tear down and rebuild on the current one.
+            window.isHidden = true
+            self.window = nil
+        }
 
         let cover = UIWindow(windowScene: scene)
         cover.windowLevel = .alert + 1

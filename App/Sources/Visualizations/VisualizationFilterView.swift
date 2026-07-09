@@ -185,9 +185,14 @@ struct VisualizationFilterView: View {
     }
 
     private var yearPairs: [(String, ReportFilter.FilterCriterion)] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let years = Set(reports.map { calendar.component(.year, from: $0.date) })
+        // Each report's OWN time zone, matching ReportFilter.matches — a
+        // New Year's Eve report filed abroad must be offered under the year
+        // the filter will actually bucket it into, not the device's year.
+        let years = Set(reports.map { report in
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: report.timeZoneIdentifier) ?? .gmt
+            return calendar.component(.year, from: report.date)
+        })
         return years.sorted(by: >).map { (String($0), .year($0)) }
     }
 

@@ -1,5 +1,6 @@
 import AVFAudio
 import CoreLocation
+import CoreMotion
 import DispatchKit
 import Foundation
 import Intents
@@ -65,6 +66,7 @@ final class PermissionCascade {
 
         await requestLocation()
         await requestHealth()
+        await requestMotion()
         await requestMicrophone()
         await requestPhotos()
         await requestFocus()
@@ -81,6 +83,17 @@ final class PermissionCascade {
         } catch {
             cascadeLog.error("health permission request failed: \(error, privacy: .public)")
         }
+    }
+
+    /// Core Motion (CMPedometer, flights descended) has no standalone
+    /// requestAuthorization API — the permission dialog fires on the first
+    /// query. Issue a tiny bounded query here so the Motion dialog takes its
+    /// place IN SEQUENCE instead of ambushing the first report capture.
+    private func requestMotion() async {
+        guard CMPedometer.isFloorCountingAvailable(),
+              CMPedometer.authorizationStatus() == .notDetermined else { return }
+        let now = Date()
+        _ = await PedometerReader.floorsDescended(from: now.addingTimeInterval(-60), to: now)
     }
 
     private func requestMicrophone() async {

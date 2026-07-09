@@ -121,9 +121,12 @@ struct HomeView: View {
         return Button {
             isShowingFilter = true
         } label: {
+            // Explicit singular/plural — the ^[…](inflect:) markup only
+            // inflects when the string lands in a LocalizedStringKey, which
+            // a ternary like this silently defeats (it becomes String).
             Text(activeCount == 0
                  ? "Filter Visualizations…"
-                 : "^[\(activeCount) filter](inflect: true) active")
+                 : (activeCount == 1 ? "1 filter active" : "\(activeCount) filters active"))
                 .font(.caption)
                 .fontWeight(.semibold)
                 .foregroundStyle(.white)
