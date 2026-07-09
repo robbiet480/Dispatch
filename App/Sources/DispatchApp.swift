@@ -42,7 +42,9 @@ struct DispatchApp: App {
         // Container construction consults the sync policy (defaults suite +
         // test environment), so defaults selection above must precede it.
         let syncPolicy = SyncPolicy(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
-        let (madeContainer, cloudKitActive) = Self.makeContainer(syncEnabled: syncPolicy.shouldSync)
+        let (madeContainer, cloudKitActive) = Self.makeContainer(
+            syncEnabled: syncPolicy.shouldSync, inMemory: isTestEnvironment
+        )
         container = madeContainer
 
         // One-time legacy default-question ID migration. Must run before
@@ -255,8 +257,29 @@ struct DispatchApp: App {
     /// entitlements now present, the default `.automatic` would infer
     /// CloudKit from them, which must not happen for the sync-disabled and
     /// test paths.
-    private static func makeContainer(syncEnabled: Bool) -> (ModelContainer, cloudKitActive: Bool) {
+    ///
+    /// Test launches (`--ui-testing`/`--mock-sensors`) get an in-memory store:
+    /// the on-disk store persists across UI-test runs on the same simulator,
+    /// so data created by one run (reports, prompt groups) pollutes the next.
+    /// No UI test relies on persistence across separate launches, and test
+    /// defaults are already wiped per launch, so per-launch stores match the
+    /// existing test isolation model.
+    private static func makeContainer(
+        syncEnabled: Bool, inMemory: Bool = false
+    ) -> (ModelContainer, cloudKitActive: Bool) {
         let schema = Schema(DispatchStore.allModels)
+        if inMemory {
+            do {
+                let config = ModelConfiguration(
+                    schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none
+                )
+                let container = try ModelContainer(for: schema, configurations: [config])
+                syncLog.info("in-memory container active (test environment)")
+                return (container, cloudKitActive: false)
+            } catch {
+                fatalError("failed to open in-memory model container: \(error)")
+            }
+        }
         if syncEnabled {
             do {
                 let config = ModelConfiguration(

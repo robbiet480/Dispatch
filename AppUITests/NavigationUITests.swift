@@ -163,13 +163,31 @@ final class NavigationUITests: XCTestCase {
                 || app.collectionViews["prompt-groups"].waitForExistence(timeout: 10)
                 || app.tables["prompt-groups"].waitForExistence(timeout: 10)
         )
-        // Add a group: name it (uniquely — the SwiftData store persists
-        // across UI test runs) and assign one question.
+        // Add a group and assign one question. The store is in-memory per
+        // launch under --ui-testing, but scroll to the add row anyway so the
+        // test survives a long list (belt and braces).
         let addButton = app.buttons["group-add"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+        var scrollsRemaining = 8
+        while !addButton.isHittable, scrollsRemaining > 0 {
+            app.swipeUp()
+            scrollsRemaining -= 1
+        }
+        XCTAssertTrue(addButton.isHittable, "ADD A GROUP row should be reachable by scrolling")
         addButton.tap()
 
         let groupName = "Check-in \(Int(Date().timeIntervalSince1970) % 100_000)"
+        // Clean up the created group even if an assertion below fails, so a
+        // failed run can't pollute the list for later tests in this launch.
+        addTeardownBlock { @MainActor in
+            let row = app.staticTexts[groupName.uppercased()]
+            guard row.exists else { return }
+            row.swipeLeft()
+            let deleteButton = app.buttons["Delete"]
+            if deleteButton.waitForExistence(timeout: 5) {
+                deleteButton.tap()
+            }
+        }
         let nameField = app.textFields["group-name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 10))
         nameField.tap()
