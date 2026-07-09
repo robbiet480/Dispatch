@@ -11,6 +11,14 @@
     <array>
         <string>remote-notification</string>
     </array>
+    <!-- Plan 16 backups: expose Documents (→ Backups/) in the Files app and
+         Finder. UIFileSharingEnabled has no effective INFOPLIST_KEY_* build
+         setting (verified: the key never reached the built plist that way),
+         so it lives here; its companion LSSupportsOpeningDocumentsInPlace is
+         set via INFOPLIST_KEY_ in project.yml. Plain plist keys, NOT
+         entitlements. -->
+    <key>UIFileSharingEnabled</key>
+    <true/>
     <!-- dispatch:// deep links — scoped to WIDGET TAPS only (widgetURL/Link
          from the home/lock screen widgets). Per Apple's widget docs
          ("Respond to user interactions"), tap-to-open-app from a widget is

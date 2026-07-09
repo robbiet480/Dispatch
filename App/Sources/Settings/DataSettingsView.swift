@@ -5,6 +5,7 @@ import SwiftUI
 struct DataSettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(BackupManager.self) private var backupManager
 
     @State private var shareURL: IdentifiableURL?
     @State private var isImporting = false
@@ -60,6 +61,8 @@ struct DataSettingsView: View {
                 } header: {
                     sectionHeader("EXPORT & IMPORT")
                 }
+
+                backupsSection
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -78,6 +81,60 @@ struct DataSettingsView: View {
         } message: { message in
             Text(message)
         }
+    }
+
+    // MARK: - Backups (plan 16)
+
+    /// Automatic rotating backups: enabled toggle (default ON), last-backup
+    /// caption + count, and a manual "Back Up Now" that ignores staleness.
+    private var backupsSection: some View {
+        Section {
+            Toggle("Automatic Backups", isOn: Binding(
+                get: { backupManager.isEnabled },
+                set: { backupManager.isEnabled = $0 }
+            ))
+            .tint(.white.opacity(0.4))
+            .foregroundStyle(.white)
+            .accessibilityIdentifier("backup-enabled")
+
+            Button {
+                backupManager.backUpNow()
+            } label: {
+                if backupManager.isBackingUp {
+                    HStack {
+                        settingsLabel("Back Up Now")
+                        Spacer()
+                        ProgressView()
+                            .tint(.white)
+                    }
+                } else {
+                    settingsLabel("Back Up Now")
+                }
+            }
+            .accessibilityIdentifier("backup-now")
+            .disabled(backupManager.isBackingUp)
+        } header: {
+            sectionHeader("BACKUPS")
+        } footer: {
+            Text(backupCaption)
+                .foregroundStyle(.white.opacity(0.7))
+                .accessibilityIdentifier("backup-caption")
+        }
+        .listRowBackground(Color.white.opacity(0.12))
+    }
+
+    private var backupCaption: String {
+        var lines = [String]()
+        if let last = backupManager.lastBackupDate {
+            lines.append("Last backup: \(last.formatted(date: .abbreviated, time: .shortened)).")
+        } else {
+            lines.append("No backups yet.")
+        }
+        let count = backupManager.backupCount
+        lines.append(count == 1 ? "1 backup kept." : "\(count) backups kept (newest 14).")
+        lines.append("Daily JSON exports in the Files app under On My iPhone → Dispatch → Backups. "
+            + "iCloud sync is not a backup — sync propagates deletions; backups let you rewind.")
+        return lines.joined(separator: " ")
     }
 
     // MARK: - Export

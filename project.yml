@@ -49,6 +49,12 @@ targets:
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Dispatch uses Face ID to unlock the app."
         INFOPLIST_KEY_NSMotionUsageDescription: "Dispatch counts flights of stairs you walked down (via the motion coprocessor) to pair with the flights climbed from Health."
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        # Plan 16 backups: expose Documents (→ Backups/) in the Files app
+        # ("On My iPhone → Dispatch") and Finder. Plain Info.plist key, NOT
+        # an entitlement — no provisioning-profile impact. Its companion
+        # UIFileSharingEnabled has no working INFOPLIST_KEY_* build setting
+        # and lives in App/Info.plist instead (verified in the built plist).
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
         # Partial plist merged into the generated Info.plist — carries
         # UIBackgroundModes (remote-notification for CloudKit silent pushes),
         # which has no INFOPLIST_KEY_* build-setting equivalent.

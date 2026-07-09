@@ -44,6 +44,8 @@ Reporter exports.
 - **Import & export** — bring in an original Reporter export or a
   Dispatch export, and export your data back out as JSON or CSV at any
   time. Everything lives on-device; there is no backend server.
+- **Automatic backups** — daily rotating JSON backups written to the
+  Files app, on by default. See [Backups](#backups).
 - **iCloud sync** — reports, questions, prompt groups, and vocabulary
   sync across your devices through your private iCloud database. See
   [iCloud sync](#icloud-sync).
@@ -110,6 +112,11 @@ never fails to launch over sync.
 **Privacy:** the private CloudKit database only. Nothing is shared,
 public, or visible to anyone but the signed-in iCloud account.
 
+**Sync is not a backup:** sync faithfully propagates every change —
+including deletions and bad imports — to all your devices; only
+[Backups](#backups) (or a manual export) let you rewind to an earlier
+state.
+
 **If you fork this:** create your own iCloud container in the developer
 portal, update the identifier in `SyncPolicy.containerIdentifier` and
 `App/Dispatch.entitlements`, and — the classic trap — after the first
@@ -142,6 +149,24 @@ snooze is an explicit "remind me" that outranks the filter.
 When the Focus turns off or switches, the full schedule resumes
 automatically. Persistent reminders remain Time Sensitive, so they can
 still break through the Focus itself for prompts that do fire.
+
+## Backups
+
+Dispatch automatically keeps rotating backups of your data (on by
+default; Settings → Data → Backups):
+
+- A full JSON export (the same v2 format as manual export) is written
+  when you open the app or file a report and the newest backup is more
+  than 20 hours old — roughly one per day of use. The newest 14 are
+  kept.
+- Backups live in the Files app under **On My iPhone → Dispatch →
+  Backups** (and in Finder when the device is connected), so they
+  survive app deletion only if you copy them out — grab one any time,
+  or use "Back Up Now" first.
+- To restore, use Settings → Data → Import… and pick a backup file.
+- Everything is on-device and foreground-scheduled: no background
+  tasks, no servers. iCloud sync is not a backup (it propagates
+  deletions); these files are your rewind point.
 
 ## Importing an original Reporter export
 

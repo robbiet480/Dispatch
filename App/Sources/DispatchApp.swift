@@ -24,6 +24,7 @@ struct DispatchApp: App {
     let permissionCascade: PermissionCascade
     let workoutEndObserver: WorkoutEndObserver
     let visitObserver: VisitObserver
+    let backupManager: BackupManager
     let remoteChangeObserver: RemoteChangeObserver
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
@@ -118,6 +119,12 @@ struct DispatchApp: App {
         )
         visitObserver = madeVisitObserver
 
+        // Automatic rotating backups (plan 16): foreground-scheduled (scene
+        // active + report save), off-main export, no background tasks.
+        backupManager = BackupManager(
+            container: container, defaults: appDefaults, isTestEnvironment: isTestEnvironment
+        )
+
         // Remote-change reactions: dedupe/vocabulary/Spotlight run on a
         // background context inside the observer; the callback re-plans
         // notifications (which also re-registers the quick-answer category)
@@ -208,6 +215,7 @@ struct DispatchApp: App {
                 .environment(permissionCascade)
                 .environment(workoutEndObserver)
                 .environment(visitObserver)
+                .environment(backupManager)
                 .environment(remoteChangeObserver)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
@@ -252,6 +260,9 @@ struct DispatchApp: App {
                     switch newPhase {
                     case .active:
                         notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+                        // Backup staleness check (plan 16): cheap when fresh,
+                        // writes a rotating v2 export off-main when >20h old.
+                        backupManager.backUpIfStale()
                         // Foreground poke: sync may have changed the shared
                         // store while the widget had no reason to refresh.
                         if !isTestEnvironment {

@@ -9,6 +9,7 @@ struct SurveyFlowView: View {
     @Query private var questions: [Question]
     @Environment(ThemeStore.self) private var themeStore
     @Environment(NotificationScheduler.self) private var notificationScheduler
+    @Environment(BackupManager.self) private var backupManager
     @State private var controller: SurveyController?
     /// Text fields register a synchronous flush closure here (see
     /// `LocalTextEditorField`/`PendingFlushRegistry`). Called immediately
@@ -108,6 +109,10 @@ struct SurveyFlowView: View {
                             // A filed report satisfies any past-due prompt:
                             // cancel their pending nag reminders.
                             notificationScheduler.reportFiled()
+                            // Post-save backup hook (plan 16): same 20h
+                            // staleness gate as scene-active — at most one
+                            // backup a day, off-main, never blocks dismiss.
+                            backupManager.backUpIfStale()
                         }
                         dismiss()
                     } else {
