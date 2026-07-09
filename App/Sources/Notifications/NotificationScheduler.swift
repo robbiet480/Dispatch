@@ -51,17 +51,32 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     private let container: ModelContainer
     private let prefs: NotificationPrefs
     private let isTestEnvironment: Bool
+    /// Where the Focus filter state lives: the App Group suite in
+    /// production (written by DispatchFocusFilter.perform()), the isolated
+    /// per-launch test suite under `--ui-testing`/`--mock-sensors` — so real
+    /// Focus state can never leak into tests, and a test can inject state
+    /// deterministically via the FOCUS_FILTER_STATE launch hook.
+    private let focusFilterDefaults: UserDefaults
 
     /// Guards against re-firing the permission request when the scene is
     /// recreated (e.g. backgrounding/foregrounding rebuilds ContentView,
     /// which would otherwise call `requestPermissionIfNeeded` again).
     private var hasRequestedThisLaunch = false
 
-    init(container: ModelContainer, prefs: NotificationPrefs, isTestEnvironment: Bool) {
+    init(container: ModelContainer, prefs: NotificationPrefs, isTestEnvironment: Bool,
+         focusFilterDefaults: UserDefaults) {
         self.container = container
         self.prefs = prefs
         self.isTestEnvironment = isTestEnvironment
+        self.focusFilterDefaults = focusFilterDefaults
         super.init()
+    }
+
+    /// The active Dispatch Focus Filter's state, or nil when no filter is
+    /// active. Read fresh on every access — the intent's perform() may have
+    /// rewritten it from a background launch since the last read.
+    var activeFocusFilter: FocusFilterState? {
+        FocusFilterState.read(from: focusFilterDefaults)
     }
 
     // MARK: - Setup
@@ -228,12 +243,30 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
-        let allPlannedDates = plannedDates(prefs: prefs, now: now, calendar: calendar)
+        // Focus filter pre-filter (plan 15): while a Dispatch Focus Filter
+        // is active, only the allowed groups (and, unless paused, the global
+        // schedule) enter the plan. Muted families contribute NOTHING
+        // downstream — no prompts, no nag parents, no budget charge — and
+        // their pending requests fall out in the single removal batch above.
+        // Deactivation (Focus off/switched) clears the state and triggers a
+        // replan, restoring the full schedule; past-parent nag resurrection
+        // still works because planned dates are recomputed deterministically
+        // from the day seed.
+        let focusFilter = activeFocusFilter
+        if let focusFilter {
+            notificationLog.info("focus filter active (\(focusFilter.label, privacy: .public)): \(focusFilter.allowedGroupIDs.count, privacy: .public) groups allowed, global \(focusFilter.allowsGlobal ? "on" : "paused", privacy: .public)")
+        }
+
+        let (groups, planGlobal) = FocusFilterState.filterPlan(
+            groups: Self.timerScheduledGroups(in: questionContext), state: focusFilter
+        )
+        let allPlannedDates = planGlobal
+            ? plannedDates(prefs: prefs, now: now, calendar: calendar)
+            : []
         let dates = allPlannedDates.filter { $0 > now }
 
         // Timer-scheduled groups (plan 12): planned per awake window with a
         // group-varied seed; event/disabled schedules plan nothing.
-        let groups = Self.timerScheduledGroups(in: questionContext)
         let windows = planWindows(now: now, calendar: calendar)
         let groupPlans: [(group: PromptGroup, all: [Date], future: [Date])] = groups.map { group in
             let all = windows.flatMap { window in

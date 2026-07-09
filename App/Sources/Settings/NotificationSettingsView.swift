@@ -45,6 +45,7 @@ struct NotificationSettingsView: View {
 
             List {
                 nextNotificationSection
+                focusFilterSection
                 frequencySection
                 distributionSection
                 scheduledSection
@@ -81,6 +82,33 @@ struct NotificationSettingsView: View {
             .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("NEXT NOTIFICATION")
+        }
+    }
+
+    /// Passive status row (plan 15): visible only while a Dispatch Focus
+    /// Filter is active, so the user can tell at a glance why prompts are
+    /// quieter than the settings below suggest. Read fresh from the
+    /// scheduler on each body evaluation — the row appears/disappears on
+    /// navigation, which is enough for a passive indicator.
+    @ViewBuilder private var focusFilterSection: some View {
+        if let filter = scheduler.activeFocusFilter {
+            Section {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Focus filter: \(filter.label) — \(filter.allowedGroupIDs.count) group\(filter.allowedGroupIDs.count == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                    Text(filter.allowsGlobal
+                         ? "Only these prompt groups are firing; ungrouped prompts continue."
+                         : "Only these prompt groups are firing; ungrouped prompts are paused.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .accessibilityIdentifier("focus-filter-status")
+                .listRowBackground(Color.white.opacity(0.12))
+            } header: {
+                sectionHeader("FOCUS FILTER")
+            }
         }
     }
 

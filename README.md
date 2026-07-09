@@ -37,6 +37,9 @@ Reporter exports.
 - **Weekly digest** — an on-device (Apple Intelligence) narrative recap
   of your week, with a deterministic summary fallback and an optional
   Sunday-evening reminder.
+- **Focus filters** — attach Dispatch to any Focus mode to record the
+  Focus's name in reports and limit which prompt groups fire while it's
+  on. See [Focus filters](#focus-filters).
 - **Face ID app lock** — optional biometric lock on launch.
 - **Import & export** — bring in an original Reporter export or a
   Dispatch export, and export your data back out as JSON or CSV at any
@@ -114,6 +117,26 @@ run against the Development environment, open CloudKit Console and
 **deploy the schema to Production**. TestFlight/App Store builds sync
 against Production; skipping the deploy makes sync a silent no-op there
 even though it works fine from Xcode.
+
+## Focus filters
+
+Dispatch ships a Focus Filter, so each Focus mode can have its own
+prompting behavior:
+
+- **Named Focus capture** — reports record the name you give the filter
+  (e.g. "Work") instead of just "Focus: On". Apple exposes no API for
+  the actual Focus mode name, so you name it once during setup.
+- **Per-Focus prompt groups** — pick which prompt groups may fire while
+  that Focus is on; everything else is muted until the Focus turns off.
+- **Pause ungrouped prompts** — optionally pause the main (ungrouped)
+  notification schedule too, so *only* the selected groups fire.
+
+Setup (per Focus mode, in the system Settings app — Apple provides no
+in-app enrollment): **Settings → Focus → choose a mode → Focus Filters →
+Add Filter → Dispatch**, then name the filter and select prompt groups.
+When the Focus turns off or switches, the full schedule resumes
+automatically. Persistent reminders remain Time Sensitive, so they can
+still break through the Focus itself for prompts that do fire.
 
 ## Importing an original Reporter export
 

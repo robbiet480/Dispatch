@@ -70,8 +70,25 @@ struct DispatchApp: App {
         }
         privacyCoverWindow = PrivacyCoverWindow(appLockStore: appLockStore, themeStore: themeStore)
 
+        // Focus filter state (plan 15) lives in the App Group defaults in
+        // production — DispatchFocusFilter.perform() writes it there so a
+        // background-launched intent run and the foreground app read the
+        // same state. Tests use the isolated per-launch suite instead
+        // (real Focus state can't leak in), with an optional injection
+        // hook: FOCUS_FILTER_STATE={json} in the launch environment.
+        let focusFilterDefaults: UserDefaults
+        if isTestEnvironment {
+            focusFilterDefaults = appDefaults
+            if let json = ProcessInfo.processInfo.environment["FOCUS_FILTER_STATE"] {
+                appDefaults.set(Data(json.utf8), forKey: FocusFilterState.defaultsKey)
+            }
+        } else {
+            focusFilterDefaults = UserDefaults(suiteName: StoreLocation.appGroupID) ?? .standard
+        }
+
         let scheduler = NotificationScheduler(
-            container: container, prefs: notificationPrefs, isTestEnvironment: isTestEnvironment
+            container: container, prefs: notificationPrefs, isTestEnvironment: isTestEnvironment,
+            focusFilterDefaults: focusFilterDefaults
         )
         notificationScheduler = scheduler
         UNUserNotificationCenter.current().delegate = scheduler
@@ -129,6 +146,15 @@ struct DispatchApp: App {
         // survey presentation stays behind ContentView's lock-gated cover.
         StartReportControlIntent.startReportInApp = {
             AppActions.shared.surveyPresenter?.request = SurveyRequest(kind: .regular, trigger: .control)
+        }
+
+        // Focus filter (plan 15): perform() runs in this process (the
+        // system launches the app in the background when it isn't running),
+        // so the intent can trigger an immediate replan after writing/
+        // clearing the FocusFilterState. Same hook pattern as the control
+        // intent above.
+        DispatchFocusFilter.replanInApp = {
+            scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
         }
 
         // Register the workout-end observer at LAUNCH, not just onAppear:
@@ -247,6 +273,40 @@ struct DispatchApp: App {
                     let pending = await UNUserNotificationCenter.current().pendingNotificationRequests()
                     let count = pending.filter { $0.identifier.hasPrefix(NotificationIdentifiers.promptPrefix) }.count
                     print("PENDING-PROMPTS: \(count)")
+                }
+                .task {
+                    guard ProcessInfo.processInfo.arguments.contains("--probe-focus-filter") else { return }
+                    // Diagnostic harness for the Focus filter lifecycle
+                    // (plan 15), grep-able from `simctl launch --console-pty`
+                    // output; kept permanently behind this launch argument,
+                    // same pattern as --dump-pending below. The iOS 26.5
+                    // SIMULATOR has no Focus pane in Settings (no way to
+                    // attach a filter to a Focus), so this probe exercises
+                    // what IS observable there: (1) `DispatchFocusFilter
+                    // .current` with no filter active — OBSERVED to return
+                    // an all-defaults instance (displayName nil) rather
+                    // than throw the documented notFound, which is why
+                    // perform() never consults it; (2) perform() with
+                    // configured parameters (an activation delivery)
+                    // writes FocusFilterState and replans; (3) perform()
+                    // on an all-defaults instance (a deactivation delivery
+                    // per Apple's documented lifecycle) clears it.
+                    do {
+                        let current = try await DispatchFocusFilter.current
+                        print("FOCUS-PROBE-CURRENT: \(current.displayName ?? "<nil>")")
+                    } catch {
+                        print("FOCUS-PROBE-CURRENT-THREW: \(error)")
+                    }
+                    var activation = DispatchFocusFilter()
+                    activation.displayName = "Work"
+                    activation.pauseGlobalPrompts = true
+                    _ = try? await activation.perform()
+                    let groupDefaults = UserDefaults(suiteName: StoreLocation.appGroupID)
+                    let active = groupDefaults.flatMap(FocusFilterState.read(from:))
+                    print("FOCUS-PROBE-ACTIVATED: label=\(active?.label ?? "<nil>") pauseGlobal=\(active?.pauseGlobal == true) schedulerSees=\(notificationScheduler.activeFocusFilter?.label ?? "<nil>")")
+                    _ = try? await DispatchFocusFilter().perform()
+                    let cleared = groupDefaults.flatMap(FocusFilterState.read(from:))
+                    print("FOCUS-PROBE-DEACTIVATED: state=\(cleared == nil ? "cleared" : "STILL PRESENT")")
                 }
                 .task {
                     guard ProcessInfo.processInfo.arguments.contains("--probe-remote-change") else { return }

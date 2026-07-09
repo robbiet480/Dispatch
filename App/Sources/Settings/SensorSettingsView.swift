@@ -56,6 +56,31 @@ struct SensorSettingsView: View {
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 
+                // Focus filter hint (plan 15): Apple provides no in-app
+                // enrollment for Focus Filters, so the best we can do is
+                // point at the Settings path. Sits with the Focus sensor's
+                // toggle above since the filter is what upgrades that
+                // sensor's boolean reading to a named Focus.
+                Section {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Name your Focus in reports")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Text("Add the Dispatch filter to a Focus mode to record its name (e.g. \u{201C}Work\u{201D}) and choose which prompt groups can fire while it's on.")
+                            .font(.caption)
+                            .opacity(0.7)
+                    }
+                    .foregroundStyle(.white)
+                    .accessibilityIdentifier("focus-filter-hint")
+                } header: {
+                    sectionHeader("FOCUS FILTER")
+                } footer: {
+                    Text("Set up in the Settings app: Focus → choose a mode → Focus Filters → Add Filter → Dispatch. Apple provides no way to do this from inside an app.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .listRowBackground(Color.white.opacity(0.12))
+
                 Section {
                     Picker("Temperature", selection: $temperatureUnit) {
                         Text("Fahrenheit").tag(TemperatureUnit.fahrenheit)
