@@ -66,6 +66,7 @@ final class PermissionCascade {
 
         await requestLocation()
         await requestHealth()
+        await requestMedications()
         await requestMotion()
         await requestMicrophone()
         await requestPhotos()
@@ -82,6 +83,21 @@ final class PermissionCascade {
             try await healthReader.authorize()
         } catch {
             cascadeLog.error("health permission request failed: \(error, privacy: .public)")
+        }
+    }
+
+    /// Medications join the standard flow (user decision, plan 14 T5) but as
+    /// their OWN sequenced step: the medication types must NEVER enter the
+    /// bulk requestAuthorization read set — that exact mistake crashed a
+    /// device with an uncatchable NSInvalidArgumentException (Swift cannot
+    /// catch NSExceptions). iOS 26 medications authorize per-object, like
+    /// vision prescriptions (`requestPerObjectReadAuthorization`). Denial or
+    /// error just moves the cascade along; capture degrades to unavailable.
+    private func requestMedications() async {
+        do {
+            try await healthReader.authorizeMedications()
+        } catch {
+            cascadeLog.error("medication per-object authorization failed: \(error, privacy: .public)")
         }
     }
 

@@ -2,15 +2,42 @@ import DispatchKit
 import Foundation
 import HealthKit
 
+/// Accumulates streaming query results and guards the continuation against
+/// double-resume (HKUserAnnotatedMedicationQuery's resultsHandler is invoked
+/// repeatedly; an error after `done` must not resume twice). HealthKit calls
+/// the handler serially, hence the unchecked Sendable + plain vars.
+private final class ResultsBox<Element>: @unchecked Sendable {
+    private(set) var results: [Element] = []
+    private var finished = false
+
+    func append(_ element: Element) {
+        results.append(element)
+    }
+
+    /// Returns true exactly once — the caller may resume the continuation.
+    func finish() -> Bool {
+        guard !finished else { return false }
+        finished = true
+        return true
+    }
+}
+
 /// Shared HealthKit access for all health sensor providers.
 final class HealthKitReader: Sendable {
     let store = HKHealthStore()
 
-    // NOTE: medicationDoseEventType is deliberately ABSENT. Including it in a
-    // bulk requestAuthorization read set throws an uncatchable ObjC
-    // NSInvalidArgumentException on device ("Authorization to read the
-    // following types is disallowed") — medications require a separate
-    // authorization flow that Dispatch does not implement yet.
+    // NOTE: the medication types (medicationDoseEventType,
+    // userAnnotatedMedicationType) are deliberately ABSENT and must NEVER be
+    // added here. Including one in a bulk requestAuthorization read set
+    // throws an uncatchable ObjC NSInvalidArgumentException on device
+    // ("Authorization to read the following types is disallowed") — it
+    // crashed a real device on day one, and Swift cannot catch NSExceptions.
+    // Medications use the dedicated per-object call instead
+    // (`requestPerObjectReadAuthorization(for: .userAnnotatedMedicationType())`,
+    // sequenced in PermissionCascade.requestMedications) — the iOS 26 SDK
+    // headers mark HKUserAnnotatedMedicationType as "the set of authorizeable
+    // HKUserAnnotatedMedications" and requestPerObjectReadAuthorization as
+    // the prompt "for types that support per object authorization".
     static let readTypes: Set<HKObjectType> = [
         HKQuantityType(.stepCount), HKQuantityType(.flightsClimbed),
         HKQuantityType(.heartRate), HKQuantityType(.heartRateVariabilitySDNN),
@@ -120,23 +147,75 @@ final class HealthKitReader: Sendable {
         }
     }
 
-    func medicationDosesToday(now: Date) async throws -> [HealthReading] {
-        let start = Calendar.current.startOfDay(for: now)
+    /// The per-object authorization prompt for medications (plan 14 T5) —
+    /// the ONLY legal way to request medication read access; see the
+    /// readTypes note above for the bulk-request crash history.
+    func authorizeMedications() async throws {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw ProviderError("health data unavailable on this device")
+        }
+        try await store.requestPerObjectReadAuthorization(
+            for: .userAnnotatedMedicationType(), predicate: nil
+        )
+    }
+
+    /// The user's tracked medications the app has been granted (per-object
+    /// authorization) — used to resolve dose events to display names.
+    private func userAnnotatedMedications() async throws -> [HKUserAnnotatedMedication] {
+        let box = ResultsBox<HKUserAnnotatedMedication>()
         return try await withCheckedThrowingContinuation { continuation in
-            let predicate = HKQuery.predicateForSamples(withStart: start, end: now)
-            let query = HKSampleQuery(sampleType: HKObjectType.medicationDoseEventType(), predicate: predicate,
-                                      limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
-                if let error { continuation.resume(throwing: error); return }
-                let readings = (samples ?? []).compactMap { sample -> HealthReading? in
-                    guard let event = sample as? HKMedicationDoseEvent else { return nil }
-                    // Use stable type string; per-medication identification awaits public name API
-                    return HealthReading(type: "medicationDose",
-                                         value: 1, unit: "dose",
-                                         startDate: event.startDate, endDate: event.endDate)
+            let query = HKUserAnnotatedMedicationQuery(
+                predicate: nil, limit: HKObjectQueryNoLimit
+            ) { _, medication, done, error in
+                if let error {
+                    if box.finish() { continuation.resume(throwing: error) }
+                    return
                 }
-                continuation.resume(returning: readings)
+                if let medication { box.append(medication) }
+                if done, box.finish() { continuation.resume(returning: box.results) }
             }
             store.execute(query)
+        }
+    }
+
+    /// Today's LOGGED medication dose events (taken/skipped — reminder
+    /// bookkeeping statuses are dropped) as `medication.<status>.<name>`
+    /// readings. Unauthorized/no-grant states surface as thrown errors or an
+    /// empty result — the provider degrades to `.unavailable`, never crashes.
+    func medicationDosesToday(now: Date) async throws -> [HealthReading] {
+        let medications = try await userAnnotatedMedications()
+        var nameByConcept: [String: String] = [:]
+        for annotated in medications {
+            let name = annotated.nickname ?? annotated.medication.displayText
+            nameByConcept[annotated.medication.identifier.description] = name
+        }
+
+        let start = Calendar.current.startOfDay(for: now)
+        let events: [HKMedicationDoseEvent] = try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: now)
+            let query = HKSampleQuery(sampleType: HKObjectType.medicationDoseEventType(),
+                                      predicate: predicate,
+                                      limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
+                if let error { continuation.resume(throwing: error); return }
+                continuation.resume(returning: (samples ?? []).compactMap { $0 as? HKMedicationDoseEvent })
+            }
+            store.execute(query)
+        }
+
+        return events.compactMap { event -> HealthReading? in
+            let status: String
+            switch event.logStatus {
+            case .taken: status = "taken"
+            case .skipped: status = "skipped"
+            default: return nil
+            }
+            let name = nameByConcept[event.medicationConceptIdentifier.description] ?? "Medication"
+            return HealthReading(
+                type: MedicationReading.type(status: status, name: name),
+                value: event.doseQuantity ?? 1,
+                unit: event.unit.unitString,
+                startDate: event.startDate, endDate: event.endDate
+            )
         }
     }
 
@@ -323,11 +402,13 @@ struct HealthMetricProvider: SensorProvider {
             let rings = try await reader.activityRings(now: now)
             return .health(rings)
         case .healthMedications:
-            // Reading dose events requires an authorization flow beyond the
-            // bulk requestAuthorization (which rejects the type outright);
-            // disabled until that flow is implemented. medicationDosesToday
-            // is kept for that future work.
-            throw ProviderError("medications reading not yet supported")
+            // Authorization happened (if ever) via the dedicated per-object
+            // call in the permission cascade — NEVER via the bulk read set
+            // above (crash history; see readTypes). No grant / no data
+            // degrades to unavailable via the thrown error below.
+            let doses = try await reader.medicationDosesToday(now: now)
+            guard !doses.isEmpty else { throw ProviderError("no medication doses logged today") }
+            return .health(doses)
         default:
             throw ProviderError("not a health metric: \(kind.rawValue)")
         }

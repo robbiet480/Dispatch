@@ -88,6 +88,9 @@ struct ReportDetailView: View {
         for (index, workout) in workoutRows.enumerated() {
             append("figure.run", "Workout", workout.text, id: "Workout-\(workout.type)-\(index)")
         }
+        for (index, medication) in medicationRows.enumerated() {
+            append("pills", "Medication", medication, id: "Medication-\(index)")
+        }
         if let activity = ActivityRingsFormatter.summary(from: report.health) {
             append("circle.circle", "Activity", activity)
         }
@@ -120,6 +123,14 @@ struct ReportDetailView: View {
         report.health.compactMap { reading in
             guard let name = WorkoutActivityName.displayName(forHealthType: reading.type) else { return nil }
             return (reading.type, "\(name) — \(formattedDuration(reading.value))")
+        }
+    }
+
+    /// Renders each `medication.<status>.<name>` reading as
+    /// "Ibuprofen · 1 · taken" via the kit's pure MedicationReading format.
+    private var medicationRows: [String] {
+        report.health.compactMap { reading in
+            MedicationReading.detailLine(type: reading.type, value: reading.value, unit: reading.unit)
         }
     }
 

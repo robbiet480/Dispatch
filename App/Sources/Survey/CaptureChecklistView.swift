@@ -15,6 +15,7 @@ struct CaptureChecklistView: View {
         (.healthSteps, "figure.walk", "STEPS"),
         (.healthFlights, "stairs", "STAIRS"),
         (.healthActivityRings, "circle.circle", "ACTIVITY RINGS"),
+        (.healthMedications, "pills", "MEDICATIONS"),
     ]
 
     var body: some View {
@@ -107,6 +108,10 @@ struct CaptureChecklistView: View {
             }
             if let rings = ActivityRingsFormatter.checklistLine(from: readings) {
                 return rings
+            }
+            let medications = readings.filter { MedicationReading.parse($0.type) != nil }
+            if !medications.isEmpty {
+                return "\(medications.count) MEDICATION\(medications.count == 1 ? "" : "S") LOGGED"
             }
             return "\(label) CAPTURED"
         case .battery, .connection, .focus:

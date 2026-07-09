@@ -64,9 +64,11 @@ final class SurveyController {
             HealthMetricProvider(kind: .healthWorkouts, reader: health, since: since),
             HealthMetricProvider(kind: .healthCaffeine, reader: health, since: since),
             HealthMetricProvider(kind: .healthActivityRings, reader: health, since: since),
-            // .healthMedications intentionally not composed: its read type is
-            // rejected by bulk requestAuthorization (device crash) — see
-            // HealthKitReader.readTypes.
+            // Medications (plan 14 T5): authorization is the dedicated
+            // per-object call in the permission cascade — the type is still
+            // NEVER in the bulk read set (device-crash history, see
+            // HealthKitReader.readTypes).
+            HealthMetricProvider(kind: .healthMedications, reader: health, since: since),
         ]
     }
 
