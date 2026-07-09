@@ -9,7 +9,16 @@
 	<key>teamID</key>
 	<string>UTQFCBPQRF</string>
 	<key>signingStyle</key>
-	<string>automatic</string>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>io.robbie.Dispatch</key>
+		<string>Dispatch App Store</string>
+		<key>io.robbie.Dispatch.widgets</key>
+		<string>Dispatch Widgets App Store</string>
+	</dict>
 	<key>uploadSymbols</key>
 	<true/>
 	<key>manageAppVersionAndBuildNumber</key>
