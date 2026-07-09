@@ -209,6 +209,32 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         Task { await replanNow(prefs: prefs, awakeStore: awakeStore, now: now, calendar: calendar) }
     }
 
+    /// One-time stamp-format migration replan (plan 17): the en_US_POSIX pin
+    /// on `isoMinuteFormatter` changes the content-addressed identifiers, so
+    /// the first launch after upgrading must remove-and-reschedule everything
+    /// or requests stamped by the old build are orphaned (the replan's
+    /// removal is by prefix, which is locale-independent — it catches old
+    /// stamps regardless of how their digits were rendered). Guarded by the
+    /// kit's `ScheduleStampVersion` defaults marker: fires exactly once per
+    /// install, and the marker is only advanced HERE, after the replan is
+    /// scheduled. Runs at launch (DispatchApp.init) — foreground `.active`
+    /// replans also run, but this guarantees the migration even if a future
+    /// refactor changes when those fire.
+    func runStampMigrationReplanIfNeeded(defaults: UserDefaults, prefs: NotificationPrefs,
+                                         awakeStore: AwakeStore) {
+        guard ScheduleStampVersion.needsMigrationReplan(in: defaults) else { return }
+        notificationLog.info("stamp format v\(ScheduleStampVersion.current) migration — running one-time full replan")
+        Task {
+            // Marker advances only AFTER the replan completes: a launch that
+            // dies mid-replan retries the migration next launch (replans are
+            // idempotent, so a retry after a completed-but-unmarked replan
+            // is harmless).
+            await replanNow(prefs: prefs, awakeStore: awakeStore)
+            ScheduleStampVersion.markMigrated(in: defaults)
+            notificationLog.info("stamp format migration replan complete — marker advanced to v\(ScheduleStampVersion.current)")
+        }
+    }
+
     /// Async replan: reads pending requests, computes the identifiers to
     /// remove, removes them, and only THEN adds the freshly-planned
     /// requests. This ordering matters — `identifiers` are content-addressed
@@ -868,8 +894,19 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// V2DateFormat — a fresh instance per use rather than a shared static
     /// (which would pin the nonisolated parsing helpers to the main actor).
     /// Construction count is a handful per replan, not a hot loop.
+    ///
+    /// Locale is pinned to `en_US_POSIX` (build-13 review minor): without
+    /// the pin, an unset locale renders the digits per device locale (e.g.
+    /// Eastern Arabic numerals), so stamps for the same minute vary with
+    /// locale and stop matching what the parsing helpers produce. TRADEOFF:
+    /// the pin re-stamps every identifier, so requests scheduled by a
+    /// pre-pin build would be orphaned — `ScheduleStampVersion` (kit,
+    /// tested) makes DispatchApp run one full replan on first launch after
+    /// upgrade, which removes old requests by prefix (locale-independent)
+    /// and re-adds them with pinned stamps.
     private nonisolated static func isoMinuteFormatter() -> DateFormatter {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmm"
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .current

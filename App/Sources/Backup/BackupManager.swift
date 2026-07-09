@@ -58,7 +58,10 @@ final class BackupManager {
         isEnabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         let stored = defaults.double(forKey: Self.lastBackupKey)
         lastBackupDate = stored > 0 ? Date(timeIntervalSince1970: stored) : nil
-        refreshCount()
+        // Off the launch critical path (build-13 review minor): this init
+        // runs inside DispatchApp.init, and the count is a Settings-caption
+        // nicety — list the directory off-main and publish back.
+        refreshCountAsync()
     }
 
     /// Scene-active / report-save hook: backs up only when enabled and the
@@ -123,9 +126,19 @@ final class BackupManager {
         }
     }
 
-    private func refreshCount() {
+    private func refreshCountAsync() {
         guard !isSkipped else { return }
-        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path())) ?? []
-        backupCount = files.filter { BackupRotation.date(fromFilename: $0) != nil }.count
+        let directory = directory
+        Task.detached(priority: .utility) {
+            // URL-based listing (review minor): skips hidden files and
+            // avoids the path-string round trip of the atPath variant.
+            let urls = (try? FileManager.default.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: nil,
+                options: .skipsHiddenFiles)) ?? []
+            let count = urls.count { BackupRotation.date(fromFilename: $0.lastPathComponent) != nil }
+            await MainActor.run {
+                self.backupCount = count
+            }
+        }
     }
 }

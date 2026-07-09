@@ -151,6 +151,13 @@ struct DispatchApp: App {
 
         scheduler.registerCategory()
 
+        // One-time full replan after the stamp formatter's en_US_POSIX pin
+        // (plan 17 hygiene) — see runStampMigrationReplanIfNeeded. Fires
+        // exactly once per install (ScheduleStampVersion marker), logged.
+        scheduler.runStampMigrationReplanIfNeeded(
+            defaults: appDefaults, prefs: notificationPrefs, awakeStore: awakeStore
+        )
+
         AppActions.shared.register(
             surveyPresenter: surveyPresenter,
             awakeStore: awakeStore,

@@ -185,6 +185,16 @@ final class VisitObserver {
             visitLog.info("visit arrival with unknown date — skipped as stale")
             return
         }
+        // KNOWN BIAS (accepted, build-13 review minor): the system can
+        // deliver several queued visits in one burst (e.g. relaunch after
+        // termination), not necessarily in arrival order. This monotonic
+        // last-handled guard keeps only the visits it sees with ascending
+        // arrival dates — once a newer arrival is handled, any older visit
+        // delivered later in the burst is dropped. That's the intended
+        // trade: the prompt asks about where the user is NOW, so the newest
+        // arrival is the only one worth prompting for, and the guard doubles
+        // as the duplicate-delivery defense. A full ledger of handled visit
+        // dates would prompt for stale arrivals, which is worse.
         let lastHandled = Date(timeIntervalSince1970: defaults.double(forKey: Self.lastHandledKey))
         guard arrival > lastHandled else {
             visitLog.info("visit arrival \(arrival, privacy: .public) at/before last-handled — skipped")

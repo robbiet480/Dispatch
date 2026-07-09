@@ -10,6 +10,10 @@ struct ContentView: View {
     @Environment(AppLockStore.self) private var appLockStore
     @State private var onboardingCompleted = false
     @State private var hasCheckedOnboarding = false
+    /// Tracks whether the Weekly Digest sheet is actually on screen (its
+    /// onAppear/onDisappear), for the REVERSE presentation handoff below —
+    /// binding state alone can't distinguish "dismissing" from "gone".
+    @State private var isDigestSheetPresented = false
 
     var body: some View {
         Group {
@@ -62,6 +66,8 @@ struct ContentView: View {
             NavigationStack {
                 WeeklyDigestView()
             }
+            .onAppear { isDigestSheetPresented = true }
+            .onDisappear { isDigestSheetPresented = false }
         }
         // Single choke point: while locked, the survey cover's item is always nil,
         // so it can never appear simultaneously with the lock cover below. The
@@ -77,8 +83,21 @@ struct ContentView: View {
         // `surveyPresenter.request` surviving the teardown (only the setter above
         // clears it), so the request itself is preserved even though the answers
         // captured so far are not.
+        // REVERSE-order handoff (build-13 review minor, the mirror of the
+        // digest-waits-for-survey case above): a survey request arriving
+        // WHILE the digest sheet is up flips the sheet's getter false (the
+        // sheet starts dismissing), but presenting this cover in the same
+        // pass — mid-dismissal, same presentation source — is exactly the
+        // simultaneous-presentation case SwiftUI drops. Gate on the sheet
+        // being fully off screen: `isDigestSheetPresented` is @State, so its
+        // onDisappear flip re-evaluates this getter and the cover presents
+        // itself once the sheet is gone. The digest flag survives (only the
+        // sheet's dismiss setter clears it), so the digest re-presents after
+        // the survey — neither presentation is ever lost, in either order.
         .fullScreenCover(item: Binding(
-            get: { appLockStore.isLocked ? nil : surveyPresenter.request },
+            get: {
+                appLockStore.isLocked || isDigestSheetPresented ? nil : surveyPresenter.request
+            },
             set: { surveyPresenter.request = $0 })) { request in
             SurveyFlowView(kind: request.kind, trigger: request.trigger, overrideDate: request.overrideDate,
                            promptGroupID: request.promptGroupID,
