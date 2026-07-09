@@ -332,6 +332,7 @@ struct TokenEntryView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "clock.arrow.circlepath").imageScale(.small)
+                                .accessibilityHidden(true) // decorative "recent" glyph
                             Text(suggestion)
                         }
                         .padding(.horizontal, 10)
@@ -339,6 +340,8 @@ struct TokenEntryView: View {
                         .background(.quaternary, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(suggestion)
+                    .accessibilityHint("Adds this recent entry.")
                     .accessibilityIdentifier("token-suggestion-\(suggestion)")
                 }
             }
@@ -371,12 +374,15 @@ struct FlowingChips: View {
                         HStack(spacing: 4) {
                             Text(token)
                             Image(systemName: "xmark.circle.fill").imageScale(.small)
+                                .accessibilityHidden(true) // decorative; the action is the button itself
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(.quaternary, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(token)
+                    .accessibilityHint("Removes this entry.")
                 }
             }
         }

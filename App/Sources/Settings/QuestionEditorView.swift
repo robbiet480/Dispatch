@@ -8,6 +8,7 @@ struct QuestionEditorView: View {
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query private var responses: [Response]
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// nil ⇒ creating a new question.
     let question: Question?
@@ -163,7 +164,9 @@ struct QuestionEditorView: View {
                 }
 
                 Section {
-                    HStack(spacing: 10) {
+                    // Three fixed chips in a row clip at accessibility
+                    // Dynamic Type sizes — stack vertically there instead.
+                    scheduleChipLayout {
                         scheduleChip("WAKE", icon: "sunrise.fill", kind: .wake, identifier: "schedule-wake")
                         scheduleChip("DAY", icon: "sun.max.fill", kind: .regular, identifier: "schedule-day")
                         scheduleChip("SLEEP", icon: "moon.fill", kind: .sleep, identifier: "schedule-sleep")
@@ -201,6 +204,18 @@ struct QuestionEditorView: View {
         VisualizationStyle.compatibleStyles(for: type).first?.displayName ?? "None"
     }
 
+    /// Horizontal row of schedule chips normally; a leading-aligned vertical
+    /// stack at accessibility Dynamic Type sizes (three chips no longer fit
+    /// side by side without clipping).
+    @ViewBuilder
+    private func scheduleChipLayout(@ViewBuilder content: () -> some View) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10, content: content)
+        } else {
+            HStack(spacing: 10, content: content)
+        }
+    }
+
     /// A capsule chip that toggles membership of `kind` in the schedule set —
     /// filled when selected, multi-select, ≥1 enforced by `canSave`.
     private func scheduleChip(_ title: String, icon: String, kind: ReportKind, identifier: String) -> some View {
@@ -211,6 +226,7 @@ struct QuestionEditorView: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .imageScale(.small)
+                    .accessibilityHidden(true) // decorative; the title names the chip
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .kerning(1.0)
@@ -223,6 +239,8 @@ struct QuestionEditorView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier)
+        .accessibilityLabel("\(title.capitalized) reports")
+        .accessibilityHint("Toggles whether this question is asked on \(title.lowercased()) reports.")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 

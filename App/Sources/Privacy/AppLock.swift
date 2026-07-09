@@ -186,6 +186,8 @@ struct AppLockView: View {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(.white)
+                    // Decorative — the "Locked" text below carries the state.
+                    .accessibilityHidden(true)
 
                 Text(appName)
                     .font(.title.bold())

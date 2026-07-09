@@ -128,6 +128,9 @@ struct StatusWidgetView: View {
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
+                        // "5 day streak" as one element, not "5" + "DAY STREAK".
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(snapshot.streakDays) day streak")
                     }
                     // The next-prompt block yields its space to the
                     // quick-answer question when one exists.
@@ -140,6 +143,8 @@ struct StatusWidgetView: View {
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Next prompt at \(next.formatted(date: .omitted, time: .shortened))")
                     }
                 }
                 Spacer()
@@ -196,6 +201,7 @@ struct StatusWidgetView: View {
                 .background(.tint.opacity(0.2), in: Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityHint("Answers the question and files a report.")
     }
 
     private var header: some View {
@@ -216,6 +222,8 @@ struct StatusWidgetView: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
+            // Read time + caption as one element, in visual order.
+            .accessibilityElement(children: .combine)
         } else {
             Text("No reports yet")
                 .font(.headline)
@@ -239,6 +247,9 @@ struct StatusWidgetView: View {
             Text("TODAY")
                 .font(.system(size: 8, weight: .semibold))
         }
+        // One element — otherwise VoiceOver reads "Hexagon, 3, TODAY".
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(todayLine)
     }
 
     private var rectangular: some View {
@@ -259,6 +270,9 @@ struct StatusWidgetView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // One utterance for the whole rectangular face (it's a single tap
+        // target); keeps VoiceOver from stopping on the app-name label.
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

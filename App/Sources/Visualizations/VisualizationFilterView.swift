@@ -109,12 +109,15 @@ struct VisualizationFilterView: View {
                         HStack(spacing: 4) {
                             Text(criterion.displayText)
                             Image(systemName: "xmark.circle.fill").imageScale(.small)
+                                .accessibilityHidden(true) // decorative; the action is the button itself
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(.quaternary, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(criterion.displayText)
+                    .accessibilityHint("Removes this filter.")
                 }
             }
         }

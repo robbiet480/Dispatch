@@ -238,6 +238,7 @@ struct ReportDetailView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(Color.white.opacity(0.25), in: Capsule())
+            .accessibilityLabel("Backdated report") // "BACKDATED" alone reads without context
             .accessibilityIdentifier("backdated-chip")
     }
 

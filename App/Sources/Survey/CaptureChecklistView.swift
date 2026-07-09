@@ -36,6 +36,9 @@ struct CaptureChecklistView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 12) {
                         Image(systemName: icon).frame(width: 24)
+                            // Decorative — SF Symbols carry derived labels
+                            // ("Map Pin") that would precede the row text.
+                            .accessibilityHidden(true)
                         Text(text(for: kind, label: label))
                             .font(.subheadline.weight(.semibold))
                             .kerning(1.2)
@@ -48,6 +51,14 @@ struct CaptureChecklistView: View {
                             expandedKind = (expandedKind == kind) ? nil : kind
                         }
                     }
+                    // One element per row (the state is in the row text);
+                    // failed/disabled rows are tappable disclosures — expose
+                    // the button trait + a hint ONLY on those, so captured
+                    // rows stay plain text to VoiceOver.
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(isTappable(kind) ? .isButton : [])
+                    .accessibilityHint(isTappable(kind)
+                        ? Text("Shows why this sensor wasn't captured.") : Text(""))
                     .accessibilityIdentifier("sensor-row-\(kind.rawValue)")
 
                     if expandedKind == kind, let hint = hint(for: kind) {

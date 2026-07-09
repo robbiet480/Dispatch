@@ -78,17 +78,28 @@ struct OptionSharesBarsView: View {
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.white)
                                     .lineLimit(2)
+                                    // Bands have data-driven fixed heights
+                                    // (min 28pt) — at accessibility Dynamic
+                                    // Type sizes the label must shrink
+                                    // rather than clip against the band.
+                                    .minimumScaleFactor(0.5)
                                 Spacer()
                                 Text(percentString(entry.share))
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
                             }
                             .padding(10)
                         }
                     }
                     .frame(height: max(proxy.size.height * entry.share, 28))
                     .frame(maxWidth: .infinity)
+                    // One element per band: "No, 69 percent" — the visual
+                    // encodes share as bar height, which VoiceOver can't see.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(entry.option), \(Int((entry.share * 100).rounded())) percent")
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
@@ -164,6 +175,11 @@ struct NumericSeriesView: View {
                         .foregroundStyle(.white.opacity(0.2))
                 }
             }
+            // VoiceOver summary for the line chart (the marks themselves
+            // aren't individually meaningful): count, range, latest, average.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Values over time")
+            .accessibilityValue(accessibilitySummary)
         }
         .accessibilityIdentifier("viz-numeric-series")
     }
@@ -172,6 +188,21 @@ struct NumericSeriesView: View {
         average.truncatingRemainder(dividingBy: 1) == 0
             ? String(format: "%.0f", average)
             : String(format: "%.1f", average)
+    }
+
+    private var accessibilitySummary: String {
+        guard let minValue = points.map(\.value).min(),
+              let maxValue = points.map(\.value).max(),
+              let latest = points.max(by: { $0.date < $1.date })?.value else {
+            return "No data"
+        }
+        func short(_ value: Double) -> String {
+            value.truncatingRemainder(dividingBy: 1) == 0
+                ? String(format: "%.0f", value)
+                : String(format: "%.1f", value)
+        }
+        return "\(points.count) entries, from \(short(minValue)) to \(short(maxValue)), "
+            + "latest \(short(latest)), average \(formattedAverage)"
     }
 }
 
@@ -197,8 +228,15 @@ struct TokenFrequencyView: View {
                         .kerning(1.5)
                         .foregroundStyle(.white.opacity(0.7))
                 }
+                // "42 answers" instead of two separate elements ("42",
+                // "ANSWERS") that read out of context.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(distinctCount) answers")
                 joinedList
                     .font(.subheadline)
+                    // The parenthesized counts read poorly ("Coding (12),") —
+                    // speak "Coding, 12 times" per item instead.
+                    .accessibilityLabel(spokenList)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
@@ -217,6 +255,13 @@ struct TokenFrequencyView: View {
             let count = Text(" (\(entry.count))").font(.caption).foregroundStyle(.white.opacity(0.55))
             return Text("\(partial)\(separator)\(name)\(count)")
         }
+    }
+
+    private var spokenList: String {
+        items.map { entry in
+            entry.count == 1 ? "\(entry.text), once" : "\(entry.text), \(entry.count) times"
+        }
+        .joined(separator: "; ")
     }
 }
 
@@ -243,6 +288,9 @@ struct RankedRowsView: View {
                     .background(Color.white.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .padding(.bottom, 4)
+                    // "Home, 12 reports" as one element per ranked row.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(row.text), \(row.count) report\(row.count == 1 ? "" : "s")")
                 }
             }
         }
@@ -270,6 +318,10 @@ struct RecentNotesView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    // Date + note text as one element, date last (the note
+                    // is the content; the date is context).
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(note.text), \(note.date.formatted(date: .abbreviated, time: .omitted))")
                 }
             }
         }
