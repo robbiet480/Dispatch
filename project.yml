@@ -16,6 +16,7 @@ targets:
       - path: App/PrivacyInfo.xcprivacy
     dependencies:
       - package: DispatchKit
+      - target: DispatchWidgets
     settings:
       base:
         PRODUCT_NAME: Dispatch
@@ -42,6 +43,31 @@ targets:
         # UIBackgroundModes (remote-notification for CloudKit silent pushes),
         # which has no INFOPLIST_KEY_* build-setting equivalent.
         INFOPLIST_FILE: App/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+  DispatchWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets/Sources
+    dependencies:
+      - package: DispatchKit
+    settings:
+      base:
+        PRODUCT_NAME: DispatchWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.widgets
+        GENERATE_INFOPLIST_FILE: YES
+        # Extension CFBundleShortVersionString/CFBundleVersion must match the
+        # host app's or App Store validation rejects the archive.
+        CURRENT_PROJECT_VERSION: 7
+        MARKETING_VERSION: 0.1.0
+        DEVELOPMENT_TEAM: UTQFCBPQRF
+        SWIFT_VERSION: 6.0
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: Widgets/DispatchWidgets.entitlements
+        INFOPLIST_KEY_CFBundleDisplayName: Dispatch
+        # Partial plist merge (same pattern as the app target's
+        # UIBackgroundModes): NSExtension has no INFOPLIST_KEY_* equivalent.
+        INFOPLIST_FILE: Widgets/Info.plist
         TARGETED_DEVICE_FAMILY: "1"
   DispatchUITests:
     type: bundle.ui-testing

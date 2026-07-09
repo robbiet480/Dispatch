@@ -150,6 +150,15 @@ struct DispatchApp: App {
                 .environment(remoteChangeObserver)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
+                .onOpenURL { url in
+                    // dispatch://report[?trigger=control] — widget "New
+                    // Report" links (trigger=widget) and the Control Center
+                    // control (trigger=control, via OpenURLIntent).
+                    guard url.scheme == "dispatch", url.host() == "report" else { return }
+                    let trigger: ReportTrigger =
+                        url.query()?.contains("trigger=control") == true ? .control : .widget
+                    surveyPresenter.request = SurveyRequest(kind: .regular, trigger: trigger)
+                }
                 .onAppear {
                     if appDefaults.bool(forKey: OnboardingFlag.key) {
                         notificationScheduler.requestPermissionIfNeeded(prefs: notificationPrefs, awakeStore: awakeStore)
@@ -168,6 +177,11 @@ struct DispatchApp: App {
                     switch newPhase {
                     case .active:
                         notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+                        // Foreground poke: sync may have changed the shared
+                        // store while the widget had no reason to refresh.
+                        if !isTestEnvironment {
+                            WidgetRefresher.reload()
+                        }
                         appLockStore.evaluateReturnFromBackground(backgroundedAt: backgroundedAt)
                         backgroundedAt = nil
                         // Decide first, then adjust the cover in the same
@@ -280,10 +294,14 @@ struct DispatchApp: App {
                 fatalError("failed to open in-memory model container: \(error)")
             }
         }
+        // Plan 14: the store lives in the App Group container so the widget
+        // extension can query it directly. Resolution runs the one-time
+        // legacy → App Group migration BEFORE any container is built.
+        let storeURL = resolveStoreURL()
         if syncEnabled {
             do {
                 let config = ModelConfiguration(
-                    schema: schema,
+                    schema: schema, url: storeURL,
                     cloudKitDatabase: .private(SyncPolicy.containerIdentifier)
                 )
                 let container = try ModelContainer(for: schema, configurations: [config])
@@ -294,7 +312,7 @@ struct DispatchApp: App {
             }
         }
         do {
-            let config = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
+            let config = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
             let container = try ModelContainer(for: schema, configurations: [config])
             syncLog.info("local (non-CloudKit) container active")
             return (container, cloudKitActive: false)
@@ -304,6 +322,32 @@ struct DispatchApp: App {
             // this is not a sync failure.
             fatalError("failed to open local model container: \(error)")
         }
+    }
+
+    /// Where the on-disk store lives, running the one-time legacy →
+    /// App Group migration first (plan 14: widgets read the store directly,
+    /// so it must live in the shared container). Never-fail-launch holds:
+    /// a missing App Group entitlement or a failed move logs loudly and
+    /// falls back to the legacy sandbox URL — widgets then show their
+    /// placeholder, but the app runs with its data intact.
+    private static func resolveStoreURL() -> URL {
+        let legacy = StoreLocation.legacyURL()
+        guard let groupURL = StoreLocation.appGroupURL() else {
+            migrationLog.error("APP GROUP CONTAINER UNAVAILABLE — running from legacy store URL")
+            return legacy
+        }
+        switch StoreLocation.migrate(from: legacy, to: groupURL) {
+        case .migrated:
+            migrationLog.info("store migrated into App Group container")
+        case .alreadyInPlace:
+            break
+        case .freshInstall:
+            migrationLog.info("fresh install — creating store in App Group container")
+        case .failed(let reason):
+            migrationLog.error("STORE MIGRATION FAILED — running from legacy store URL: \(reason, privacy: .public)")
+            return legacy
+        }
+        return groupURL
     }
 
     private func seedDefaultQuestionsIfNeeded() {

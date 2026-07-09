@@ -190,7 +190,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
 
         center.removePendingNotificationRequests(withIdentifiers: identifiersToRemove)
 
-        guard awakeStore.isAwake else { return }
+        guard awakeStore.isAwake else {
+            // Asleep ⇒ no prompts scheduled: clear the widget's "next prompt"
+            // and let it re-render.
+            if !isTestEnvironment {
+                WidgetRefresher.replanCompleted(nextPromptDate: nil)
+            }
+            return
+        }
 
         let allPlannedDates = plannedDates(prefs: prefs, now: now, calendar: calendar)
         let dates = allPlannedDates.filter { $0 > now }
@@ -269,6 +276,19 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                     notificationLog.error("failed to schedule group prompt \(identifier, privacy: .public): \(error, privacy: .public)")
                 }
             }
+        }
+
+        // Publish the earliest planned prompt (global or group) for the
+        // widget's "next prompt" line, then poke timelines. Nags below are
+        // follow-ups to prompts, never the next prompt itself.
+        if !isTestEnvironment {
+            let nextGlobal = dates.prefix(allocation.global).first
+            let nextGroup = groupPlans.compactMap { plan in
+                plan.future.prefix(allocation.count(forGroup: plan.group.uniqueIdentifier)).first
+            }.min()
+            WidgetRefresher.replanCompleted(
+                nextPromptDate: [nextGlobal, nextGroup].compactMap(\.self).min()
+            )
         }
 
         guard prefs.nagEnabled, allocation.nagsPerPrompt >= 0 else { return }
@@ -632,6 +652,9 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 answers: [draft],
                 in: context
             )
+            if !isTestEnvironment {
+                WidgetRefresher.reload()
+            }
         } catch {
             notificationLog.error("failed to save quick answer report: \(error, privacy: .public)")
         }

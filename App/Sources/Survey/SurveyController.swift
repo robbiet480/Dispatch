@@ -106,6 +106,9 @@ final class SurveyController {
         SpotlightIndexer.index(report: report)
 
         guard !isTestEnvironment else { return }
+        // Widgets read the shared store directly but get no change
+        // notifications — poke them after every report save.
+        WidgetRefresher.reload()
         let savedQuestions = questions
         Task {
             await StateOfMindWriter.write(for: report, in: savedQuestions, context: context)

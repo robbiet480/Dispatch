@@ -11,5 +11,18 @@
     <array>
         <string>remote-notification</string>
     </array>
+    <!-- dispatch:// deep links — widget "New Report" links and the Control
+         Center control (via OpenURLIntent) route through onOpenURL. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>io.robbie.Dispatch</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>dispatch</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
