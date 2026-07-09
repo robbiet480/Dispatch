@@ -153,6 +153,9 @@ struct DataSettingsView: View {
                 SpotlightIndexer.rebuildAll(reports: reports)
                 await MainActor.run {
                     isImportRunning = false
+                    // Widgets read the shared store directly but get no
+                    // change notifications — poke them after an import lands.
+                    WidgetRefresher.reload()
                     presentAlert(
                         "Imported \(summary.questionsImported) questions, \(summary.reportsImported) reports, "
                             + "\(summary.responsesImported) responses. Skipped: \(summary.skipped)."

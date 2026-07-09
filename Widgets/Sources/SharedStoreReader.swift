@@ -21,6 +21,15 @@ enum SharedStoreReader {
     /// pure `WidgetSnapshot.compute`. Returns nil when the shared store does
     /// not exist yet (app never launched post-migration, or the migration
     /// fell back to the legacy sandbox URL) — the widget shows a placeholder.
+    ///
+    /// KNOWN RACE (accepted, see `StoreLocation.migrate`): this
+    /// `fileExists` check can land in the tiny window between the app moving
+    /// the main store and its sidecars during the one-time migration. Worst
+    /// case the read-only open fails or reads a store missing its WAL tail —
+    /// the widget renders its placeholder for one timeline cycle and the
+    /// next reload (the app pokes on every save/replan/foreground) is
+    /// correct; the app-side migration rollback/fail-forward guarantees no
+    /// persistent split state.
     static func snapshot(now: Date = Date()) -> WidgetSnapshot? {
         guard let storeURL = StoreLocation.appGroupURL(),
               FileManager.default.fileExists(atPath: storeURL.path) else {

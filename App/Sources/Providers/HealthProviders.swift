@@ -180,8 +180,10 @@ final class HealthKitReader: Sendable {
 
     /// Today's LOGGED medication dose events (taken/skipped — reminder
     /// bookkeeping statuses are dropped) as `medication.<status>.<name>`
-    /// readings. Unauthorized/no-grant states surface as thrown errors or an
-    /// empty result — the provider degrades to `.unavailable`, never crashes.
+    /// readings. Unauthorized/denied states surface as thrown query errors
+    /// (the provider degrades to `.unavailable`, never crashes); granted with
+    /// nothing logged returns an EMPTY array, which the provider treats as a
+    /// zero-reading success.
     func medicationDosesToday(now: Date) async throws -> [HealthReading] {
         let medications = try await userAnnotatedMedications()
         var nameByConcept: [String: String] = [:]
@@ -404,11 +406,14 @@ struct HealthMetricProvider: SensorProvider {
         case .healthMedications:
             // Authorization happened (if ever) via the dedicated per-object
             // call in the permission cascade — NEVER via the bulk read set
-            // above (crash history; see readTypes). No grant / no data
-            // degrades to unavailable via the thrown error below.
-            let doses = try await reader.medicationDosesToday(now: now)
-            guard !doses.isEmpty else { throw ProviderError("no medication doses logged today") }
-            return .health(doses)
+            // above (crash history; see readTypes). Denial/auth errors
+            // degrade to unavailable via thrown query errors, but granted
+            // with ZERO doses logged today is SUCCESS with zero readings —
+            // the sensor is default-ON, so for every non-medication user an
+            // empty day is the normal case, not a detection failure. The
+            // checklist and report detail render nothing for an empty
+            // success.
+            return .health(try await reader.medicationDosesToday(now: now))
         default:
             throw ProviderError("not a health metric: \(kind.rawValue)")
         }

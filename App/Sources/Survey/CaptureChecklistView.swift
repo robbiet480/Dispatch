@@ -18,9 +18,21 @@ struct CaptureChecklistView: View {
         (.healthMedications, "pills", "MEDICATIONS"),
     ]
 
+    /// Medications captured with ZERO readings is the granted-but-nothing-
+    /// logged success case (default-ON sensor, most users log no doses) —
+    /// showing "MEDICATIONS CAPTURED" or a failure row for it would be
+    /// noise, so the row disappears entirely.
+    private var visibleRows: [(SensorKind, String, String)] {
+        Self.rows.filter { kind, _, _ in
+            guard kind == .healthMedications,
+                  case .captured(.health(let readings)) = outcomes[kind] else { return true }
+            return !readings.isEmpty
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            ForEach(Self.rows, id: \.0) { kind, icon, label in
+            ForEach(visibleRows, id: \.0) { kind, icon, label in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 12) {
                         Image(systemName: icon).frame(width: 24)

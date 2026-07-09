@@ -183,6 +183,9 @@ struct ReportsListView: View {
             context.delete(report)
         }
         try? context.save()
+        // Widgets read the shared store directly but get no change
+        // notifications — poke them after a deletion, same as report save.
+        WidgetRefresher.reload()
     }
 }
 

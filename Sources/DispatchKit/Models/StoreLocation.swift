@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let storeLog = Logger(subsystem: "io.robbie.Dispatch", category: "store-location")
 
 /// Where the SwiftData store lives, shared by the app and the widget
 /// extension (plan 14 amendment: the store moves into the App Group container
@@ -34,6 +37,13 @@ public enum StoreLocation {
         /// Move failed (rolled back where possible); the caller MUST fall
         /// back to the legacy URL — never-fail-launch holds.
         case failed(String)
+        /// A sidecar move failed AND rolling the already-moved main store
+        /// back also failed. Failed FORWARD: remaining sidecars were force-
+        /// moved (best effort) so the store and its WAL stay co-located at
+        /// the destination — the alternative (store at destination, WAL
+        /// orphaned at legacy) is silent data loss on the next open. The
+        /// caller MUST use the destination URL and log loudly.
+        case failedForward(String)
     }
 
     /// One-time move of `default.store` (+ `-wal`/`-shm` sidecars) from
@@ -42,9 +52,29 @@ public enum StoreLocation {
     /// rollback on partial failure so the store is never split across
     /// locations. CloudKit mirroring metadata lives inside the store and
     /// survives a path move.
+    ///
+    /// KNOWN RACE (accepted): the widget extension may run its
+    /// `fileExists` + read-only open (SharedStoreReader) in the window
+    /// between the main-store move landing and the sidecar moves. The
+    /// window is a couple of same-volume renames during a single app
+    /// launch's init, the widget only ever reads (it cannot corrupt the
+    /// store), and a failed widget open just renders the placeholder until
+    /// the next timeline reload. On a migration failure the rollback (or
+    /// fail-forward) still leaves store+WAL co-located, and the app retries
+    /// the migration on next launch — so no persistent bad state survives.
     public static func migrate(from legacy: URL, to destination: URL,
                                fileManager: FileManager = .default) -> MigrationOutcome {
-        if fileManager.fileExists(atPath: destination.path) { return .alreadyInPlace }
+        if fileManager.fileExists(atPath: destination.path) {
+            // Leftover legacy sidecars next to an already-migrated store
+            // mean a previous partial move (e.g. a fail-forward run that
+            // could not move every sidecar); the destination store no longer
+            // matches them, so they're stale — but their presence is worth
+            // shouting about on every launch until someone looks.
+            for suffix in sidecarSuffixes where fileManager.fileExists(atPath: legacy.path + suffix) {
+                storeLog.error("LEFTOVER LEGACY SIDECAR at \(legacy.path + suffix, privacy: .public) — stale, store already migrated to destination")
+            }
+            return .alreadyInPlace
+        }
         guard fileManager.fileExists(atPath: legacy.path) else { return .freshInstall }
 
         do {
@@ -66,8 +96,38 @@ public enum StoreLocation {
                 try fileManager.moveItem(at: pair.source, to: pair.target)
                 moved.append(pair)
             } catch {
+                var rollbackErrors: [String] = []
                 for step in moved.reversed() {
-                    try? fileManager.moveItem(at: step.target, to: step.source)
+                    do {
+                        try fileManager.moveItem(at: step.target, to: step.source)
+                    } catch let rollbackError {
+                        rollbackErrors.append("\(step.target.lastPathComponent): \(rollbackError)")
+                    }
+                }
+                guard rollbackErrors.isEmpty else {
+                    // Rollback ALSO failed — some of the store is stuck at
+                    // the destination (typically the main store file). A
+                    // half-rolled-back state where the next launch opens the
+                    // destination store WITHOUT its WAL is silent data loss,
+                    // so fail FORWARD: force-move everything still at the
+                    // legacy URL (best effort, obstructions removed — the
+                    // destination had no store, so anything in the way is
+                    // orphaned garbage) to keep store + WAL co-located.
+                    for remaining in pairs where fileManager.fileExists(atPath: remaining.source.path) {
+                        if fileManager.fileExists(atPath: remaining.target.path) {
+                            try? fileManager.removeItem(at: remaining.target)
+                        }
+                        do {
+                            try fileManager.moveItem(at: remaining.source, to: remaining.target)
+                        } catch let forwardError {
+                            storeLog.error("FAIL-FORWARD move of \(remaining.source.lastPathComponent, privacy: .public) failed: \(forwardError, privacy: .public)")
+                        }
+                    }
+                    return .failedForward(
+                        "move of \(pair.source.lastPathComponent) failed (\(error)); "
+                            + "rollback failed (\(rollbackErrors.joined(separator: "; "))); "
+                            + "failed forward to keep store and WAL co-located at destination"
+                    )
                 }
                 return .failed("move of \(pair.source.lastPathComponent) failed: \(error)")
             }

@@ -50,6 +50,7 @@ targets:
     platform: iOS
     sources:
       - Widgets/Sources
+      - path: Widgets/PrivacyInfo.xcprivacy
     dependencies:
       - package: DispatchKit
     settings:

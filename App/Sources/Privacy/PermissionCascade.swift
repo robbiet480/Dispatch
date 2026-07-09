@@ -28,24 +28,34 @@ private let cascadeLog = Logger(subsystem: "io.robbie.Dispatch", category: "perm
 final class PermissionCascade {
     private(set) var isRequesting = false
 
+    /// Defaults flag marking that the Motion + medications cascade steps
+    /// (added after build 7) have been requested at least once — set by
+    /// `requestAll()` (fresh installs, onboarding) and by
+    /// `runUpgradeTopUpIfNeeded()` (existing installs that completed
+    /// onboarding before these steps existed).
+    static let motionMedicationsRequestedKey = "permissions.motionMedicationsRequested"
+
     let isTestEnvironment: Bool
     private let locationRequester: CascadeLocationRequester
     private let healthReader: HealthKitReader
     private let notificationScheduler: NotificationScheduler
     private let notificationPrefs: NotificationPrefs
     private let awakeStore: AwakeStore
+    private let defaults: UserDefaults
 
     init(
         healthReader: HealthKitReader,
         notificationScheduler: NotificationScheduler,
         notificationPrefs: NotificationPrefs,
         awakeStore: AwakeStore,
+        defaults: UserDefaults = .standard,
         isTestEnvironment: Bool? = nil
     ) {
         self.healthReader = healthReader
         self.notificationScheduler = notificationScheduler
         self.notificationPrefs = notificationPrefs
         self.awakeStore = awakeStore
+        self.defaults = defaults
         self.locationRequester = CascadeLocationRequester()
         self.isTestEnvironment = isTestEnvironment ?? {
             let arguments = ProcessInfo.processInfo.arguments
@@ -72,6 +82,29 @@ final class PermissionCascade {
         await requestPhotos()
         await requestFocus()
         requestNotifications()
+        // Full cascade covers the post-build-7 Motion/medications steps, so
+        // the upgrade top-up below must never re-run them.
+        defaults.set(true, forKey: Self.motionMedicationsRequestedKey)
+    }
+
+    /// One-time top-up for installs that completed onboarding BEFORE the
+    /// Motion and medications cascade steps existed: their `requestAll()`
+    /// already ran, so those two dialogs would otherwise ambush the next
+    /// capture (Motion) or silently never be requested (medications). Runs
+    /// JUST the new steps, sequentially awaited like the full cascade, then
+    /// sets the same defaults flag `requestAll()` sets. Callers gate on the
+    /// onboarding-complete flag; fresh installs get the flag from
+    /// `requestAll()` and skip this entirely. No-op in test mode.
+    func runUpgradeTopUpIfNeeded() async {
+        guard !isTestEnvironment else { return }
+        guard !defaults.bool(forKey: Self.motionMedicationsRequestedKey) else { return }
+        guard !isRequesting else { return }
+        isRequesting = true
+        defer { isRequesting = false }
+
+        await requestMotion()
+        await requestMedications()
+        defaults.set(true, forKey: Self.motionMedicationsRequestedKey)
     }
 
     private func requestLocation() async {
@@ -105,11 +138,20 @@ final class PermissionCascade {
     /// requestAuthorization API — the permission dialog fires on the first
     /// query. Issue a tiny bounded query here so the Motion dialog takes its
     /// place IN SEQUENCE instead of ambushing the first report capture.
+    /// The query is issued directly (not via `PedometerReader`, which
+    /// deliberately refuses to query while `.notDetermined` so capture paths
+    /// can never trigger this dialog) — this is the ONE place allowed to
+    /// query in the undetermined state.
     private func requestMotion() async {
         guard CMPedometer.isFloorCountingAvailable(),
               CMPedometer.authorizationStatus() == .notDetermined else { return }
         let now = Date()
-        _ = await PedometerReader.floorsDescended(from: now.addingTimeInterval(-60), to: now)
+        let pedometer = CMPedometer()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            pedometer.queryPedometerData(from: now.addingTimeInterval(-60), to: now) { _, _ in
+                continuation.resume()
+            }
+        }
     }
 
     private func requestMicrophone() async {

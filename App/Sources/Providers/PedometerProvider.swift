@@ -9,17 +9,21 @@ private let pedometerLog = Logger(subsystem: "io.robbie.Dispatch", category: "pe
 /// flightsClimbed but no descended equivalent — original Reporter's
 /// "7 STAIRCASES UP · 2 DOWN" needs Core Motion). Strictly optional
 /// enrichment: any unavailability (no barometer hardware, Motion permission
-/// denied/restricted, query error, nil floorsDescended) degrades to nil and
-/// the flights reading stays climbed-only with unchanged display.
+/// denied/restricted/undetermined, query error, nil floorsDescended)
+/// degrades to nil and the flights reading stays climbed-only with
+/// unchanged display.
 enum PedometerReader {
     static func floorsDescended(from start: Date, to end: Date) async -> Double? {
         guard CMPedometer.isFloorCountingAvailable() else { return nil }
         switch CMPedometer.authorizationStatus() {
-        case .denied, .restricted:
-            return nil
-        case .notDetermined, .authorized:
+        case .authorized:
             break
-        @unknown default:
+        default:
+            // Includes `.notDetermined`: querying while undetermined would
+            // fire the Motion permission dialog mid-capture. The dialog is
+            // OWNED by PermissionCascade.requestMotion (sequenced, awaited);
+            // no capture path may ever ambush the user with it. Until the
+            // cascade has run, the reading simply degrades to climbed-only.
             return nil
         }
         let pedometer = CMPedometer()

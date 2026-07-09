@@ -81,6 +81,7 @@ struct DispatchApp: App {
             notificationScheduler: scheduler,
             notificationPrefs: notificationPrefs,
             awakeStore: awakeStore,
+            defaults: appDefaults,
             isTestEnvironment: isTestEnvironment
         )
 
@@ -155,8 +156,10 @@ struct DispatchApp: App {
                     // Report" links (trigger=widget) and the Control Center
                     // control (trigger=control, via OpenURLIntent).
                     guard url.scheme == "dispatch", url.host() == "report" else { return }
-                    let trigger: ReportTrigger =
-                        url.query()?.contains("trigger=control") == true ? .control : .widget
+                    let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                        .queryItems ?? []
+                    let isControl = queryItems.contains { $0.name == "trigger" && $0.value == "control" }
+                    let trigger: ReportTrigger = isControl ? .control : .widget
                     surveyPresenter.request = SurveyRequest(kind: .regular, trigger: trigger)
                 }
                 .onAppear {
@@ -171,6 +174,17 @@ struct DispatchApp: App {
                     // by now, so raise the lock window before content is seen.
                     if appLockStore.isLocked {
                         privacyCoverWindow.show()
+                    }
+                }
+                .task {
+                    // Upgrade-install permission top-up: existing installs
+                    // completed onboarding before the Motion/medications
+                    // cascade steps existed, so run JUST those two (once,
+                    // defaults-flag-gated inside). Post-onboarding installs
+                    // only — fresh installs get both via the onboarding
+                    // cascade, which sets the same flag. Test-gated inside.
+                    if appDefaults.bool(forKey: OnboardingFlag.key) {
+                        await permissionCascade.runUpgradeTopUpIfNeeded()
                     }
                 }
                 .onChange(of: scenePhase) { oldPhase, newPhase in
@@ -346,6 +360,11 @@ struct DispatchApp: App {
         case .failed(let reason):
             migrationLog.error("STORE MIGRATION FAILED — running from legacy store URL: \(reason, privacy: .public)")
             return legacy
+        case .failedForward(let reason):
+            // Rollback failed too, so the store (and, force-moved, its WAL)
+            // ended up at the destination — run from there; the legacy URL
+            // no longer holds a coherent store.
+            migrationLog.error("STORE MIGRATION FAILED FORWARD — running from App Group store URL: \(reason, privacy: .public)")
         }
         return groupURL
     }

@@ -16,6 +16,7 @@ struct WeeklyDigestView: View {
     @State private var source: DigestNarrativeSource?
     @State private var isGenerating = false
     @State private var generationTask: Task<Void, Never>?
+    @State private var generationID = UUID()
 
     private var theme: Theme { themeStore.theme }
     private var isTestEnvironment: Bool {
@@ -189,6 +190,12 @@ struct WeeklyDigestView: View {
 
     private func regenerate(with stats: DigestStats) {
         generationTask?.cancel()
+        // Tag this generation: a cancelled generation's already-queued
+        // onPartial hop (MainActor.run) can land AFTER a fresh generation
+        // started, so cancellation alone can't stop a stale partial from
+        // overwriting the new narrative — every write checks the tag.
+        let id = UUID()
+        generationID = id
         isGenerating = true
         narrative = ""
         source = nil
@@ -197,9 +204,10 @@ struct WeeklyDigestView: View {
             let result = await DigestGenerator.narrative(
                 for: stats, isTestEnvironment: testEnvironment
             ) { partial in
+                guard generationID == id else { return }
                 narrative = partial
             }
-            guard !Task.isCancelled else { return }
+            guard generationID == id, !Task.isCancelled else { return }
             narrative = result.text
             source = result.source
             isGenerating = false
