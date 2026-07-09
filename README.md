@@ -35,6 +35,9 @@ Reporter exports.
 - **Import & export** — bring in an original Reporter export or a
   Dispatch export, and export your data back out as JSON or CSV at any
   time. Everything lives on-device; there is no backend server.
+- **iCloud sync** — reports, questions, prompt groups, and vocabulary
+  sync across your devices through your private iCloud database. See
+  [iCloud sync](#icloud-sync).
 
 ## Requirements
 
@@ -68,6 +71,43 @@ If you build with a free-tier team, Xcode will drop entitlements it
 can't provision; Dispatch degrades gracefully in every such case
 (weather, Health, and Focus context are omitted from reports) rather
 than crash.
+
+## iCloud sync
+
+Dispatch mirrors its SwiftData store to the private CloudKit database
+`iCloud.io.robbie.Dispatch` using SwiftData's built-in CloudKit support —
+no custom sync engine, no server of ours.
+
+**What syncs:** reports (with all responses and sensor context),
+questions, prompt groups, and the token/people vocabulary.
+
+**What stays device-local** (deliberately, in UserDefaults): nag state
+(`lastActedAt` — each device nags for its own delivered prompts),
+notification preferences (alerts per day, distribution, scheduled times,
+nag settings), the awake/asleep state, theme, units, Face ID app lock,
+onboarding progress, sensor toggles, visualization filters, and the
+iCloud Sync toggle itself. Notification schedules are re-planned per
+device from the synced questions and groups.
+
+**Toggle semantics:** Settings → Data → iCloud has an "iCloud Sync"
+toggle (default ON). It takes effect after reopening Dispatch — the
+store is chosen once at launch; swapping it under live views mid-flight
+is deliberately avoided. Turning sync off keeps all data on-device;
+export remains the manual escape hatch. If CloudKit isn't available at
+launch (no iCloud account, missing container), Dispatch logs the reason
+(OSLog category `sync`) and falls back to the local store — the app
+never fails to launch over sync.
+
+**Privacy:** the private CloudKit database only. Nothing is shared,
+public, or visible to anyone but the signed-in iCloud account.
+
+**If you fork this:** create your own iCloud container in the developer
+portal, update the identifier in `SyncPolicy.containerIdentifier` and
+`App/Dispatch.entitlements`, and — the classic trap — after the first
+run against the Development environment, open CloudKit Console and
+**deploy the schema to Production**. TestFlight/App Store builds sync
+against Production; skipping the deploy makes sync a silent no-op there
+even though it works fine from Xcode.
 
 ## Importing an original Reporter export
 
