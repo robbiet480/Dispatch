@@ -123,6 +123,14 @@ struct DispatchApp: App {
             notificationPrefs: notificationPrefs
         )
 
+        // Control Center control: its OpenIntent's perform() runs in THIS
+        // process (dual target membership) and routes through the same
+        // AppActions → SurveyPresenter path as StartReportIntent, so the
+        // survey presentation stays behind ContentView's lock-gated cover.
+        StartReportControlIntent.startReportInApp = {
+            AppActions.shared.surveyPresenter?.request = SurveyRequest(kind: .regular, trigger: .control)
+        }
+
         // Register the workout-end observer at LAUNCH, not just onAppear:
         // HealthKit background delivery relaunches a terminated app headless
         // (no scene, ContentView.onAppear never runs), so the HKObserverQuery
@@ -152,15 +160,15 @@ struct DispatchApp: App {
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onOpenURL { url in
-                    // dispatch://report[?trigger=control] — widget "New
-                    // Report" links (trigger=widget) and the Control Center
-                    // control (trigger=control, via OpenURLIntent).
+                    // dispatch://report — home/lock screen WIDGET TAPS only
+                    // (widgetURL/Link). Per Apple's widget docs ("Respond to
+                    // user interactions"), tap-to-open-app from a widget is
+                    // URL-based by design, so the scheme stays for those. The
+                    // Control Center control no longer routes through here —
+                    // it uses StartReportControlIntent (an OpenIntent in both
+                    // targets) whose perform() runs in-app.
                     guard url.scheme == "dispatch", url.host() == "report" else { return }
-                    let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                        .queryItems ?? []
-                    let isControl = queryItems.contains { $0.name == "trigger" && $0.value == "control" }
-                    let trigger: ReportTrigger = isControl ? .control : .widget
-                    surveyPresenter.request = SurveyRequest(kind: .regular, trigger: trigger)
+                    surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .widget)
                 }
                 .onAppear {
                     if appDefaults.bool(forKey: OnboardingFlag.key) {

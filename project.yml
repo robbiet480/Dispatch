@@ -50,6 +50,12 @@ targets:
     platform: iOS
     sources:
       - Widgets/Sources
+      # Dual target membership (Apple: "Creating controls to perform actions
+      # across the system" → "Open your app with a control"): the Control
+      # Center intent must be compiled into BOTH the app (via App/Sources
+      # above) and this extension, so the system opens the app and runs
+      # perform() in the app process.
+      - path: App/Sources/Intents/StartReportControlIntent.swift
       - path: Widgets/PrivacyInfo.xcprivacy
     dependencies:
       - package: DispatchKit

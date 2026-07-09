@@ -11,8 +11,11 @@
     <array>
         <string>remote-notification</string>
     </array>
-    <!-- dispatch:// deep links — widget "New Report" links and the Control
-         Center control (via OpenURLIntent) route through onOpenURL. -->
+    <!-- dispatch:// deep links — scoped to WIDGET TAPS only (widgetURL/Link
+         from the home/lock screen widgets). Per Apple's widget docs
+         ("Respond to user interactions"), tap-to-open-app from a widget is
+         URL-based by design. The Control Center control does NOT use this
+         scheme; it opens the app via StartReportControlIntent (OpenIntent). -->
     <key>CFBundleURLTypes</key>
     <array>
         <dict>

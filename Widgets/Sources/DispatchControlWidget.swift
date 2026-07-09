@@ -2,24 +2,11 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-/// The Control Center intent lives in the WIDGET process, where the app's
-/// `StartReportIntent` (which needs the in-app `AppActions` singleton) can't
-/// run. It opens the app via the same `dispatch://report` deep link the home
-/// screen widget's "New Report" button uses; `trigger=control` marks the
-/// resulting report `.control` in history.
-struct StartReportControlIntent: AppIntent {
-    static let title: LocalizedStringResource = "Start Report"
-    static let description = IntentDescription("Opens Dispatch and starts a new report.")
-    static let openAppWhenRun = true
-
-    @MainActor
-    func perform() async throws -> some IntentResult & OpensIntent {
-        .result(opensIntent: OpenURLIntent(URL(string: "dispatch://report?trigger=control")!))
-    }
-}
-
 /// One-tap "new report" from Control Center (and the lock screen's control
-/// slots / Action button assignment).
+/// slots / Action button assignment). The button's action is
+/// `StartReportControlIntent` — an `OpenIntent` compiled into BOTH this
+/// extension and the app (see project.yml), so the system opens the app and
+/// runs the intent's perform() in the app process. No deep-link round trip.
 struct DispatchControlWidget: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "io.robbie.Dispatch.widgets.control") {
