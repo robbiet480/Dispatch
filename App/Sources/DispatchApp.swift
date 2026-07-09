@@ -347,7 +347,10 @@ struct DispatchApp: App {
                     } catch {
                         print("FOCUS-PROBE-CURRENT-THREW: \(error)")
                     }
-                    var activation = DispatchFocusFilter()
+                    // let, not var: @Parameter assignment routes through the
+                    // wrapper's nonmutating setter, so the value itself is
+                    // never mutated (var draws a compiler warning).
+                    let activation = DispatchFocusFilter()
                     activation.displayName = "Work"
                     activation.pauseGlobalPrompts = true
                     _ = try? await activation.perform()

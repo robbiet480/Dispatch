@@ -358,8 +358,9 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             notificationLog.info("budget clamped group \(plan.group.uniqueIdentifier, privacy: .public) to \(allocation.count(forGroup: plan.group.uniqueIdentifier), privacy: .public) of \(plan.future.count, privacy: .public)")
         }
 
+        let stampFormatter = Self.isoMinuteFormatter()
         for date in dates.prefix(allocation.global) {
-            let identifier = "\(NotificationIdentifiers.promptPrefix)\(Self.isoMinuteFormatter.string(from: date))"
+            let identifier = "\(NotificationIdentifiers.promptPrefix)\(stampFormatter.string(from: date))"
             let content = Self.makeContent(question: question)
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
@@ -423,7 +424,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         let nagParents = pastGlobalParents + dates.prefix(allocation.global)
         await scheduleNagChains(
             for: nagParents, nagsPerPrompt: allocation.nagsPerPrompt,
-            stamp: { Self.isoMinuteFormatter.string(from: $0) },
+            stamp: { stampFormatter.string(from: $0) },
             makeContent: { Self.makeContent(question: question) },
             prefs: prefs, now: now, calendar: calendar)
         for plan in groupPlans {
@@ -523,7 +524,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// Parent stamp (`yyyyMMdd-HHmm`, or `<groupID>-<yyyyMMdd-HHmm>` for
     /// group prompts) from a prompt, group-prompt, or nag identifier;
     /// nil for snoozes and anything else.
-    private static func parentStamp(fromRequestIdentifier identifier: String) -> String? {
+    // The stamp/date parsing helpers below are `nonisolated`: they're pure
+    // string/date arithmetic with no scheduler state, and they run inside
+    // UNUserNotificationCenter completion handlers (nonisolated contexts) —
+    // reportFiled's pending-request filter in particular. Swift 6 flags the
+    // isolated-static-from-nonisolated calls otherwise (build-4 review note).
+
+    private nonisolated static func parentStamp(fromRequestIdentifier identifier: String) -> String? {
         if identifier.hasPrefix(NotificationIdentifiers.promptPrefix) {
             return String(identifier.dropFirst(NotificationIdentifiers.promptPrefix.count))
         }
@@ -537,20 +544,20 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// `yyyyMMdd-HHmm`; group stamps prepend `<groupID>-` (the group ID is a
     /// UUID and itself contains dashes), so the date is always the last two
     /// dash-separated segments.
-    private static func parentDate(fromStamp stamp: String) -> Date? {
+    private nonisolated static func parentDate(fromStamp stamp: String) -> Date? {
         let segments = stamp.split(separator: "-")
         guard segments.count >= 2 else { return nil }
-        return isoMinuteFormatter.date(from: segments.suffix(2).joined(separator: "-"))
+        return isoMinuteFormatter().date(from: segments.suffix(2).joined(separator: "-"))
     }
 
     /// `<groupID>-<yyyyMMdd-HHmm>` — the stamp used by gprompt identifiers
     /// and their nag chains.
-    private static func groupStamp(groupID: String, date: Date) -> String {
-        "\(groupID)-\(isoMinuteFormatter.string(from: date))"
+    private nonisolated static func groupStamp(groupID: String, date: Date) -> String {
+        "\(groupID)-\(isoMinuteFormatter().string(from: date))"
     }
 
     /// Parent stamp from `nag-<yyyyMMdd-HHmm>-<n>`; nil for non-nag identifiers.
-    private static func nagParentStamp(fromNagIdentifier identifier: String) -> String? {
+    private nonisolated static func nagParentStamp(fromNagIdentifier identifier: String) -> String? {
         guard identifier.hasPrefix(NotificationIdentifiers.nagPrefix) else { return nil }
         let suffix = String(identifier.dropFirst(NotificationIdentifiers.nagPrefix.count))
         // suffix = "<yyyyMMdd>-<HHmm>-<n>" — the stamp is everything before the last dash.
@@ -855,22 +862,18 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         return UInt64(max(0, value))
     }
 
-    private static let isoDayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd"
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .current
-        return formatter
-    }()
-
     /// Content-addressed identifier suffix (`yyyyMMdd-HHmm`) so pending
     /// prompt requests for the same planned minute collide (by design) on
     /// re-plan instead of accumulating index-based duplicates.
-    private static let isoMinuteFormatter: DateFormatter = {
+    /// `DateFormatter` isn't Sendable, so — same tradeoff as the kit's
+    /// V2DateFormat — a fresh instance per use rather than a shared static
+    /// (which would pin the nonisolated parsing helpers to the main actor).
+    /// Construction count is a handful per replan, not a hot loop.
+    private nonisolated static func isoMinuteFormatter() -> DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmm"
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .current
         return formatter
-    }()
+    }
 }

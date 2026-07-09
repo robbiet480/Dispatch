@@ -63,3 +63,26 @@ Verify: build, kit suite, UI suite. Commit `feat: automatic rotating backups` �
 - Wrap: full suites; completion note in this doc.
 
 Verify: build (warning-free), kit suite, UI suite. Commit `chore: warning cleanup, CI caching, presentation guard` → push. Whole-branch review follows (controller-driven).
+
+---
+
+## Completion note (2026-07-09)
+
+All four tasks shipped: 0ff4aa7 (kit), de58877 (visit groups), a4099c2
+(backups), + the task-4 commit. Suites at finish: **273 kit + 12 UI**, all
+green; clean app + kit builds are warning-free (sole deliberate exception:
+the `appintentsmetadataprocessor` "Metadata extraction skipped" log line on
+the UI-test bundle — a toolchain notice about a target with no AppIntents
+dependency, not a compiler warning). NO new entitlements: verified — only
+purpose strings (`NSLocationAlwaysAndWhenInUseUsageDescription`) and plain
+plist keys (`UIFileSharingEnabled` via App/Info.plist because it has no
+working `INFOPLIST_KEY_*` equivalent; `LSSupportsOpeningDocumentsInPlace`
+via build setting; both plutil-verified in the built app). Visit monitoring
+ships WITHOUT a UIBackgroundModes entry, per Apple's current
+`startMonitoringVisits()` docs (relaunch delivery is intrinsic; the
+`location` background mode is for continuous live updates) — citation in
+VisitObserver's type doc. CI caching is structural (SwiftPM `.build` +
+pinned DerivedData, exact-key + restore-keys); before/after runtimes to be
+read off the next few Actions runs. Full report:
+`.superpowers/sdd/plan-16-report.md` — device checks for visits/backups
+(unsimulatable) are listed there for the owner.

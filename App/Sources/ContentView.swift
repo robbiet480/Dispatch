@@ -44,8 +44,20 @@ struct ContentView: View {
         // Digest notification tap → present the Weekly Digest sheet. Gated
         // on the lock like every other presentation: while locked, the
         // getter yields false and the flag survives until unlock.
+        //
+        // Serialized against the survey cover (plan 16 debt item): this view
+        // sources BOTH presentations, and SwiftUI drops the second of two
+        // simultaneous ones. The survey wins — it's the time-sensitive
+        // capture; the digest can wait. While a survey request is pending or
+        // presented, this getter yields false and the digest flag survives
+        // (only the dismiss setter clears it), so the sheet presents
+        // automatically once the survey cover goes down — both getters read
+        // @Observable state, so the handoff re-evaluates on its own.
         .sheet(isPresented: Binding(
-            get: { notificationScheduler.pendingDigestOpen && !appLockStore.isLocked },
+            get: {
+                notificationScheduler.pendingDigestOpen && !appLockStore.isLocked
+                    && surveyPresenter.request == nil
+            },
             set: { notificationScheduler.pendingDigestOpen = $0 })) {
             NavigationStack {
                 WeeklyDigestView()

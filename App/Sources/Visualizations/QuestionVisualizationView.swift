@@ -206,15 +206,16 @@ struct TokenFrequencyView: View {
         .accessibilityIdentifier("viz-token-frequency")
     }
 
-    /// One wrapping Text so the comma-joined list flows naturally across lines.
+    /// One wrapping Text so the comma-joined list flows naturally across
+    /// lines. Built with Text interpolation (which accepts styled Text
+    /// values) — `Text + Text` concatenation is deprecated as of iOS 26.
     private var joinedList: Text {
         items.enumerated().reduce(Text("")) { partial, item in
             let (index, entry) = item
             let separator = index == 0 ? Text("") : Text(", ").foregroundStyle(.white.opacity(0.6))
-            return partial
-                + separator
-                + Text(entry.text).foregroundStyle(.white)
-                + Text(" (\(entry.count))").font(.caption).foregroundStyle(.white.opacity(0.55))
+            let name = Text(entry.text).foregroundStyle(.white)
+            let count = Text(" (\(entry.count))").font(.caption).foregroundStyle(.white.opacity(0.55))
+            return Text("\(partial)\(separator)\(name)\(count)")
         }
     }
 }
