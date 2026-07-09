@@ -1,0 +1,104 @@
+import AppIntents
+import DispatchKit
+import Foundation
+import os
+import SwiftData
+import WidgetKit
+
+private let quickAnswerLog = Logger(subsystem: "io.robbie.Dispatch", category: "quick-answer-intent")
+
+/// Interactive-widget quick answer: the medium status widget's Yes/No
+/// buttons invoke this intent to file the answer without opening the app.
+///
+/// Dual target membership (same pattern as StartReportControlIntent — see
+/// project.yml): `Button(intent:)` requires the intent type to be compiled
+/// into the widget extension, and App Intents metadata extraction wants it
+/// in the app too.
+///
+/// EXECUTION PROCESS (probe-verified on the iOS 26.5 simulator, plan 17):
+/// tapping the widget button runs `perform()` in the WIDGET EXTENSION
+/// process (`ProcessInfo.processName` logged "DispatchWidgets", pid
+/// distinct from the app's) — NOT in the app, and the app is NOT launched.
+/// Consequences, side effect by side effect:
+/// - report save: works here — the shared App Group store is opened
+///   writable (`allowsSave: true`, `cloudKitDatabase: .none`; only the app
+///   process mirrors to CloudKit, and its history-tracking ingest picks the
+///   row up at next launch/foreground).
+/// - `lastActedAt` + nag-chain cancellation: NOT reachable from this
+///   process (app-sandbox `.standard` defaults; the extension's
+///   UNUserNotificationCenter manages the extension's own notification
+///   identity, not the app's pending requests) — so `perform()` persists a
+///   pending-action marker in the App Group defaults that the app drains at
+///   next launch/foreground (`NotificationScheduler
+///   .drainWidgetQuickAnswerActions`).
+/// - widget reload: `WidgetCenter` works from the extension process;
+///   reloading refreshes counts and flips the transient "Filed ✓" state
+///   (`WidgetQuickAnswerMarker.filedAt`).
+struct QuickAnswerIntent: AppIntent {
+    static let title: LocalizedStringResource = "Answer Quick Question"
+    static let description = IntentDescription(
+        "Answers your quick Yes/No question and files a minimal report."
+    )
+    /// Widget-internal: the buttons carry fully-configured instances; the
+    /// raw question-ID/choice-index parameters are meaningless in Shortcuts.
+    static let isDiscoverable = false
+
+    @Parameter(title: "Question ID")
+    var questionID: String
+
+    @Parameter(title: "Choice Index")
+    var choiceIndex: Int
+
+    init() {}
+
+    init(questionID: String, choiceIndex: Int) {
+        self.questionID = questionID
+        self.choiceIndex = choiceIndex
+    }
+
+    func perform() async throws -> some IntentResult {
+        // Probe (plan 17): identifies the executing process in the unified
+        // log — kept permanently; it's one line per tap and it documents
+        // the process contract this file's behavior depends on.
+        quickAnswerLog.info("perform() in process \(ProcessInfo.processInfo.processName, privacy: .public) pid \(ProcessInfo.processInfo.processIdentifier)")
+
+        guard let storeURL = StoreLocation.appGroupURL(),
+              FileManager.default.fileExists(atPath: storeURL.path) else {
+            quickAnswerLog.error("no shared store — cannot file quick answer")
+            return .result()
+        }
+        do {
+            let schema = Schema(DispatchStore.allModels)
+            let config = ModelConfiguration(
+                schema: schema, url: storeURL, allowsSave: true, cloudKitDatabase: .none
+            )
+            let container = try ModelContainer(for: schema, configurations: [config])
+            let context = ModelContext(container)
+            // Re-fetch by ID: the timeline that rendered the button may be
+            // stale (question deleted/disabled/re-ordered since) — never
+            // file against a question that no longer matches.
+            let targetID = questionID
+            var descriptor = FetchDescriptor<Question>(
+                predicate: #Predicate { $0.uniqueIdentifier == targetID }
+            )
+            descriptor.fetchLimit = 1
+            guard let question = try context.fetch(descriptor).first,
+                  question.isEnabled, question.type == .yesNo else {
+                quickAnswerLog.error("question \(targetID, privacy: .public) missing or no longer quick-answerable — reloading timelines instead")
+                WidgetCenter.shared.reloadAllTimelines()
+                return .result()
+            }
+            try QuickAnswerFiler.file(
+                question: question, choiceIndex: choiceIndex, trigger: .widget, in: context
+            )
+            if let defaults = UserDefaults(suiteName: StoreLocation.appGroupID) {
+                WidgetQuickAnswerMarker.recordFiled(at: Date(), in: defaults)
+            }
+            quickAnswerLog.info("filed widget quick answer (choice \(choiceIndex)) for \(targetID, privacy: .public)")
+        } catch {
+            quickAnswerLog.error("widget quick answer failed: \(error, privacy: .public)")
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        return .result()
+    }
+}

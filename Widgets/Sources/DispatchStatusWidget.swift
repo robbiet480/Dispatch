@@ -6,6 +6,12 @@ struct SnapshotEntry: TimelineEntry {
     let date: Date
     /// nil ⇒ the shared store isn't readable yet — render the placeholder.
     let snapshot: WidgetSnapshot?
+    /// The quick-answer Yes/No question (medium family renders its prompt
+    /// and interactive answer buttons); nil hides the quick-answer block.
+    var quickAnswer: QuickAnswerQuestion?
+    /// A quick answer was filed from the widget within the last few minutes
+    /// — the medium family shows a transient "Filed ✓" instead of buttons.
+    var filedRecently = false
 }
 
 struct SnapshotProvider: TimelineProvider {
@@ -13,26 +19,44 @@ struct SnapshotProvider: TimelineProvider {
         SnapshotEntry(date: Date(),
                       snapshot: WidgetSnapshot(lastReportDate: Date().addingTimeInterval(-3600),
                                                todayCount: 3, streakDays: 5,
-                                               nextPromptDate: Date().addingTimeInterval(5400)))
+                                               nextPromptDate: Date().addingTimeInterval(5400)),
+                      quickAnswer: QuickAnswerQuestion(
+                          questionID: "placeholder", prompt: "Are you working?",
+                          yesTitle: "Yes", noTitle: "No"))
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SnapshotEntry) -> Void) {
         if context.isPreview {
             completion(placeholder(in: context))
         } else {
-            completion(SnapshotEntry(date: Date(), snapshot: SharedStoreReader.snapshot()))
+            completion(entry(now: Date()))
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SnapshotEntry>) -> Void) {
         let now = Date()
-        let entry = SnapshotEntry(date: now, snapshot: SharedStoreReader.snapshot(now: now))
+        let entry = entry(now: now)
         // "Time since last report" uses relative date text (self-updating);
         // counts/streak flip at midnight — refresh at the next of (30 min,
-        // midnight). The app also pokes reloadAllTimelines on save/replan.
+        // midnight, "Filed ✓" expiry). The app also pokes reloadAllTimelines
+        // on save/replan, and the quick-answer intent pokes after filing.
         let halfHour = now.addingTimeInterval(30 * 60)
         let midnight = Calendar.current.startOfDay(for: now).addingTimeInterval(24 * 60 * 60)
-        completion(Timeline(entries: [entry], policy: .after(min(halfHour, midnight))))
+        var refreshAt = min(halfHour, midnight)
+        if entry.filedRecently, let defaults = UserDefaults(suiteName: StoreLocation.appGroupID),
+           let filedAt = WidgetQuickAnswerMarker.filedAt(in: defaults) {
+            refreshAt = min(refreshAt, filedAt.addingTimeInterval(WidgetQuickAnswerMarker.filedDisplayDuration))
+        }
+        completion(Timeline(entries: [entry], policy: .after(refreshAt)))
+    }
+
+    private func entry(now: Date) -> SnapshotEntry {
+        let filedRecently = UserDefaults(suiteName: StoreLocation.appGroupID)
+            .map { WidgetQuickAnswerMarker.filedRecently(in: $0, now: now) } ?? false
+        return SnapshotEntry(date: now,
+                             snapshot: SharedStoreReader.snapshot(now: now),
+                             quickAnswer: SharedStoreReader.quickAnswerQuestion(),
+                             filedRecently: filedRecently)
     }
 }
 
@@ -105,7 +129,10 @@ struct StatusWidgetView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    if let next = snapshot.nextPromptDate, next > entry.date {
+                    // The next-prompt block yields its space to the
+                    // quick-answer question when one exists.
+                    if entry.quickAnswer == nil,
+                       let next = snapshot.nextPromptDate, next > entry.date {
                         VStack(alignment: .trailing, spacing: 0) {
                             Text(next, style: .time)
                                 .font(.headline)
@@ -116,15 +143,59 @@ struct StatusWidgetView: View {
                     }
                 }
                 Spacer()
-                Link(destination: URL(string: "dispatch://report?trigger=widget")!) {
-                    Label("New Report", systemImage: "plus")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.tint.opacity(0.2), in: Capsule())
+                if let question = entry.quickAnswer {
+                    quickAnswerBlock(question)
+                } else {
+                    Link(destination: URL(string: "dispatch://report?trigger=widget")!) {
+                        Label("New Report", systemImage: "plus")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.tint.opacity(0.2), in: Capsule())
+                    }
                 }
             }
         }
+    }
+
+    /// Quick-answer block (medium family): the question's prompt plus two
+    /// interactive buttons that file the answer in place — no app launch
+    /// (see QuickAnswerIntent). After filing, a transient "Filed ✓" replaces
+    /// the buttons until the marker expires or the next timeline reload.
+    @ViewBuilder
+    private func quickAnswerBlock(_ question: QuickAnswerQuestion) -> some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Text(question.prompt)
+                .font(.caption.weight(.medium))
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            if entry.filedRecently {
+                Label("Filed", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .padding(.vertical, 6)
+            } else {
+                HStack(spacing: 6) {
+                    quickAnswerButton(title: question.yesTitle,
+                                      questionID: question.questionID, choiceIndex: 0)
+                    quickAnswerButton(title: question.noTitle,
+                                      questionID: question.questionID, choiceIndex: 1)
+                }
+            }
+        }
+    }
+
+    private func quickAnswerButton(title: String, questionID: String, choiceIndex: Int) -> some View {
+        Button(intent: QuickAnswerIntent(questionID: questionID, choiceIndex: choiceIndex)) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.tint.opacity(0.2), in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var header: some View {

@@ -259,6 +259,17 @@ struct DispatchApp: App {
                 .onChange(of: scenePhase) { oldPhase, newPhase in
                     switch newPhase {
                     case .active:
+                        // Drain the widget quick-answer marker BEFORE the
+                        // replan: the intent files from the widget-extension
+                        // process and leaves lastActedAt/nag cancellation to
+                        // this app-side drain (see WidgetQuickAnswerMarker),
+                        // and the replan must read the updated lastActedAt.
+                        // Test environments skip it — the shared App Group
+                        // suite must not leak real markers into UI tests.
+                        if !isTestEnvironment {
+                            notificationScheduler.drainWidgetQuickAnswerActions(
+                                from: UserDefaults(suiteName: StoreLocation.appGroupID))
+                        }
                         notificationScheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
                         // Backup staleness check (plan 16): cheap when fresh,
                         // writes a rotating v2 export off-main when >20h old.

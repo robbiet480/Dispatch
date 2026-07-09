@@ -71,6 +71,12 @@ targets:
       # above) and this extension, so the system opens the app and runs
       # perform() in the app process.
       - path: App/Sources/Intents/StartReportControlIntent.swift
+      # Same dual-membership pattern for the interactive-widget quick-answer
+      # intent: Button(intent:) in the widget view needs the type compiled
+      # into this extension; unlike the control intent, its perform() RUNS
+      # HERE in the widget-extension process (probe-verified — see the
+      # comment in QuickAnswerIntent.swift).
+      - path: App/Sources/Intents/QuickAnswerIntent.swift
       - path: Widgets/PrivacyInfo.xcprivacy
     dependencies:
       - package: DispatchKit

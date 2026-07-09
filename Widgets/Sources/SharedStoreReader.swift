@@ -52,4 +52,28 @@ enum SharedStoreReader {
             return nil
         }
     }
+
+    /// The quick-answer question the medium family renders buttons for —
+    /// the SAME selection the notification quick-answer actions use
+    /// (`QuickAnswerFiler.firstEnabledYesNoQuestion`); nil when the store
+    /// is unreadable or no enabled regular Yes/No question exists.
+    static func quickAnswerQuestion() -> QuickAnswerQuestion? {
+        guard let storeURL = StoreLocation.appGroupURL(),
+              FileManager.default.fileExists(atPath: storeURL.path) else { return nil }
+        do {
+            let schema = Schema(DispatchStore.allModels)
+            let config = ModelConfiguration(
+                schema: schema, url: storeURL, allowsSave: false, cloudKitDatabase: .none
+            )
+            let container = try ModelContainer(for: schema, configurations: [config])
+            let context = ModelContext(container)
+            guard let question = QuickAnswerFiler.firstEnabledYesNoQuestion(in: context) else {
+                return nil
+            }
+            return QuickAnswerQuestion(question: question)
+        } catch {
+            widgetLog.error("quick-answer question read failed: \(error, privacy: .public)")
+            return nil
+        }
+    }
 }

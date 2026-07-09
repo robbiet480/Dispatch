@@ -512,6 +512,26 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Drains the widget quick-answer pending-action marker (see
+    /// `WidgetQuickAnswerMarker`): the widget intent files its report from
+    /// the widget-extension process, where the app's `.standard` defaults
+    /// (`lastActedAt`) and the app's notification identity (nag-chain
+    /// removal) are unreachable — so it leaves a marker in the App Group
+    /// defaults and this method applies both side effects at the app's next
+    /// launch/foreground, exactly as an in-app save would via `reportFiled`.
+    /// Called before the foreground replan so the replan reads the updated
+    /// `lastActedAt`.
+    func drainWidgetQuickAnswerActions(from defaults: UserDefaults?, now: Date = Date()) {
+        guard let defaults,
+              let actedAt = WidgetQuickAnswerMarker.takePendingActedAt(in: defaults) else { return }
+        // Clamp future-dated markers (clock skew) to now; never regress an
+        // already-newer lastActedAt.
+        let effective = min(actedAt, now)
+        notificationLog.info("draining widget quick-answer marker (actedAt \(effective, privacy: .public))")
+        guard (prefs.lastActedAt ?? .distantPast) < effective else { return }
+        reportFiled(now: effective)
+    }
+
     /// Removes the sibling nag chain for the prompt stamped `stamp`.
     /// Identifiers are enumerable (`nag-<stamp>-1...10`, nagMaxCount's upper
     /// clamp), so we remove the full range blindly — removing an identifier
@@ -787,29 +807,11 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     private func fileQuickAnswer(isYes: Bool) {
         let context = ModelContext(container)
         guard let question = Self.firstEnabledYesNoQuestion(in: context) else { return }
-
-        let ref = QuestionRef(
-            uniqueIdentifier: question.uniqueIdentifier,
-            prompt: question.prompt,
-            type: question.type
-        )
-        let choiceIndex = isYes ? 0 : 1
-        let value: AnswerValue
-        if question.choices.indices.contains(choiceIndex) {
-            value = .options([question.choices[choiceIndex]])
-        } else {
-            value = .options([isYes ? "Yes" : "No"])
-        }
-        let draft = AnswerDraft(question: ref, value: value)
-
         do {
-            try ReportBuilder.save(
-                kind: .regular,
+            try QuickAnswerFiler.file(
+                question: question,
+                choiceIndex: isYes ? 0 : 1,
                 trigger: .notification,
-                date: Date(),
-                timeZone: .current,
-                outcomes: [:],
-                answers: [draft],
                 in: context
             )
             if !isTestEnvironment {
@@ -840,14 +842,11 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         return content
     }
 
+    /// Delegates to the kit's shared quick-answer path so the notification
+    /// actions, the widget buttons, and this scheduler's content builder all
+    /// target the SAME question.
     private static func firstEnabledYesNoQuestion(in context: ModelContext) -> Question? {
-        let descriptor = FetchDescriptor<Question>(
-            sortBy: [SortDescriptor(\.sortOrder)]
-        )
-        guard let questions = try? context.fetch(descriptor) else { return nil }
-        return questions.first {
-            $0.isEnabled && $0.type == .yesNo && $0.reportKinds.contains(.regular)
-        }
+        QuickAnswerFiler.firstEnabledYesNoQuestion(in: context)
     }
 
     /// Day's `yyyyMMdd` digits as a UInt64 — stable within a calendar day,
