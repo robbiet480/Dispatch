@@ -18,12 +18,17 @@ struct DispatchMod {
                                (--tags a,b to attach catalog tags)
       reject <recordName>      Delete a submission without publishing
       serve                    Localhost dashboard (--port N, default 8787)
+      import <seed.json>       Bulk-load a curated seed file into the catalog
+                               (--dry-run to validate and preview only; prompts
+                               already in the catalog are skipped, so re-runs
+                               are safe — see docs/catalog/README.md)
       help                     Show this help
 
     OPTIONS:
       --env development|production   CloudKit environment (default development)
       --tags a,b,c                   approve only: comma-separated tags
       --port N                       serve only: listen port (127.0.0.1 only)
+      --dry-run                      import only: no network, no writes
 
     CONFIG (key NEVER lives in the repo — see docs/moderation.md):
       ~/.dispatch-mod/config.json    {"keyID": "...", "keyPath": "...",
@@ -88,6 +93,38 @@ struct DispatchMod {
                 try run(envOverride) { client in
                     try Dashboard(client: client, port: port).serve()
                 }
+            case "import":
+                let dryRun = flag("--dry-run", in: &arguments)
+                guard let path = arguments.first else {
+                    fail("import needs a seed file path (see docs/catalog/README.md)")
+                }
+                let drafts = try CatalogSeed.parse(Data(contentsOf: URL(fileURLWithPath: path)))
+                if dryRun {
+                    print("Seed file OK — \(drafts.count) question(s):")
+                    for draft in drafts { print("  " + describe(draft)) }
+                    print("Dry run — nothing written.")
+                    return
+                }
+                try run(envOverride) { client in
+                    let existing = Set(try client.catalogQuestions().map { $0.prompt.lowercased() })
+                    let new = drafts.filter { !existing.contains($0.prompt.lowercased()) }
+                    if new.count < drafts.count {
+                        print("Skipping \(drafts.count - new.count) question(s) already in the catalog.")
+                    }
+                    // The catalog sorts approvedAt descending; stagger the
+                    // timestamps so file order is preserved, first entry newest.
+                    let base = Date()
+                    let questions = new.enumerated().map { index, draft in
+                        draft.catalogQuestion(
+                            recordName: UUID().uuidString,
+                            approvedAt: base.addingTimeInterval(-Double(index))
+                        )
+                    }
+                    try client.createCatalogQuestions(questions) { created in
+                        print("  + \(created.prompt)")
+                    }
+                    print("Imported \(questions.count) question(s).")
+                }
             default:
                 fail("Unknown subcommand \"\(subcommand)\".\n\n\(helpText)")
             }
@@ -107,6 +144,22 @@ struct DispatchMod {
             print("⚠️  Operating on the PRODUCTION environment.")
         }
         try body(client)
+    }
+
+    private static func describe(_ draft: CatalogSeedDraft) -> String {
+        let type = QuestionType(rawValue: draft.typeRaw)
+            .map(String.init(describing:)) ?? "unknown(\(draft.typeRaw))"
+        var line = "[\(type)] \(draft.prompt)"
+        if !draft.choices.isEmpty { line += "  {\(draft.choices.joined(separator: " | "))}" }
+        if !draft.tags.isEmpty { line += "  #\(draft.tags.joined(separator: " #"))" }
+        if let credit = draft.credit { line += "  — \(credit)" }
+        return line
+    }
+
+    private static func flag(_ name: String, in arguments: inout [String]) -> Bool {
+        guard let index = arguments.firstIndex(of: name) else { return false }
+        arguments.remove(at: index)
+        return true
     }
 
     private static func optionValue(_ name: String, in arguments: inout [String]) -> String? {

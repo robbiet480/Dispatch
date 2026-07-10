@@ -113,7 +113,7 @@ struct CloudKitWebClient {
         return fields
     }
 
-    private func queryRecords(recordType: String, sortField: String) throws -> [(String, [String: CatalogFieldValue])] {
+    func queryRecords(recordType: String, sortField: String) throws -> [(String, [String: CatalogFieldValue])] {
         var records: [(String, [String: CatalogFieldValue])] = []
         var continuationMarker: String?
         repeat {
