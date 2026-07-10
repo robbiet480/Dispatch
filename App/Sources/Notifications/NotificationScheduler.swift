@@ -31,6 +31,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     private let container: ModelContainer
     private let prefs: NotificationPrefs
     private let isTestEnvironment: Bool
+    /// Last "tails/parents" pair logged at info by the nag-tail budget line —
+    /// replans re-run the same idempotent accounting constantly, so repeats
+    /// log at debug instead (user-reported spam).
+    private var lastLoggedNagTailSignature: String?
     /// Where the Focus filter state lives: the App Group suite in
     /// production (written by DispatchFocusFilter.perform()), the isolated
     /// per-launch test suite under `--ui-testing`/`--mock-sensors` — so real
@@ -369,7 +373,19 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             now: now,
             cap: 60)
         if allocation.pastNagTails > 0 {
-            notificationLog.info("budget charged \(allocation.pastNagTails, privacy: .public) resurrected nag tail fires for \(pastNagParents.count, privacy: .public) past prompts against the cap")
+            // Replans run often (foreground, settings, every sync pass) and
+            // this accounting is idempotent — only log at info when the
+            // numbers actually change; repeats drop to debug (user-reported
+            // log spam while prompts sat unanswered).
+            let signature = "\(allocation.pastNagTails)/\(pastNagParents.count)"
+            if signature != lastLoggedNagTailSignature {
+                lastLoggedNagTailSignature = signature
+                notificationLog.info("budget charged \(allocation.pastNagTails, privacy: .public) resurrected nag tail fires for \(pastNagParents.count, privacy: .public) past prompts against the cap")
+            } else {
+                notificationLog.debug("nag tail budget unchanged (\(signature, privacy: .public))")
+            }
+        } else {
+            lastLoggedNagTailSignature = nil
         }
         if allocation.global < dates.count {
             notificationLog.info("budget clamped global prompts to \(allocation.global, privacy: .public) of \(dates.count, privacy: .public)")
