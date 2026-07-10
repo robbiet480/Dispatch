@@ -223,14 +223,30 @@ targets:
         SWIFT_VERSION: 6.0
         # Plan 27: the UI-test bundle must run on iPad simulators too.
         TARGETED_DEVICE_FAMILY: "1,2"
+  # Hostless unit bundle (PR #41 review): pure view-layer math that belongs
+  # app-side (not DispatchKit) but deserves real unit tests. Sources under
+  # test are compiled directly into the bundle — no TEST_HOST/app injection.
+  DispatchAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AppTests
+      - path: App/Sources/Visualizations/OptionBlockLayout.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.apptests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        TARGETED_DEVICE_FAMILY: "1,2"
 schemes:
   DispatchApp:
     build:
       targets:
         DispatchApp: all
         DispatchUITests: [test]
+        DispatchAppTests: [test]
     test:
-      targets: [DispatchUITests]
+      targets: [DispatchAppTests, DispatchUITests]
   DispatchWatch:
     build:
       targets:

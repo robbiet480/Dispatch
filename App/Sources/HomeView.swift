@@ -380,23 +380,33 @@ struct HomeView: View {
     }
 }
 
-/// Plan 29: plain page-indicator dots (no background pill). Decorative — the
-/// pager itself stays VoiceOver-adjustable, so the dots are hidden from the
-/// accessibility tree but keep an identifier for structural UI tests.
+/// Plan 29: plain page-indicator dots (no background pill). One read-only
+/// VoiceOver element ("Page N of M") — page CHANGES stay on the adjustable
+/// pager; exposing (rather than hiding) the element also keeps `page-dots`
+/// reliably queryable from UI tests (PR #41 review).
 private struct PlainPageDots: View {
     let count: Int
     let currentIndex: Int
 
+    /// PR #41 review: fixed-size circles can't shrink, so a long page list
+    /// would collide with the REPORT/AWAKE neighbors on 390pt phones.
+    /// Tiered shrink rather than UIPageControl-style truncation (every page
+    /// keeps a dot): ≤10 pages 7pt/9pt, ≤15 5pt/6pt, beyond 4pt/4pt —
+    /// 15 pages ≈ 159pt, 25 pages ≈ 196pt, both inside the dots' slot.
+    private var dotSize: CGFloat { count <= 10 ? 7 : (count <= 15 ? 5 : 4) }
+    private var dotSpacing: CGFloat { count <= 10 ? 9 : (count <= 15 ? 6 : 4) }
+
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: dotSpacing) {
             ForEach(0..<count, id: \.self) { index in
                 Circle()
                     .fill(index == currentIndex ? Color.white : Color.white.opacity(0.35))
-                    .frame(width: 7, height: 7)
+                    .frame(width: dotSize, height: dotSize)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page \(currentIndex + 1) of \(count)")
         .accessibilityIdentifier("page-dots")
-        .accessibilityHidden(true)
     }
 }
 

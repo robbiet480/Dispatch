@@ -192,6 +192,15 @@ struct DispatchApp: App {
                 seedLog.error("demo-data seeding failed: \(error, privacy: .public)")
             }
         }
+        // Pager-dots density fixture (PR #41 review): pads to 15 enabled
+        // questions so UI tests can pin the many-page dot layout.
+        if isTestEnvironment, arguments.contains("--demo-many-questions") {
+            do {
+                try DemoData.seedExtraQuestions(into: ModelContext(container))
+            } catch {
+                seedLog.error("demo-many-questions seeding failed: \(error, privacy: .public)")
+            }
+        }
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
         }

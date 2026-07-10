@@ -71,6 +71,13 @@ struct OptionSharesBarsView: View {
 
     var body: some View {
         GeometryReader { proxy in
+            // Heights come from OptionBlockLayout so they always sum EXACTLY
+            // to the container (PR #41 review: per-block max(share*H, 28)
+            // could overflow into the bottom strip / clip in the grid card).
+            let heights = OptionBlockLayout.heights(
+                shares: shares.map(\.share),
+                availableHeight: proxy.size.height
+            )
             VStack(spacing: 2) {
                 ForEach(Array(shares.enumerated()), id: \.offset) { index, entry in
                     ZStack(alignment: .bottom) {
@@ -93,7 +100,7 @@ struct OptionSharesBarsView: View {
                         .padding(10)
                         .frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(height: max(proxy.size.height * entry.share, 28))
+                    .frame(height: heights[index])
                     // One element per block: "No, 69 percent" — the visual
                     // encodes share as block height, which VoiceOver can't see.
                     .accessibilityElement(children: .ignore)
@@ -197,9 +204,14 @@ struct NumericSeriesView: View {
         }
         // Min/max captions live inside the plot's leading corners so the
         // hidden Y axis doesn't leave the sparse demo line unanchored
-        // (decision recorded per plan 29 Task 5 Step 1).
+        // (decision recorded per plan 29 Task 5 Step 1). A flat series has
+        // min == max — render one caption, not a duplicate pair (PR #41).
         .overlay(alignment: .topLeading) { cornerCaption(points.map(\.value).max()) }
-        .overlay(alignment: .bottomLeading) { cornerCaption(points.map(\.value).min()) }
+        .overlay(alignment: .bottomLeading) {
+            if let minValue = points.map(\.value).min(), minValue != points.map(\.value).max() {
+                cornerCaption(minValue)
+            }
+        }
         // VoiceOver summary for the line chart (the marks themselves
         // aren't individually meaningful): count, range, latest, average.
         .accessibilityElement(children: .ignore)
