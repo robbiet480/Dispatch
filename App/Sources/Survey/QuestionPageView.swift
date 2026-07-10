@@ -295,6 +295,9 @@ struct TokenEntryView: View {
     @State private var draft = ""
     /// Vocabulary candidates, fetched once per appearance — never per keystroke.
     @State private var candidates: [(text: String, usageCount: Int)] = []
+    /// People-question candidates: full registry entities so suggestions
+    /// resolve alternate names without duplicate chips (plan 22).
+    @State private var peopleCandidates: [PersonEntity] = []
     /// Contact matches for the current draft (people questions with the
     /// contacts toggle on). Provider is created per field appearance so the
     /// contact store is fetched at most once per appearance, off-main.
@@ -374,7 +377,9 @@ struct TokenEntryView: View {
     /// History/registry suggestions first, then contact matches (people
     /// questions only), blended and deduped by `PersonSuggestionMerger`.
     private var suggestions: [PersonSuggestion] {
-        let history = TokenSuggester.suggest(query: draft, candidates: candidates, excluding: tokens)
+        let history = isPeople
+            ? TokenSuggester.suggestPeople(query: draft, people: peopleCandidates, excluding: tokens)
+            : TokenSuggester.suggest(query: draft, candidates: candidates, excluding: tokens)
         guard isPeople, !contactMatches.isEmpty else {
             return history.map { PersonSuggestion(text: $0, isContact: false) }
         }
@@ -494,8 +499,8 @@ struct TokenEntryView: View {
 
     private func loadCandidates() {
         if isPeople {
-            let fetched = (try? modelContext.fetch(FetchDescriptor<PersonEntity>())) ?? []
-            candidates = fetched.map { (text: $0.text, usageCount: $0.usageCount) }
+            peopleCandidates = (try? modelContext.fetch(FetchDescriptor<PersonEntity>(
+                sortBy: [SortDescriptor(\.uniqueIdentifier)]))) ?? []
         } else {
             let fetched = (try? modelContext.fetch(FetchDescriptor<TokenEntity>())) ?? []
             candidates = fetched.map { (text: $0.text, usageCount: $0.usageCount) }

@@ -98,19 +98,40 @@ public enum ReportFilter {
     ///
     /// `peopleQuestionIDs` narrows person-name matching to responses of people
     /// questions; when empty (unknown), person criteria match any token text.
+    ///
+    /// `people` is the person registry (plan 22): a person criterion resolves
+    /// through it so a filter on the current display name also matches
+    /// reports filed under the person's alternate (pre-rename/merge) names.
     public static func matches(report: Report, criteria: [FilterCriterion],
-                               peopleQuestionIDs: Set<String> = []) -> Bool {
-        criteria.allSatisfy { matches(report: report, criterion: $0, peopleQuestionIDs: peopleQuestionIDs) }
+                               peopleQuestionIDs: Set<String> = [],
+                               people: [PersonEntity] = []) -> Bool {
+        criteria.allSatisfy {
+            matches(report: report, criterion: $0,
+                    peopleQuestionIDs: peopleQuestionIDs, people: people)
+        }
     }
 
     private static func matches(report: Report, criterion: FilterCriterion,
-                                peopleQuestionIDs: Set<String>) -> Bool {
+                                peopleQuestionIDs: Set<String>, people: [PersonEntity]) -> Bool {
         switch criterion {
         case .person(let name):
+            // Every name the criterion stands for: the resolved person's
+            // display name + alternates, or just the literal when unresolved.
+            let acceptedNames: Set<String>
+            if let person = PersonResolver.person(
+                matching: name,
+                in: people.sorted(by: { $0.uniqueIdentifier < $1.uniqueIdentifier })) {
+                acceptedNames = Set(([person.text] + person.alternateNames)
+                    .map(PersonResolver.normalize))
+            } else {
+                acceptedNames = [PersonResolver.normalize(name)]
+            }
             return (report.responses ?? []).contains { response in
                 guard peopleQuestionIDs.isEmpty
                         || response.questionIdentifier.map(peopleQuestionIDs.contains) == true else { return false }
-                return (response.tokens ?? []).contains { $0.text.caseInsensitiveCompare(name) == .orderedSame }
+                return (response.tokens ?? []).contains {
+                    acceptedNames.contains(PersonResolver.normalize($0.text))
+                }
             }
         case .token(let text):
             // Mirror of the person criterion: when people questions are

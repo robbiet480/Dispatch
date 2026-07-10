@@ -48,8 +48,17 @@ public enum VisualizationData {
     /// Builds the visualization for `question` over `reports`, dispatching on question type.
     /// Responses join by `questionIdentifier` first; when a response's identifier is nil, it
     /// falls back to matching by `questionPrompt` (mirrors QuestionSettingsView's response count).
-    public static func build(for question: Question, reports: [Report]) -> QuestionVisualization {
+    ///
+    /// `people` is the person registry (plan 22): people-question frequency
+    /// aggregates BY PERSON — alternate names unify into one bar displaying
+    /// the current display name. Empty (the default) means no resolution.
+    public static func build(for question: Question, reports: [Report],
+                             people: [PersonEntity] = []) -> QuestionVisualization {
         let responses = matchingResponses(for: question, reports: reports)
+        // Deterministic resolution order regardless of fetch order.
+        let registry = question.type == .people
+            ? people.sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
+            : []
 
         // Per-question style override, honored only when compatible with the
         // question type; incompatible or nil falls through to the type default.
@@ -60,7 +69,7 @@ public enum VisualizationData {
             case .graph:
                 return buildNumericSeries(responses: responses, reports: reports)
             case .frequency:
-                return buildFrequency(responses: responses)
+                return buildFrequency(responses: responses, people: registry)
             }
         }
 
@@ -70,7 +79,7 @@ public enum VisualizationData {
         case .number:
             return buildNumericSeries(responses: responses, reports: reports)
         case .tokens, .people:
-            return buildFrequency(responses: responses)
+            return buildFrequency(responses: responses, people: registry)
         case .location:
             return buildPlaces(responses: responses)
         case .note:
@@ -147,11 +156,18 @@ public enum VisualizationData {
         return .numericSeries(points: points, average: average)
     }
 
-    private static func buildFrequency(responses: [Response]) -> QuestionVisualization {
+    private static func buildFrequency(responses: [Response],
+                                       people: [PersonEntity] = []) -> QuestionVisualization {
         var counts: [String: Int] = [:]
         for response in responses {
             for token in response.tokens ?? [] {
-                counts[token.text, default: 0] += 1
+                // Person-keyed aggregation (plan 22): a token resolving to a
+                // registry person counts under the CURRENT display name, so
+                // renamed/merged people unify into one entry.
+                let key = people.isEmpty
+                    ? token.text
+                    : (PersonResolver.person(matching: token.text, in: people)?.text ?? token.text)
+                counts[key, default: 0] += 1
             }
         }
         guard !counts.isEmpty else { return .empty }

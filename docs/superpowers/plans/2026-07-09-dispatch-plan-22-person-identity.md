@@ -74,3 +74,16 @@ Verify: build, kit suite, UI suite (+1). Commit `feat: people management — ren
 **Contract:** spec §Consumers verbatim — aggregate by person, display current display name. Wrap: full suites; completion note in this doc; README People section (what identity does, what's device-local, the same-name limitation).
 
 Verify: build, kit suite, UI suite. Commit `feat: person-resolved visualization, filters, suggestions` → push. Whole-branch review follows (controller-driven).
+
+---
+
+## Completion note (2026-07-09)
+
+All four tasks implemented on branch `plan-22-person-identity` (PR to main; UI suite runs at the merge gate).
+
+- **Task 1:** PersonEntity gained `uniqueIdentifier`/`alternateNames` (additive, defaulted); `PersonResolver` (resolve/rename/merge); `VocabularyBuilder.rebuild` preserves registry entities (match by text OR alternates, counts updated in place, aliased entries survive at zero usage); `SyncDedupe` person merge unions alternate names deterministically (sorted, case/diacritic-deduped); v2 gained an optional `people` array (nil-omitted, absence-tolerant, upsert by uniqueIdentifier).
+- **Task 2:** `ContactSuggestionProviding` protocol + `CNContactSuggestionProvider` actor (off-main, per-appearance cache, no continuations) + stub under `--mock-sensors`/`--ui-testing`; `ContactLinkCache` (app-group defaults, never synced); `PersonSuggestionMerger.blend` landed kit-side with tests; typeahead blends history-first with contact chips (thumbnails); toggle default OFF in Settings → Sensors with on-but-denied hint; one-time inline offer under people questions; `NSContactsUsageDescription` purpose string only. Note: `ContactMatch` carries an extra `contactIdentifier` field beyond the planned shape — required so picking a suggestion can record the per-device link.
+- **Task 3:** `PeopleListView` (`people-list`, multi-select merge via `person-merge`, deterministic survivor: highest usage then lowest uniqueIdentifier) + `PersonDetailView` (`person-rename`, `person-link`, unlink, delete with resurrection-caveat confirmation); Settings entry row; photos live-fetched via the link cache; rename/merge trigger `VocabularyBuilder.rebuild` directly (same pass the remote-change pipeline runs).
+- **Task 4:** `VisualizationData.build(people:)` person-keys people frequency; `ReportFilter.matches(people:)` person criterion accepts display + alternate names both directions; `InsightsEngine.compute(people:)` resolves person signals (Plan 18 shipped, wired for real — the integration-point comment replaced); `TokenSuggester.suggestPeople` matches aliases without duplicate chips and excludes by any name. HomeView/InsightsView pass the registry and fingerprint it into their memo keys. `DigestStats`' embedded top-insights call keeps the empty-registry default (kit-internal call site; not in this plan's file list).
+
+Kit suite: 352 → 375 tests, all green. UI tests added: blended stub-contact suggestions render + pick; People screen renders seeded person + rename flow (run at merge gate).

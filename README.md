@@ -168,6 +168,33 @@ default; Settings → Data → Backups):
   tasks, no servers. iCloud sync is not a backup (it propagates
   deletions); these files are your rewind point.
 
+## People
+
+People you name in reports are stable identities, not just text
+(Settings → People):
+
+- **Rename heals history.** Renaming a person moves the old name into
+  their alternate names: past reports keep the text you actually
+  typed, but visualizations, insights, filters, and suggestions all
+  count both names as the same person and display the current name.
+- **Merge duplicates.** Multi-select two or more people to merge them
+  — names union, counts sum. Duplicate entries arriving via iCloud
+  sync merge the same way automatically.
+- **Contacts are optional and device-local.** "Suggest from Contacts"
+  (Settings → Sensors, off by default) blends contact names and photos
+  into the people typeahead. Contact links — including the ones made
+  by "Link to Contact" on a person — are a per-device cache: contact
+  identifiers and photos are never stored in your data and never sync,
+  because Apple's contact identifiers only identify a contact on one
+  device. Photos are fetched live from the linked contact for display
+  only.
+- **Known limitation:** two different people who share an identical
+  full display name collapse into one person — answers are stored as
+  name text, so the fix is distinct names (e.g. add a last initial).
+- Deleting a person removes only the registry entry; reports are
+  untouched, and a plain entry may reappear if the name still occurs
+  in reports.
+
 ## Importing an original Reporter export
 
 Reporter's export format (`{"questions": [...], "snapshots": [...]}`) is

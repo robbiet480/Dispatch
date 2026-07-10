@@ -13,6 +13,8 @@ struct InsightsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Query private var reports: [Report]
     @Query private var questions: [Question]
+    /// Person registry (plan 22): person signals resolve alternate names.
+    @Query private var people: [PersonEntity]
 
     /// nil = not yet computed (first appearance); [] = computed, nothing
     /// passed the honesty guards.
@@ -30,7 +32,14 @@ struct InsightsView: View {
         let identityFingerprint = reports.reduce(into: 0) { partial, report in
             partial ^= report.uniqueIdentifier.hashValue
         }
-        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(questions.count)"
+        // Person registry fingerprint (plan 22): renames/merges change how
+        // person signals aggregate, so they must refire the compute.
+        let peopleFingerprint = people.reduce(into: 0) { partial, person in
+            partial ^= person.uniqueIdentifier.hashValue
+            partial ^= person.text.hashValue
+            partial ^= person.alternateNames.joined(separator: "\u{1F}").hashValue
+        }
+        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(questions.count)|\(peopleFingerprint)"
     }
 
     var body: some View {
@@ -64,7 +73,8 @@ struct InsightsView: View {
         // .task rather than a detached actor hop — same trade HomeView makes
         // for its visualizations.
         .task(id: insightsTaskID) {
-            insights = InsightsEngine.compute(reports: reports, questions: questions)
+            insights = InsightsEngine.compute(reports: reports, questions: questions,
+                                              people: people)
         }
     }
 
