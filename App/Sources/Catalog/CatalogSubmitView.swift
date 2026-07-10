@@ -11,13 +11,22 @@ struct CatalogSubmitView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var prompt = ""
-    @State private var type: QuestionType = .yesNo
-    @State private var choicesText = ""
+    @State private var prompt: String
+    @State private var type: QuestionType
+    @State private var choicesText: String
     @State private var creditName = ""
     @State private var errorMessage: String?
     @State private var isSubmitting = false
     @State private var submitted = false
+
+    /// Blank by default (the catalog browser's "Submit a Question" entry);
+    /// the question editor passes its current prompt/type/choices to pre-fill.
+    init(store: CatalogStore, prompt: String = "", type: QuestionType = .yesNo, choices: [String] = []) {
+        self.store = store
+        _prompt = State(initialValue: prompt)
+        _type = State(initialValue: type)
+        _choicesText = State(initialValue: choices.joined(separator: "\n"))
+    }
 
     private var theme: Theme { themeStore.theme }
 

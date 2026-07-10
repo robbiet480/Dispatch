@@ -48,4 +48,30 @@ final class CatalogUITests: XCTestCase {
         XCTAssertTrue(newQuestionRow.waitForExistence(timeout: 10),
                       "expected the added catalog question to appear in the local Questions list")
     }
+
+    /// The question editor exposes a "Submit to Catalog" button, disabled
+    /// while the draft can't pass catalog validation (here: an empty prompt on
+    /// a brand-new question).
+    @MainActor
+    func testEditorSubmitToCatalogButtonGatedOnValidity() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        app.buttons["settings-button"].firstMatch.tap()
+        let questionsLink = app.buttons["questions-settings-link"]
+        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
+        questionsLink.tap()
+
+        let addButton = app.buttons["add-question-button"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+        addButton.tap()
+
+        // The button lives at the bottom of the form — scroll to it.
+        let submit = app.buttons["submit-to-catalog"]
+        var scrolls = 6
+        while !submit.exists, scrolls > 0 { app.swipeUp(); scrolls -= 1 }
+        XCTAssertTrue(submit.exists, "expected a Submit to Catalog button in the editor")
+        XCTAssertFalse(submit.isEnabled, "empty prompt should disable catalog submission")
+    }
 }

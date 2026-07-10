@@ -32,7 +32,23 @@ struct QuestionEditorView: View {
     @State private var inputMax: String
     @State private var inputStep: String
 
+    // Community-catalog submission (own store, like CatalogView).
+    @State private var catalogStore = CatalogStore()
+    @State private var showingCatalogSubmit = false
+
     private var theme: Theme { themeStore.theme }
+
+    /// The current draft passes catalog validation (non-empty prompt within
+    /// the length limit, valid choices for multiple-choice). Gates the
+    /// Submit-to-Catalog button; the sheet itself handles the iCloud-account
+    /// requirement and shows any residual errors.
+    private var isCatalogValid: Bool {
+        CatalogValidation.validate(
+            prompt: prompt,
+            typeRaw: type.rawValue,
+            choices: type == .multipleChoice ? choices : []
+        ).isEmpty
+    }
 
     init(question: Question?) {
         self.question = question
@@ -263,6 +279,25 @@ struct QuestionEditorView: View {
                         .foregroundStyle(.white.opacity(0.7))
                         .listRowBackground(Color.clear)
                 }
+
+                Section {
+                    Button {
+                        showingCatalogSubmit = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Submit to Catalog")
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .disabled(!isCatalogValid)
+                    .accessibilityIdentifier("submit-to-catalog")
+                    .listRowBackground(Color.white.opacity(0.12))
+                } footer: {
+                    Text("Share this question with the community catalog for others to add. Anonymous unless you add a credit name.")
+                        .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.clear)
+                }
             }
             .scrollContentBackground(.hidden)
             // Plan 27: readable column on iPad; no-op at iPhone widths.
@@ -276,6 +311,15 @@ struct QuestionEditorView: View {
                 Button("Save") { save() }
                     .disabled(!canSave)
             }
+        }
+        .sheet(isPresented: $showingCatalogSubmit) {
+            CatalogSubmitView(
+                store: catalogStore,
+                prompt: prompt,
+                type: type,
+                choices: type == .multipleChoice ? choices : []
+            )
+            .environment(themeStore)
         }
     }
 
