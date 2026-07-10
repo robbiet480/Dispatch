@@ -51,11 +51,21 @@ struct SensorSettingsView: View {
                             Text(kind.displayName)
                                 .foregroundStyle(.white)
                             Spacer()
-                            permissionAffordance(for: kind)
-                            Toggle(kind.displayName, isOn: enabledBinding(kind))
-                                .labelsHidden()
-                                .fixedSize()
-                                .tint(.white.opacity(0.4))
+                            // A locked sensor (permission not yet granted, or
+                            // denied) can't be enabled — its slider is off and
+                            // disabled, with a Request/Settings button beside
+                            // it. Granted (and HealthKit's opaque "requested")
+                            // leave the slider free.
+                            permissionButton(for: kind)
+                            Toggle(
+                                kind.displayName,
+                                isOn: isLocked(kind) ? .constant(false) : enabledBinding(kind)
+                            )
+                            .labelsHidden()
+                            .fixedSize()
+                            .tint(.white.opacity(0.4))
+                            .disabled(isLocked(kind))
+                            .accessibilityIdentifier("sensor-toggle-\(kind)")
                         }
                     }
 
@@ -250,63 +260,59 @@ struct SensorSettingsView: View {
     /// "Denied" button deep-linking to the Settings app (the only place a
     /// denial can be fixed). Rows without a gating permission — and unknown
     /// states — render nothing.
+    /// Whether the sensor's slider must be off + disabled because the app
+    /// can't read it yet: true when the gating permission is not-determined
+    /// or denied. Granted, HealthKit's opaque `.requested`, `.unknown`, and
+    /// sensors with no gating permission (battery/connection) are all free.
+    private func isLocked(_ kind: SensorKind) -> Bool {
+        guard let permission = kind.permission else { return false }
+        switch permissionStates[permission] ?? .unknown {
+        case .notDetermined, .denied: return true
+        case .granted, .requested, .unknown: return false
+        }
+    }
+
+    /// The button beside a locked sensor's slider: "Request" when the dialog
+    /// hasn't been shown, "Settings" when denied (the only place a denial can
+    /// be reversed). Granted/requested/unowned rows render nothing here.
     @ViewBuilder
-    private func permissionAffordance(for kind: SensorKind) -> some View {
+    private func permissionButton(for kind: SensorKind) -> some View {
         if let permission = kind.permission {
             switch permissionStates[permission] ?? .unknown {
-            case .granted, .requested:
-                // A filled radio, no text. HealthKit hides read-grant status
-                // (see SensorPermissionState), so `.requested` — the dialog
-                // was shown, the choice is opaque — can't be distinguished
-                // from `.granted`; both are usable and collapse to "on".
-                permissionRadio(on: true)
-                    .accessibilityIdentifier("permission-radio-\(permission.rawValue)")
-                    .accessibilityLabel("Granted")
             case .notDetermined:
-                // The only truly requestable state: a Request button plus an
-                // empty radio.
-                HStack(spacing: 12) {
-                    requestButton(permission: permission)
-                    permissionRadio(on: false)
-                        .accessibilityIdentifier("permission-radio-\(permission.rawValue)")
-                        .accessibilityLabel("Not granted")
-                }
+                requestButton(permission: permission)
             case .denied:
-                // Empty radio, tappable — a denial can only be reversed in
-                // the Settings app, so the indicator deep-links there.
-                Button {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        openURL(url)
-                    }
-                } label: {
-                    permissionRadio(on: false)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityIdentifier("permission-radio-\(permission.rawValue)")
-                .accessibilityLabel("Denied — open Settings")
-            case .unknown:
+                settingsButton(permission: permission)
+            case .granted, .requested, .unknown:
                 EmptyView()
             }
         }
     }
 
-    /// The status indicator: a filled radio when the permission is usable,
-    /// an empty one otherwise. Purely visual — callers attach the identifier
-    /// and label so the granted/denied/requestable cases stay distinct.
-    private func permissionRadio(on: Bool) -> some View {
-        Image(systemName: on ? "largecircle.fill.circle" : "circle")
-            .font(.body)
-            .foregroundStyle(.white.opacity(on ? 0.9 : 0.4))
+    private func settingsButton(permission: SensorPermission) -> some View {
+        pillButton("Settings", id: "permission-settings-\(permission.rawValue)") {
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                openURL(url)
+            }
+        }
     }
 
     private func requestButton(permission: SensorPermission) -> some View {
-        Button {
+        pillButton("Request", id: "permission-request-\(permission.rawValue)") {
             Task {
                 await permissionCascade.request(permission)
                 await refreshPermissionStates()
             }
-        } label: {
-            Text("Request")
+        }
+        .disabled(permissionCascade.isRequesting)
+    }
+
+    /// Shared capsule button for the trailing permission affordances.
+    private func pillButton(
+        _ title: String, id: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)
@@ -316,8 +322,7 @@ struct SensorSettingsView: View {
         // Borderless keeps the tap target scoped to the capsule — a plain
         // row-embedded Button would otherwise swallow the whole row.
         .buttonStyle(.borderless)
-        .disabled(permissionCascade.isRequesting)
-        .accessibilityIdentifier("permission-request-\(permission.rawValue)")
+        .accessibilityIdentifier(id)
     }
 
     private func requestSensorAccess() async {
