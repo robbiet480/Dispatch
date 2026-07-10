@@ -8,6 +8,22 @@ struct QuestionVisualizationView: View {
     let question: Question
     let visualization: QuestionVisualization
     let theme: Theme
+    /// Full-bleed applies to the compact (iPhone/pager) layout only — the
+    /// regular-width iPad grid keeps carded, inset cells.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    /// The chart CANVAS (fills) runs to the physical screen edges on compact,
+    /// like original Reporter; IN-CHART text keeps a ~20pt inset so curved
+    /// corners never clip glyphs. Chrome (heading/filter row) is NOT canvas
+    /// and keeps its margins. Text-list pages (tokens/places/notes) are not
+    /// fills — they keep the 8pt page inset.
+    private var isFullBleedCanvas: Bool {
+        guard horizontalSizeClass != .regular else { return false }
+        switch visualization {
+        case .optionShares, .numericSeries: return true
+        default: return false
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,7 +42,11 @@ struct QuestionVisualizationView: View {
                 .accessibilityLabel(question.prompt)
 
             content
-                .padding(.horizontal, 8)
+                .padding(.horizontal, isFullBleedCanvas ? 0 : 8)
+                // Portrait iPhones have no horizontal safe-area inset, but if
+                // one ever appears (landscape/regulatory), the canvas should
+                // still own the physical edge.
+                .ignoresSafeArea(isFullBleedCanvas ? .container : [], edges: .horizontal)
                 // Dots no longer overlay pages (plan 29 reserved strip) —
                 // just breathing room above the toolbar.
                 .padding(.bottom, 8)
@@ -37,9 +57,10 @@ struct QuestionVisualizationView: View {
     private var content: some View {
         switch visualization {
         case .optionShares(let shares):
-            OptionSharesBarsView(shares: shares, theme: theme)
+            OptionSharesBarsView(shares: shares, theme: theme, isFullBleed: isFullBleedCanvas)
         case .numericSeries(let points, let average):
-            NumericSeriesView(points: points, average: average, theme: theme)
+            NumericSeriesView(points: points, average: average, theme: theme,
+                              isFullBleed: isFullBleedCanvas)
         case .frequency(let items, let distinctCount):
             TokenFrequencyView(items: items, distinctCount: distinctCount)
         case .places(let items):
@@ -68,6 +89,9 @@ struct QuestionVisualizationView: View {
 struct OptionSharesBarsView: View {
     let shares: [(option: String, share: Double)]
     let theme: Theme
+    /// Edge-to-edge canvas (compact home): square corners so blocks run under
+    /// the screen's corner radii, and labels inset 20pt from the edges.
+    var isFullBleed: Bool = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -81,7 +105,7 @@ struct OptionSharesBarsView: View {
             VStack(spacing: 2) {
                 ForEach(Array(shares.enumerated()), id: \.offset) { index, entry in
                     ZStack(alignment: .bottom) {
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: isFullBleed ? 0 : 6)
                             .fill(tint(for: index))
 
                         HStack {
@@ -97,7 +121,9 @@ struct OptionSharesBarsView: View {
                         // accessibility Dynamic Type sizes the labels must
                         // shrink rather than clip against the block.
                         .minimumScaleFactor(0.5)
-                        .padding(10)
+                        .padding(.vertical, 10)
+                        // In-chart text stays clear of the curved corners.
+                        .padding(.horizontal, isFullBleed ? 20 : 10)
                         .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(height: heights[index])
@@ -169,6 +195,10 @@ struct NumericSeriesView: View {
     let points: [(date: Date, value: Double)]
     let average: Double
     let theme: Theme
+    /// Edge-to-edge canvas (compact home): the plot runs to the physical
+    /// screen edges, so in-chart text insets grow to 20pt to stay clear of
+    /// the curved corners.
+    var isFullBleed: Bool = false
 
     var body: some View {
         Chart {
@@ -190,7 +220,7 @@ struct NumericSeriesView: View {
                         .font(.caption2.weight(.semibold))
                         .kerning(0.5)
                         .foregroundStyle(.white.opacity(0.8))
-                        .padding(.trailing, 4)
+                        .padding(.trailing, isFullBleed ? 20 : 4)
                 }
         }
         // Plan 29: no leading Y-axis gutter — the chart owns the full page
@@ -228,7 +258,9 @@ struct NumericSeriesView: View {
                  : String(format: "%.1f", value))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.6))
-                .padding(4)
+                .padding(.vertical, 4)
+                // In-chart text stays clear of the curved corners.
+                .padding(.horizontal, isFullBleed ? 20 : 4)
         }
     }
 

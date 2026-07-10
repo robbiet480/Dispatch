@@ -95,6 +95,16 @@ final class HomeParityUITests: XCTestCase {
                        "stacked blocks share the same leading edge")
         XCTAssertGreaterThan(second.minY, first.maxY - 1.0,
                              "blocks must stack vertically, not sit side by side")
+
+        // Compact canvas is truly full-bleed: fills touch the physical
+        // screen edges (iPad grid cells stay carded/inset).
+        if !isPad {
+            let screen = app.windows.firstMatch.frame
+            XCTAssertEqual(first.minX, 0, accuracy: 1.0,
+                           "full-bleed block should touch the leading screen edge")
+            XCTAssertEqual(first.maxX, screen.maxX, accuracy: 1.0,
+                           "full-bleed block should touch the trailing screen edge")
+        }
     }
 
     /// PR #41 review: 15 pages of dots (tiered shrink) must fit inside the
