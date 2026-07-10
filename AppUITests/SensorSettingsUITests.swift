@@ -29,21 +29,21 @@ final class SensorSettingsUITests: XCTestCase {
             statuses: #"{"location":"granted","microphone":"notDetermined","photos":"denied"}"#
         )
 
-        // Granted renders as subdued text (three rows share the location
-        // permission — Location/Weather/Elevation — so firstMatch).
-        let granted = app.staticTexts["permission-status-location"].firstMatch
+        // Granted renders as a filled radio, no text (three rows share the
+        // location permission — Location/Weather/Elevation — so firstMatch).
+        let granted = app.images["permission-radio-location"].firstMatch
         XCTAssertTrue(granted.waitForExistence(timeout: 10))
         XCTAssertEqual(granted.label, "Granted")
 
-        // Not-determined renders as a Request button.
-        let request = app.buttons["permission-status-microphone"].firstMatch
+        // Not-determined renders as a Request button beside an empty radio.
+        let request = app.buttons["permission-request-microphone"].firstMatch
         XCTAssertTrue(request.waitForExistence(timeout: 10))
         XCTAssertEqual(request.label, "Request")
 
-        // Denied renders as a button (deep link to the Settings app).
-        let denied = app.buttons["permission-status-photos"].firstMatch
+        // Denied renders as a tappable empty radio (deep link to Settings).
+        let denied = app.buttons["permission-radio-photos"].firstMatch
         XCTAssertTrue(denied.waitForExistence(timeout: 10))
-        XCTAssertEqual(denied.label, "Denied")
+        XCTAssertEqual(denied.label, "Denied — open Settings")
 
         // Something is requestable, so the bulk request row is present —
         // scroll to it (List rows materialize lazily; the bottom of the
@@ -63,8 +63,8 @@ final class SensorSettingsUITests: XCTestCase {
             statuses: #"{"location":"granted","health":"requested","motion":"granted","microphone":"denied","photos":"denied","mediaLibrary":"granted","focus":"granted"}"#
         )
 
-        // Screen is up (a granted affordance is visible)…
-        XCTAssertTrue(app.staticTexts["permission-status-location"].firstMatch.waitForExistence(timeout: 10))
+        // Screen is up (a granted radio is visible)…
+        XCTAssertTrue(app.images["permission-radio-location"].firstMatch.waitForExistence(timeout: 10))
         // …but with nothing in not-determined there is nothing to request:
         // scroll through the whole section (rows are lazy) and confirm the
         // bulk row never materializes.

@@ -254,43 +254,59 @@ struct SensorSettingsView: View {
     private func permissionAffordance(for kind: SensorKind) -> some View {
         if let permission = kind.permission {
             switch permissionStates[permission] ?? .unknown {
-            case .granted:
-                statusCaption("Granted", permission: permission)
-            case .requested:
-                // HealthKit hides read-grant status by design — "Requested"
-                // (dialog already shown) is the strongest truthful claim.
-                statusCaption("Requested", permission: permission)
+            case .granted, .requested:
+                // A filled radio, no text. HealthKit hides read-grant status
+                // (see SensorPermissionState), so `.requested` — the dialog
+                // was shown, the choice is opaque — can't be distinguished
+                // from `.granted`; both are usable and collapse to "on".
+                permissionRadio(on: true)
+                    .accessibilityIdentifier("permission-radio-\(permission.rawValue)")
+                    .accessibilityLabel("Granted")
             case .notDetermined:
-                statusButton("Request", permission: permission) {
-                    Task {
-                        await permissionCascade.request(permission)
-                        await refreshPermissionStates()
-                    }
+                // The only truly requestable state: a Request button plus an
+                // empty radio.
+                HStack(spacing: 12) {
+                    requestButton(permission: permission)
+                    permissionRadio(on: false)
+                        .accessibilityIdentifier("permission-radio-\(permission.rawValue)")
+                        .accessibilityLabel("Not granted")
                 }
             case .denied:
-                statusButton("Denied", permission: permission) {
+                // Empty radio, tappable — a denial can only be reversed in
+                // the Settings app, so the indicator deep-links there.
+                Button {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         openURL(url)
                     }
+                } label: {
+                    permissionRadio(on: false)
                 }
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("permission-radio-\(permission.rawValue)")
+                .accessibilityLabel("Denied — open Settings")
             case .unknown:
                 EmptyView()
             }
         }
     }
 
-    private func statusCaption(_ title: String, permission: SensorPermission) -> some View {
-        Text(title)
-            .font(.caption)
-            .foregroundStyle(.white.opacity(0.6))
-            .accessibilityIdentifier("permission-status-\(permission.rawValue)")
+    /// The status indicator: a filled radio when the permission is usable,
+    /// an empty one otherwise. Purely visual — callers attach the identifier
+    /// and label so the granted/denied/requestable cases stay distinct.
+    private func permissionRadio(on: Bool) -> some View {
+        Image(systemName: on ? "largecircle.fill.circle" : "circle")
+            .font(.body)
+            .foregroundStyle(.white.opacity(on ? 0.9 : 0.4))
     }
 
-    private func statusButton(
-        _ title: String, permission: SensorPermission, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
+    private func requestButton(permission: SensorPermission) -> some View {
+        Button {
+            Task {
+                await permissionCascade.request(permission)
+                await refreshPermissionStates()
+            }
+        } label: {
+            Text("Request")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)
@@ -301,7 +317,7 @@ struct SensorSettingsView: View {
         // row-embedded Button would otherwise swallow the whole row.
         .buttonStyle(.borderless)
         .disabled(permissionCascade.isRequesting)
-        .accessibilityIdentifier("permission-status-\(permission.rawValue)")
+        .accessibilityIdentifier("permission-request-\(permission.rawValue)")
     }
 
     private func requestSensorAccess() async {
