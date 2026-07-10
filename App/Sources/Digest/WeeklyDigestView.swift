@@ -7,6 +7,11 @@ import SwiftUI
 /// when available, deterministic template otherwise. Generation is async and
 /// on-demand (screen open / Regenerate); nothing runs in the background.
 struct WeeklyDigestView: View {
+    /// Which trailing period this screen renders. Defaults to `.week` — the
+    /// Settings `NavigationLink` (frozen as `weekly-digest-link`) opens the
+    /// weekly digest; notification taps pass their own schedule's period.
+    var period: DigestPeriod = .week
+
     @Environment(ThemeStore.self) private var themeStore
     @Query private var reports: [Report]
     @Query private var questions: [Question]
@@ -43,14 +48,14 @@ struct WeeklyDigestView: View {
                 .readableColumn()
             }
         }
-        .navigationTitle("Weekly Digest")
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .accessibilityIdentifier("weekly-digest-view")
         .onAppear {
             guard stats == nil else { return }
             let computed = DigestStats.compute(reports: reports, questions: questions,
-                                               weekEnding: Date())
+                                               period: period, ending: Date())
             stats = computed
             regenerate(with: computed)
         }
@@ -72,11 +77,20 @@ struct WeeklyDigestView: View {
         }
     }
 
+    private var navigationTitle: String {
+        switch period {
+        case .week: return "Weekly Digest"
+        case .month: return "Monthly Digest"
+        case .quarter: return "Quarterly Digest"
+        }
+    }
+
     private func deltaText(_ stats: DigestStats) -> String? {
+        let noun = period.noun
         let delta = stats.reportCount - stats.priorPeriodReportCount
-        if delta > 0 { return "+\(delta) vs last week" }
-        if delta < 0 { return "\(delta) vs last week" }
-        return "same as last week"
+        if delta > 0 { return "+\(delta) vs last \(noun)" }
+        if delta < 0 { return "\(delta) vs last \(noun)" }
+        return "same as last \(noun)"
     }
 
     private func statTile(value: String, caption: String, detail: String?) -> some View {
@@ -154,7 +168,7 @@ struct WeeklyDigestView: View {
     private var narrativeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("THIS WEEK")
+                Text("THIS \(period.noun.uppercased())")
                     .font(.caption.weight(.semibold))
                     .kerning(1.5)
                     .foregroundStyle(.white.opacity(0.7))

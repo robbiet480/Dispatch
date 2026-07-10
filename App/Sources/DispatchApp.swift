@@ -77,6 +77,9 @@ struct DispatchApp: App {
         themeStore = ThemeStore(defaults: appDefaults)
         awakeStore = AwakeStore(defaults: appDefaults)
         notificationPrefs = NotificationPrefs(defaults: appDefaults)
+        // Plan 40: migrate the single digestEnabled toggle to the schedules
+        // list once, before the first replan reads digestSchedules.
+        notificationPrefs.migrateDigestSchedulesIfNeeded()
         visualizationFilterStore = VisualizationFilterStore(defaults: appDefaults)
         appLockStore = AppLockStore(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
         appLockStore.lockAtLaunchIfNeeded()

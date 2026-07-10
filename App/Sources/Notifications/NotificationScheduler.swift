@@ -282,27 +282,39 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
 
         center.removePendingNotificationRequests(withIdentifiers: identifiersToRemove)
 
-        // Weekly digest reminder — scheduled ahead of the asleep guard: the
-        // digest is a Sunday-evening summary, not an awake-window prompt.
-        // Its removal joined the batch above, so a disabled toggle simply
-        // never re-adds it.
-        if prefs.digestEnabled {
-            var digestComponents = DateComponents()
-            digestComponents.weekday = 1 // Sunday
-            digestComponents.hour = 19
-            let digestContent = UNMutableNotificationContent()
-            digestContent.title = "Your weekly digest is ready"
-            digestContent.body = "See how your week stacked up — reports, people, places, and more."
-            digestContent.sound = .default
-            let digestRequest = UNNotificationRequest(
-                identifier: NotificationIdentifiers.digestWeeklyIdentifier,
-                content: digestContent,
-                trigger: UNCalendarNotificationTrigger(dateMatching: digestComponents, repeats: true)
-            )
+        // Digest reminders (plan 40) — scheduled ahead of the asleep guard: a
+        // digest is a periodic summary, not an awake-window prompt. Removals
+        // joined the digest- prefix batch above, so disabled/deleted schedules
+        // simply never re-add. Weekly and monthly(day ≤ 28) repeat natively;
+        // monthly 29–31 and quarterly are one-shot at the kit-computed next
+        // fire, re-armed by every replan (foreground replans run on every app
+        // open, so the request refreshes long before it fires).
+        var digestRequestCount = 0
+        for schedule in prefs.digestSchedules where schedule.isEnabled {
+            let trigger: UNNotificationTrigger
+            if let matching = schedule.repeatingTriggerComponents {
+                trigger = UNCalendarNotificationTrigger(dateMatching: matching, repeats: true)
+            } else if let fireDate = schedule.nextFireDate(after: now, calendar: calendar) {
+                let components = calendar.dateComponents(
+                    [.year, .month, .day, .hour, .minute], from: fireDate)
+                trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            } else {
+                continue
+            }
+            let content = UNMutableNotificationContent()
+            content.title = Self.digestTitle(for: schedule.cadence.period)
+            content.body = Self.digestBody(for: schedule.cadence.period)
+            content.sound = .default
+            content.userInfo = [NotificationIdentifiers.digestPeriodKey:
+                                    schedule.cadence.period.rawValue]
+            let request = UNNotificationRequest(
+                identifier: "\(NotificationIdentifiers.digestPrefix)\(schedule.id.uuidString)",
+                content: content, trigger: trigger)
             do {
-                try await center.add(digestRequest)
+                try await center.add(request)
+                digestRequestCount += 1
             } catch {
-                notificationLog.error("failed to schedule weekly digest: \(error, privacy: .public)")
+                notificationLog.error("failed to schedule digest \(schedule.id, privacy: .public): \(error, privacy: .public)")
             }
         }
 
@@ -371,7 +383,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 : nil,
             pastNagParents: pastNagParents,
             now: now,
-            cap: 60)
+            // Digests occupy the 64-request system cap too (there can now be
+            // several), so drop the prompt allocation by however many digest
+            // requests we just scheduled — digests never crowd out prompts.
+            cap: 60 - digestRequestCount)
         if allocation.pastNagTails > 0 {
             // Replans run often (foreground, settings, every sync pass) and
             // this accounting is idempotent — only log at info when the
@@ -721,6 +736,24 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// the group may not contain the global Yes/No question, so the actions
     /// would file answers against a question outside the group. userInfo
     /// carries the group ID for the tap-through survey scoping.
+    /// Period-aware digest notification copy (plan 40). Static, stats-free —
+    /// the screen computes fresh stats on open (plan-14 doctrine).
+    static func digestTitle(for period: DigestPeriod) -> String {
+        switch period {
+        case .week: return "Your weekly digest is ready"
+        case .month: return "Your monthly digest is ready"
+        case .quarter: return "Your quarterly digest is ready"
+        }
+    }
+
+    static func digestBody(for period: DigestPeriod) -> String {
+        switch period {
+        case .week: return "See how your week stacked up — reports, people, places, and more."
+        case .month: return "A month of reports, people, and places — see how it added up."
+        case .quarter: return "Three months of reports — see the bigger picture."
+        }
+    }
+
     static func makeGroupContent(groupID: String, body: String) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = "Time to report"
@@ -840,11 +873,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             .userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] as? String
         let firedByVisitArrival = response.notification.request.content
             .userInfo[NotificationIdentifiers.visitArrivalKey] != nil
+        // Missing/unknown period → .week — also covers stale pre-plan-40
+        // `digest-weekly` requests (no period payload).
+        let digestPeriod = DigestPeriod(rawValue: response.notification.request.content
+            .userInfo[NotificationIdentifiers.digestPeriodKey] as? String ?? "") ?? .week
         Task { @MainActor in
             // Digest taps deep-link to the digest screen — no survey, no
             // lastActedAt marker (the digest is not a prompt).
             if requestIdentifier.hasPrefix(NotificationIdentifiers.digestPrefix) {
-                pendingDigestOpen = true
+                pendingDigestPeriod = digestPeriod
                 completionHandler()
                 return
             }
@@ -892,9 +929,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// this via the environment and present SurveyFlowView, then clear it.
     var pendingSurveyRequest: SurveyRequest?
 
-    /// Set by the delegate when a `digest-` notification is tapped;
-    /// ContentView observes this and presents the Weekly Digest sheet.
-    var pendingDigestOpen = false
+    /// Set by the delegate when a `digest-` notification is tapped, carrying
+    /// the tapped schedule's period; ContentView observes this and presents
+    /// the digest sheet scoped to that period. nil ⇒ no pending digest.
+    var pendingDigestPeriod: DigestPeriod?
 
     private func scheduleSnooze() {
         let identifier = "\(NotificationIdentifiers.snoozePrefix)\(UUID().uuidString)"
