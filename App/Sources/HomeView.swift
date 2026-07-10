@@ -234,8 +234,10 @@ struct HomeView: View {
                 .tag(Optional(question.uniqueIdentifier))
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: .always))
-        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        // Plan 29: the UIPageControl overlay is off entirely — plain dots
+        // render in the reserved bottom strip (see `bottomBar`), so pages
+        // never need dot-avoidance padding again.
+        .tabViewStyle(.page(indexDisplayMode: .never))
     }
 
     /// Plan 27 (regular width): every visible question's visualization at
@@ -330,6 +332,9 @@ struct HomeView: View {
         }
     }
 
+    /// Plan 29: the reserved bottom strip — REPORT / plain page dots / AWAKE
+    /// pill. Fixed-height sibling of the pager, so content can never overlap
+    /// it (the old UIPageControl-overlay bug class is structurally gone).
     private var bottomBar: some View {
         HStack {
             Button("REPORT") {
@@ -348,7 +353,18 @@ struct HomeView: View {
 
             Spacer()
 
-            Button(awakeStore.isAwake ? "AWAKE" : "ASLEEP") {
+            // Dots belong to the pager only — the regular-width grid shows
+            // every visualization at once, so there's nothing to page.
+            if horizontalSizeClass != .regular && !visibleQuestions.isEmpty && !reports.isEmpty {
+                PlainPageDots(
+                    count: visibleQuestions.count,
+                    currentIndex: visibleQuestions.firstIndex { $0.uniqueIdentifier == selectedQuestionID } ?? 0
+                )
+            }
+
+            Spacer()
+
+            AwakePillToggle(isAwake: awakeStore.isAwake) {
                 // Toggling is authoritative even if the survey that follows is
                 // cancelled — the state change reflects reality regardless of
                 // whether the user files the optional report about it.
@@ -356,10 +372,63 @@ struct HomeView: View {
                 scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
                 surveyPresenter.request = SurveyRequest(kind: kind, trigger: .manual)
             }
-            .font(.headline)
-            .foregroundStyle(.white)
-            .accessibilityIdentifier("awake-toggle")
         }
-        .padding()
+        .padding(.horizontal)
+        // The reserved strip: minHeight (not a hard frame) so accessibility
+        // text sizes can grow the controls instead of clipping them.
+        .frame(minHeight: 52)
+    }
+}
+
+/// Plan 29: plain page-indicator dots (no background pill). Decorative — the
+/// pager itself stays VoiceOver-adjustable, so the dots are hidden from the
+/// accessibility tree but keep an identifier for structural UI tests.
+private struct PlainPageDots: View {
+    let count: Int
+    let currentIndex: Int
+
+    var body: some View {
+        HStack(spacing: 9) {
+            ForEach(0..<count, id: \.self) { index in
+                Circle()
+                    .fill(index == currentIndex ? Color.white : Color.white.opacity(0.35))
+                    .frame(width: 7, height: 7)
+            }
+        }
+        .accessibilityIdentifier("page-dots")
+        .accessibilityHidden(true)
+    }
+}
+
+/// Plan 29: Reporter-style AWAKE/ASLEEP pill — a capsule whose white knob
+/// slides edge-to-edge as the label swaps. Semantics live in `action`;
+/// this view is presentation only.
+private struct AwakePillToggle: View {
+    let isAwake: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            withAnimation(.snappy) { action() }
+        } label: {
+            HStack(spacing: 8) {
+                if !isAwake { knob }
+                Text(isAwake ? "AWAKE" : "ASLEEP")
+                    .font(.caption.weight(.bold))
+                    .kerning(0.5)
+                    .foregroundStyle(.white)
+                if isAwake { knob }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.18)))
+        }
+        .accessibilityIdentifier("awake-toggle")
+        // NavigationUITests reads .label and asserts AWAKE/ASLEEP + the flip.
+        .accessibilityLabel(isAwake ? "AWAKE" : "ASLEEP")
+    }
+
+    private var knob: some View {
+        Circle().fill(Color.white).frame(width: 18, height: 18)
     }
 }
