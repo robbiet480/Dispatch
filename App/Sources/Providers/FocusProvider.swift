@@ -14,8 +14,16 @@ struct FocusProvider: SensorProvider {
     func capture() async throws -> SensorPayload {
         let center = INFocusStatusCenter.default
         if center.authorizationStatus == .notDetermined {
+            // INFocusStatusCenter's completion handler is the same callback
+            // PermissionCascade.requestFocus guards: framework completion
+            // handlers have double-fired on OS betas (the build-8 CMPedometer
+            // launch crash), and a second resume of a checked continuation
+            // traps. One-shot guard makes late/duplicate callbacks a no-op.
+            let resumeGate = OneShotResumeGuard()
             _ = await withCheckedContinuation { continuation in
-                center.requestAuthorization { status in continuation.resume(returning: status) }
+                center.requestAuthorization { status in
+                    if resumeGate.claim() { continuation.resume(returning: status) }
+                }
             }
         }
         guard center.authorizationStatus == .authorized else {

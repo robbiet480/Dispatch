@@ -34,6 +34,27 @@ import Testing
         #expect(!gate.claim())
     }
 
+    /// Simulates the timeout-vs-callback race (the launch-under-debugger
+    /// shape): a bounding timeout resumes the continuation first, then the
+    /// real framework callback arrives late. The guard must let the timeout
+    /// win and silently drop the late callback instead of trapping.
+    @Test func timeoutThenLateCallbackResumesExactlyOnce() async {
+        let gate = OneShotResumeGuard()
+        var lateCallback: (@Sendable (Int) -> Void)?
+        let value: Int = await withCheckedContinuation { continuation in
+            // Framework call: slow under a debugger, callback held for later.
+            lateCallback = { result in
+                if gate.claim() { continuation.resume(returning: result) }
+            }
+            // Timeout fires first and wins the continuation.
+            if gate.claim() { continuation.resume(returning: -1) }
+        }
+        #expect(value == -1)
+        // The real callback finally arrives — must be a no-op, not a trap.
+        lateCallback?(42)
+        #expect(!gate.claim())
+    }
+
     /// The real handler can arrive on any queue: hammer claim() from many
     /// concurrent tasks and require exactly one winner.
     @Test func claimIsSingleWinnerUnderConcurrency() async {
