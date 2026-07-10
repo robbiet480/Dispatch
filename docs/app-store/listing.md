@@ -41,6 +41,11 @@ community catalog, or import the questions you used in Reporter.
 Number questions come with slider, stepper, dial, tap-counter, and
 scale inputs. Answers can log State of Mind entries to Apple Health.
 
+People you mention get stable identities: rename someone and your
+history follows, merge duplicates, and — if you turn it on — get
+name suggestions and photos from your contact book. Contact matching
+stays on your device; nothing from Contacts is uploaded or synced.
+
 Prompting is flexible: a global random schedule with quiet hours,
 plus prompt groups that fire on their own schedule — every few hours,
 at fixed times, when a workout ends, or when you arrive somewhere
@@ -56,14 +61,18 @@ Your data works for you:
 • Full-text and Spotlight search
 • Home and lock screen widgets, and a Control Center button that
   starts a report in one tap
-• Export everything as JSON or CSV, automatic daily backups to the
-  Files app, and one-button Delete All Data
+• Export everything as JSON or CSV, automatic daily backups (Files
+  app and your own iCloud Drive), and one-button Delete All Data
+• Optional webhooks: send each report's JSON to a URL you choose —
+  your home-automation server, your own service — with signing and
+  encryption options
 
 Privacy, plainly: there is no server, no account, no analytics, and
 no third-party code. Data stays on your device and — if you leave
-iCloud Sync on — in your own private iCloud database, which includes
-the Health readings attached to your reports. Turn sync off and
-nothing leaves the device. Full policy inside the app and at the
+iCloud Sync and iCloud Drive backups on — in your own private iCloud
+storage, which includes the Health readings attached to your reports.
+Turn those off and nothing leaves the device unless you point a
+webhook somewhere yourself. Full policy inside the app and at the
 privacy policy link.
 
 Dispatch is an independent, open-source reimplementation inspired by
@@ -96,8 +105,9 @@ First App Store release. Random survey prompts, prompt groups
 (timed, workout-end, and arrival triggers), Focus filters, Apple
 Health capture including medications and State of Mind, charts,
 insights, a weekly on-device digest, widgets and a Control Center
-button, iCloud sync, JSON/CSV export, automatic backups, and Reporter
-import.
+button, people management with optional contact suggestions, iCloud
+sync, JSON/CSV export, automatic backups to Files and iCloud Drive,
+webhooks, and Reporter import.
 ```
 
 ## Age rating questionnaire
