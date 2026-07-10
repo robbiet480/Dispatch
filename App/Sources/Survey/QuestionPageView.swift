@@ -446,6 +446,12 @@ struct TokenEntryView: View {
     /// Picking a contact suggestion creates the PersonEntity if it's new
     /// (via PersonResolver so alternate names heal to the same person) and
     /// records the per-device contact link.
+    ///
+    /// Accepted edge case: if the survey is abandoned (or a rebuild runs)
+    /// before this answer is filed, the freshly created alias-free entity is
+    /// pruned by the next `VocabularyBuilder.rebuild` and its link-cache row
+    /// is orphaned. Harmless and device-local: re-picking the contact
+    /// recreates both, and orphaned cache rows never sync anywhere.
     private func recordContactPick(_ displayName: String) {
         guard let match = contactMatches.first(where: {
             PersonResolver.normalize($0.displayName) == PersonResolver.normalize(displayName)

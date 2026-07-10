@@ -105,12 +105,16 @@ public enum ReportFilter {
     public static func matches(report: Report, criteria: [FilterCriterion],
                                peopleQuestionIDs: Set<String> = [],
                                people: [PersonEntity] = []) -> Bool {
-        criteria.allSatisfy {
+        // Deterministic resolution order, sorted ONCE here — not per
+        // criterion per report (callers evaluate this over every report).
+        let registry = people.sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
+        return criteria.allSatisfy {
             matches(report: report, criterion: $0,
-                    peopleQuestionIDs: peopleQuestionIDs, people: people)
+                    peopleQuestionIDs: peopleQuestionIDs, people: registry)
         }
     }
 
+    /// `people` must already be deterministically sorted (see `matches`).
     private static func matches(report: Report, criterion: FilterCriterion,
                                 peopleQuestionIDs: Set<String>, people: [PersonEntity]) -> Bool {
         switch criterion {
@@ -118,9 +122,7 @@ public enum ReportFilter {
             // Every name the criterion stands for: the resolved person's
             // display name + alternates, or just the literal when unresolved.
             let acceptedNames: Set<String>
-            if let person = PersonResolver.person(
-                matching: name,
-                in: people.sorted(by: { $0.uniqueIdentifier < $1.uniqueIdentifier })) {
+            if let person = PersonResolver.person(matching: name, in: people) {
                 acceptedNames = Set(([person.text] + person.alternateNames)
                     .map(PersonResolver.normalize))
             } else {

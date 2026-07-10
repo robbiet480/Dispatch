@@ -35,9 +35,14 @@ struct InsightsView: View {
         // Person registry fingerprint (plan 22): renames/merges change how
         // person signals aggregate, so they must refire the compute.
         let peopleFingerprint = people.reduce(into: 0) { partial, person in
-            partial ^= person.uniqueIdentifier.hashValue
-            partial ^= person.text.hashValue
-            partial ^= person.alternateNames.joined(separator: "\u{1F}").hashValue
+            // Hash each person as ONE combined unit — XORing the field
+            // hashes separately would let two people swapping alternates
+            // (or a rename mirrored by an alias change) cancel out.
+            var hasher = Hasher()
+            hasher.combine(person.uniqueIdentifier)
+            hasher.combine(person.text)
+            hasher.combine(person.alternateNames)
+            partial ^= hasher.finalize()
         }
         return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(questions.count)|\(peopleFingerprint)"
     }

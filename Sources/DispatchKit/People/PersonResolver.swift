@@ -47,6 +47,12 @@ public enum PersonResolver {
         alternates.append(contentsOf: absorbed.alternateNames)
         survivor.alternateNames = dedupe(alternates, excludingNameOf: survivor)
         survivor.usageCount += absorbed.usageCount
+        // usageCount sums (per-occurrence, additive across the two people),
+        // but questionCount keeps the MAX: per-question membership can't be
+        // reconstructed from counts alone — summing would double-count
+        // questions both people appeared under. Mirrors SyncDedupe's
+        // vocabulary merge; the next VocabularyBuilder.rebuild recomputes
+        // both exactly.
         survivor.questionCount = max(survivor.questionCount, absorbed.questionCount)
         context.delete(absorbed)
         try context.save()

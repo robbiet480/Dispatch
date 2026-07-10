@@ -40,7 +40,9 @@ public enum VocabularyBuilder {
         // OR alternate names and update counts in place. Only entities that
         // match no current usage AND carry no alternate names are deleted —
         // registry entries with aliases survive even at zero usage.
-        let existingPeople = try context.fetch(FetchDescriptor<PersonEntity>())
+        let fetchedPeople = try context.fetch(FetchDescriptor<PersonEntity>())
+        backfillSharedIdentifiers(fetchedPeople)
+        let existingPeople = fetchedPeople
             .sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
         var tallies: [ObjectIdentifier: Tally] = [:]
         var unmatched: [(text: String, tally: Tally)] = []
@@ -73,5 +75,30 @@ public enum VocabularyBuilder {
             context.insert(entity)
         }
         try context.save()
+    }
+
+    /// One-time backfill for the SwiftData lightweight-migration trap: the
+    /// `uniqueIdentifier = UUID().uuidString` default added to PersonEntity
+    /// (plan 22) is evaluated ONCE during migration of a shipped store, so
+    /// every pre-existing row received the SAME identifier — breaking
+    /// ForEach identity, multi-select, merge tie-breaks, link-cache keys,
+    /// and v2 import upserts.
+    ///
+    /// Rows sharing an identifier are repaired here: the deterministic
+    /// survivor — lowest `SyncDedupe.persistentIDString`, the same rule the
+    /// dedupe pass uses — KEEPS the shared identifier (so any per-device
+    /// contact link keyed to it stays attached to exactly one person); every
+    /// other row gets a fresh UUID. Runs on every rebuild (a cheap no-op
+    /// once identifiers are unique); the caller's save persists the change.
+    static func backfillSharedIdentifiers(_ people: [PersonEntity]) {
+        for group in Dictionary(grouping: people, by: \.uniqueIdentifier).values
+        where group.count > 1 {
+            let ordered = group.sorted {
+                SyncDedupe.persistentIDString($0) < SyncDedupe.persistentIDString($1)
+            }
+            for extra in ordered.dropFirst() {
+                extra.uniqueIdentifier = UUID().uuidString
+            }
+        }
     }
 }

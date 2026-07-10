@@ -194,11 +194,15 @@ struct PersonDetailView: View {
     }
 
     /// Delete removes the registry entry only; reports are untouched. The
-    /// per-device link goes too.
+    /// per-device link goes too. The immediate rebuild (matching the
+    /// rename/merge flows) makes the documented resurrection behavior
+    /// consistent right away: a still-mentioned name reappears as a plain
+    /// entry now, not at some later rebuild.
     private func deletePerson() {
         linkCache.unlink(personID: person.uniqueIdentifier)
         modelContext.delete(person)
         try? modelContext.save()
+        try? VocabularyBuilder.rebuild(in: modelContext)
         dismiss()
     }
 
