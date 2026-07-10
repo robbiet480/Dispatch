@@ -54,6 +54,26 @@ enum DemoData {
             let isWeekend = weekday == 1 || weekday == 7
             let reportsToday = 2 + Int(rng.next() % 2) // 2–3
 
+            // Morning wake report — the sleep question is the FIRST home viz
+            // page, so it must have data or the hero screenshot is empty.
+            if let wakeDate = calendar.date(bySettingHour: 7, minute: 15 + Int(rng.next() % 40),
+                                            second: 0, of: day), wakeDate <= now {
+                let wake = Report()
+                wake.uniqueIdentifier = "demo-wake-\(dayOffset)"
+                wake.date = wakeDate
+                wake.timeZoneIdentifier = TimeZone.current.identifier
+                wake.kind = .wake
+                wake.trigger = .wake
+                wake.battery = 0.9
+                let roll = rng.next() % 10
+                let quality = roll < 6 ? "Great" : (roll < 9 ? "OK" : "Poorly")
+                let sleepAnswer = answer(question("how-did-you-sleep"), options: [quality])
+                context.insert(wake)
+                context.insert(sleepAnswer)
+                sleepAnswer.report = wake
+                reportIndex += 1
+            }
+
             for slot in 0..<reportsToday {
                 let hour = [9, 14, 19][slot % 3] + Int(rng.next() % 2)
                 let minute = Int(rng.next() % 60)

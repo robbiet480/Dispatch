@@ -83,9 +83,11 @@ final class ScreenshotTests: XCTestCase {
         let groupsLink = app.buttons["prompt-groups-link"]
         XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
         groupsLink.tap()
-        XCTAssertTrue(app.staticTexts["Workday check-in"].waitForExistence(timeout: 10))
+        // Rows render group names uppercased.
+        let workdayRow = app.staticTexts["WORKDAY CHECK-IN"]
+        XCTAssertTrue(workdayRow.waitForExistence(timeout: 10))
         snap("04-prompt-groups")
-        app.staticTexts["Workday check-in"].tap()
+        workdayRow.tap()
         XCTAssertTrue(app.textFields["group-name"].waitForExistence(timeout: 10))
         snap("05-prompt-group-editor")
         // Editor is a sheet/push with a save button; back out without saving.
