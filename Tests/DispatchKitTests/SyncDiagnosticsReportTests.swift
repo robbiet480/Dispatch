@@ -116,6 +116,33 @@ struct SyncDiagnosticsReportTests {
         #expect(dump.contains("2"))
     }
 
+    /// The EVENTS section renders in the exact order it receives (the caller
+    /// pre-sorts newest-first). Render must NOT re-reverse — doing so would
+    /// list oldest-first, contradicting the "newest first" label and the
+    /// on-screen list.
+    @Test func renderPreservesEventOrderNewestFirst() {
+        let events = [
+            SyncEventRecord(
+                date: Date(timeIntervalSince1970: 1_700_000_200),
+                kindRaw: "newerEvent", succeeded: true, detail: nil
+            ),
+            SyncEventRecord(
+                date: Date(timeIntervalSince1970: 1_700_000_100),
+                kindRaw: "olderEvent", succeeded: true, detail: nil
+            ),
+        ]
+        let dump = SyncDiagnosticsReport.render(
+            appVersion: "1.0 (25)", osVersion: "iOS 26.0", deviceModel: "iPhone17,1",
+            syncEnabled: true, syncActive: true, accountStatusText: "Available",
+            events: events, dedupeTotals: DedupeTotals(), provenance: [],
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_300)
+        )
+        let newer = try! #require(dump.range(of: "newerEvent"))
+        let older = try! #require(dump.range(of: "olderEvent"))
+        #expect(newer.lowerBound < older.lowerBound,
+                "events must render in the newest-first order they are passed")
+    }
+
     // MARK: - Privacy pin (executable form of the privacy decision)
 
     @Test func renderNeverLeaksReportContent() throws {

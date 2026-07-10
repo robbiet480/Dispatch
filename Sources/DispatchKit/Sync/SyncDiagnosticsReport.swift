@@ -108,7 +108,10 @@ public enum SyncDiagnosticsReport {
         if events.isEmpty {
             lines.append("  (none observed)")
         } else {
-            for event in events.reversed() {
+            // `events` already arrives newest-first (the caller passes
+            // `SyncDiagnostics.events`, i.e. `log.records.reversed()`), matching
+            // both this section's label and the on-screen list — render as-is.
+            for event in events {
                 let name = event.kind?.displayName ?? event.kindRaw
                 let result: String
                 switch event.succeeded {
