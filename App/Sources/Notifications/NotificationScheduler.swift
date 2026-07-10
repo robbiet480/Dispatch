@@ -535,6 +535,31 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         reportFiled(now: effective)
     }
 
+    /// Synced-report nag reconciliation (plan 19): reports mirrored in from
+    /// another device (the watch quick answer in particular) must quiet an
+    /// in-flight nag chain here — the remote device can reach neither this
+    /// device's `lastActedAt` defaults nor its pending requests. Guards live
+    /// in the kit (`SyncedReportReconciler`, kit-tested): floor from the
+    /// report's OWN timestamp, forward-only, historical/backfill arrivals
+    /// ignored via a window derived from the nag chain's own maximum
+    /// lifetime under the current prefs — not a magic constant.
+    /// Called by the remote-change callback BEFORE the replan so the replan
+    /// reads the updated `lastActedAt` (same ordering contract as the
+    /// widget-marker drain above).
+    func syncedReportsArrived(reportDates: [Date], now: Date = Date()) {
+        let window = TimeInterval(
+            (prefs.nagDelayMinutes + prefs.nagMaxCount * prefs.nagIntervalMinutes) * 60
+        )
+        guard let floor = SyncedReportReconciler.newFloor(
+            reportDates: reportDates,
+            currentFloor: prefs.lastActedAt,
+            now: now,
+            window: window
+        ) else { return }
+        notificationLog.info("synced report arrival floors lastActedAt to \(floor, privacy: .public) — cancelling past-due nags")
+        reportFiled(now: floor)
+    }
+
     /// Removes the sibling nag chain for the prompt stamped `stamp`.
     /// Identifiers are enumerable (`nag-<stamp>-1...10`, nagMaxCount's upper
     /// clamp), so we remove the full range blindly — removing an identifier
