@@ -20,9 +20,14 @@ struct WatchHomeView: View {
         questions.filter { $0.isEnabled && $0.reportKinds.contains(.regular) }
     }
 
-    /// Same eligibility as the widget/notification quick answer.
+    /// Same eligibility as the widget/notification quick answer — mirrors
+    /// `QuickAnswerFiler.firstEnabledYesNoQuestion` over the live @Query
+    /// (already sortOrder-sorted) instead of re-fetching the store on every
+    /// body evaluation.
     private var quickAnswerQuestion: Question? {
-        QuickAnswerFiler.firstEnabledYesNoQuestion(in: modelContext)
+        questions.first {
+            $0.isEnabled && $0.type == .yesNo && $0.reportKinds.contains(.regular)
+        }
     }
 
     var body: some View {

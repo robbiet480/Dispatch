@@ -6,11 +6,12 @@ import SwiftUI
 /// therefore PER-DEVICE — these toggles are the watch's own (default ON) and
 /// never sync to the phone (cross-device toggle sync is deferred scope).
 struct WatchSettingsView: View {
-    private let settings = SensorSettings()
+    private let settings: SensorSettings
     @State private var enabledByKind: [SensorKind: Bool]
 
     init() {
         let settings = SensorSettings()
+        self.settings = settings
         var initial: [SensorKind: Bool] = [:]
         for kind in WatchProviders.watchCapableKinds {
             initial[kind] = settings.isEnabled(kind)
