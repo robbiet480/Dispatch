@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Counts of duplicate rows removed by a `SyncDedupe.run` pass, per type.
-public struct DedupeSummary: Equatable, Sendable {
+public struct DedupeSummary: Equatable, Sendable, Codable {
     public var questionsRemoved = 0
     public var promptGroupsRemoved = 0
     public var tokensRemoved = 0
