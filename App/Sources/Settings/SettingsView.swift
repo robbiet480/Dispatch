@@ -1,4 +1,5 @@
 import DispatchKit
+import SwiftData
 import SwiftUI
 
 struct SettingsView: View {
@@ -7,6 +8,7 @@ struct SettingsView: View {
     @Environment(AppLockStore.self) private var appLockStore
     @Environment(\.notificationPrefs) private var notificationPrefs
     @Environment(\.appDefaults) private var appDefaults
+    @Environment(\.modelContext) private var context
     @State private var nextAlertCaption: String?
 
     private var theme: Theme { themeStore.theme }
@@ -133,8 +135,57 @@ struct SettingsView: View {
             .tint(ThemeColor.color(theme))
             .accessibilityIdentifier("app-lock-toggle")
             .listRowBackground(Color.white.opacity(0.12))
+
+            // Only meaningful while app lock is on — with lock off, indexing
+            // always happens, so the row is hidden entirely (same conditional-
+            // row pattern as elsewhere in Settings).
+            if appLockStore.enabled {
+                Toggle(isOn: Binding(
+                    get: { appLockStore.spotlightWhileLockedEnabled },
+                    set: { newValue in
+                        setSpotlightWhileLocked(newValue)
+                    })) {
+                    settingsLabel("Spotlight Search While Locked")
+                }
+                .tint(ThemeColor.color(theme))
+                .accessibilityIdentifier("spotlight-while-locked-toggle")
+                .listRowBackground(Color.white.opacity(0.12))
+            }
         } header: {
             sectionHeader("PRIVACY")
+        } footer: {
+            if appLockStore.enabled {
+                Text("Show reports in iOS search while App Lock is on. Search results can reveal report content without unlocking.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    /// Flipping the opt-in has immediate index side effects: opting in rebuilds
+    /// the Spotlight index from all persisted reports (they were deindexed when
+    /// app lock came on); opting out re-runs the same wipe that enabling app
+    /// lock performs, so nothing stays searchable behind the lock. The rebuild
+    /// runs on a background ModelContext off the main actor — same cross-context
+    /// pattern as DataSettingsView's import; `SpotlightIndexer.rebuildAll`
+    /// snapshots the models before any async work.
+    private func setSpotlightWhileLocked(_ newValue: Bool) {
+        appLockStore.spotlightWhileLockedEnabled = newValue
+        if newValue {
+            let container = context.container
+            Task.detached(priority: .utility) {
+                do {
+                    let backgroundContext = ModelContext(container)
+                    let reports = try backgroundContext.fetch(FetchDescriptor<Report>())
+                    SpotlightIndexer.rebuildAll(reports: reports)
+                } catch {
+                    // Best-effort, same as every indexer op: the index also
+                    // self-heals via index(report:) on each save.
+                }
+            }
+        } else {
+            SpotlightIndexer.deleteAll()
         }
     }
 

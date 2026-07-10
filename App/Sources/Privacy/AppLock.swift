@@ -14,6 +14,7 @@ import SwiftUI
 public final class AppLockStore: @unchecked Sendable {
     private let defaults: UserDefaults
     private var _enabled: Bool
+    private var _spotlightWhileLockedEnabled: Bool
     public var isLocked: Bool = false
 
     /// Runtime-only: true while the app is covered for backgrounding but not
@@ -44,6 +45,7 @@ public final class AppLockStore: @unchecked Sendable {
     public init(defaults: UserDefaults = .standard, isTestEnvironment: Bool? = nil) {
         self.defaults = defaults
         self._enabled = defaults.bool(forKey: Self.enabledDefaultsKey)
+        self._spotlightWhileLockedEnabled = defaults.bool(forKey: Self.spotlightWhileLockedDefaultsKey)
         self.isTestEnvironment = isTestEnvironment ?? {
             let arguments = ProcessInfo.processInfo.arguments
             return arguments.contains("--mock-sensors") || arguments.contains("--ui-testing")
@@ -65,6 +67,29 @@ public final class AppLockStore: @unchecked Sendable {
         set {
             _enabled = newValue
             defaults.set(newValue, forKey: Self.enabledDefaultsKey)
+        }
+    }
+
+    /// Key backing the "Spotlight Search While Locked" opt-in. Defaults to false:
+    /// enabling app lock stops Spotlight indexing unless the user explicitly
+    /// accepts that search results can reveal report content without unlocking.
+    static let spotlightWhileLockedDefaultsKey = "privacy.spotlightWhileLockedEnabled"
+
+    /// Static read of the Spotlight-while-locked opt-in, for `SpotlightIndexer`
+    /// (same pattern as `isEnabled(defaults:)`).
+    public static func isSpotlightWhileLockedEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: spotlightWhileLockedDefaultsKey)
+    }
+
+    /// User opt-in: keep indexing report content into Spotlight even while app
+    /// lock is enabled. Only consulted when `enabled` is true — with lock off,
+    /// indexing always happens. Callers toggling this are responsible for the
+    /// index side effects (rebuild on enable, wipe on disable) — see SettingsView.
+    public var spotlightWhileLockedEnabled: Bool {
+        get { _spotlightWhileLockedEnabled }
+        set {
+            _spotlightWhileLockedEnabled = newValue
+            defaults.set(newValue, forKey: Self.spotlightWhileLockedDefaultsKey)
         }
     }
 
@@ -165,8 +190,9 @@ public final class AppLockStore: @unchecked Sendable {
     /// instantly with no LAContext call.
     ///
     /// Spotlight policy: while app lock is enabled, Dispatch does not index report
-    /// content, so report text can't leak through system-wide Spotlight search when
-    /// the device is locked/shared. Enabling wipes the existing index immediately
+    /// content (unless the user opts into `spotlightWhileLockedEnabled`), so report
+    /// text can't leak through system-wide Spotlight search when the device is
+    /// locked/shared. Enabling wipes the existing index immediately
     /// (`SpotlightIndexer.deleteAll()`) since content indexed before lock was turned
     /// on must not remain searchable afterward.
     ///
@@ -198,7 +224,12 @@ public final class AppLockStore: @unchecked Sendable {
             let success = try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)
             if success {
                 enabled = true
-                SpotlightIndexer.deleteAll()
+                // Wipe the index unless the user has already opted into
+                // Spotlight-while-locked (in which case indexing stays allowed
+                // and the existing index remains valid).
+                if !spotlightWhileLockedEnabled {
+                    SpotlightIndexer.deleteAll()
+                }
             }
         } catch {
             // Leave disabled on failure/cancel.

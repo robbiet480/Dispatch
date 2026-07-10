@@ -23,4 +23,23 @@ public enum AppLockPolicy {
         guard enabled, let backgroundedAt else { return false }
         return now.timeIntervalSince(backgroundedAt) > graceSeconds
     }
+
+    /// Whether report content may be indexed into system-wide Spotlight.
+    ///
+    /// Policy: while app lock is enabled, indexing is off by default — Spotlight
+    /// results could reveal report content without unlocking the app. The user
+    /// can explicitly opt back in via the "Spotlight Search While Locked"
+    /// setting, accepting that trade-off. When app lock is off the opt-in flag
+    /// is irrelevant: indexing is always allowed.
+    ///
+    /// - Parameters:
+    ///   - lockEnabled: Whether app lock is turned on in settings.
+    ///   - spotlightWhileLockedEnabled: The "Spotlight Search While Locked" opt-in.
+    /// - Returns: `true` if Spotlight indexing is allowed.
+    public static func allowsSpotlightIndexing(
+        lockEnabled: Bool,
+        spotlightWhileLockedEnabled: Bool
+    ) -> Bool {
+        !lockEnabled || spotlightWhileLockedEnabled
+    }
 }

@@ -95,4 +95,42 @@ final class AppLockUITests: XCTestCase {
         XCTAssertTrue(app.buttons["survey-next"].waitForExistence(timeout: 10))
         XCTAssertFalse(lockView.exists)
     }
+
+    /// The "Spotlight Search While Locked" row is only meaningful while app
+    /// lock is enabled: it must appear (defaulting OFF) under the Face ID
+    /// toggle when lock is on, and disappear when lock is turned off.
+    ///
+    /// Only row visibility and the default are assertable here: the actual
+    /// CoreSpotlight index isn't reachable from UI tests, and SpotlightIndexer
+    /// deliberately no-ops under `--ui-testing`. The gate decision itself is
+    /// unit-tested via `AppLockPolicy.allowsSpotlightIndexing` in DispatchKit.
+    @MainActor
+    func testSpotlightWhileLockedRowFollowsAppLockToggle() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--mock-sensors", "--enable-app-lock", "--skip-onboarding"]
+        app.launch()
+
+        let unlockButton = app.buttons["app-lock-unlock-button"]
+        XCTAssertTrue(unlockButton.waitForExistence(timeout: 10))
+        unlockButton.tap()
+
+        let settingsButton = app.buttons["settings-button"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
+        settingsButton.tap()
+
+        // Row present while lock is on, and defaults to OFF.
+        let spotlightToggle = app.switches["spotlight-while-locked-toggle"]
+        XCTAssertTrue(spotlightToggle.waitForExistence(timeout: 10))
+        XCTAssertEqual(spotlightToggle.value as? String, "0")
+
+        // Turning app lock off hides the row (indexing always happens then).
+        // SwiftUI Toggles expose an outer container Switch plus the inner
+        // UISwitch — drill into the inner one (see NavigationUITests).
+        let lockToggle = app.switches["app-lock-toggle"]
+        XCTAssertTrue(lockToggle.waitForExistence(timeout: 10))
+        let innerLockToggle = lockToggle.switches.firstMatch
+        XCTAssertTrue(innerLockToggle.waitForExistence(timeout: 10))
+        innerLockToggle.tap()
+        XCTAssertTrue(spotlightToggle.waitForNonExistence(timeout: 10))
+    }
 }

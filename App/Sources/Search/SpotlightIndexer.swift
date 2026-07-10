@@ -20,13 +20,39 @@ enum SpotlightIndexer {
         return arguments.contains("--mock-sensors") || arguments.contains("--ui-testing")
     }
 
+    /// Policy gate: while app lock is enabled, Dispatch does not index report
+    /// content — report text must not become searchable system-wide (e.g. from
+    /// the lock screen) — unless the user has explicitly opted into
+    /// "Spotlight Search While Locked" (see `AppLockPolicy.allowsSpotlightIndexing`).
+    private static var isIndexingAllowed: Bool {
+        AppLockPolicy.allowsSpotlightIndexing(
+            lockEnabled: AppLockStore.isEnabled(),
+            spotlightWhileLockedEnabled: AppLockStore.isSpotlightWhileLockedEnabled()
+        )
+    }
+
+    /// The skip decision fires on every save/rebuild trigger while locked-down,
+    /// which used to flood the log. Log the policy skip at info exactly once per
+    /// launch; every subsequent skip drops to debug.
+    private static let didLogPolicySkip = OSAllocatedUnfairLock(initialState: false)
+
+    private static func logPolicySkip(_ what: @autoclosure () -> String) {
+        let firstThisLaunch = didLogPolicySkip.withLock { logged in
+            defer { logged = true }
+            return !logged
+        }
+        let message = what()
+        if firstThisLaunch {
+            spotlightLog.info("skipping \(message, privacy: .public): app lock enabled (further skips logged at debug)")
+        } else {
+            spotlightLog.debug("skipping \(message, privacy: .public): app lock enabled")
+        }
+    }
+
     static func index(report: Report) {
         guard !isTestEnvironment else { return }
-        // Policy: while app lock is enabled, Dispatch does not index report content —
-        // report text must not become searchable system-wide (e.g. from the lock
-        // screen) while the user has explicitly asked for the app to be locked down.
-        guard !AppLockStore.isEnabled() else {
-            spotlightLog.info("skipping index for report \(report.uniqueIdentifier, privacy: .public): app lock enabled")
+        guard isIndexingAllowed else {
+            logPolicySkip("index for report \(report.uniqueIdentifier)")
             return
         }
         // Hoist model reads before the completion closure: `report` is a SwiftData
@@ -78,8 +104,8 @@ enum SpotlightIndexer {
 
     static func rebuildAll(reports: [Report]) {
         guard !isTestEnvironment else { return }
-        guard !AppLockStore.isEnabled() else {
-            spotlightLog.info("skipping spotlight rebuild: app lock enabled")
+        guard isIndexingAllowed else {
+            logPolicySkip("spotlight rebuild")
             return
         }
         // Hoist model reads before any completion closure: `reports` are SwiftData

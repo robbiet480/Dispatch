@@ -60,6 +60,21 @@ private func freshSuite() -> UserDefaults {
     #expect(AppLockPolicy.shouldLock(enabled: true, backgroundedAt: backgroundedAt, now: now))
 }
 
+@Test func spotlightIndexingAlwaysAllowedWhenLockDisabled() {
+    // With app lock off, the while-locked opt-in is irrelevant.
+    #expect(AppLockPolicy.allowsSpotlightIndexing(lockEnabled: false, spotlightWhileLockedEnabled: false))
+    #expect(AppLockPolicy.allowsSpotlightIndexing(lockEnabled: false, spotlightWhileLockedEnabled: true))
+}
+
+@Test func spotlightIndexingBlockedByLockWithoutOptIn() {
+    // Default posture: enabling app lock stops Spotlight indexing.
+    #expect(!AppLockPolicy.allowsSpotlightIndexing(lockEnabled: true, spotlightWhileLockedEnabled: false))
+}
+
+@Test func spotlightIndexingAllowedWhileLockedWithOptIn() {
+    #expect(AppLockPolicy.allowsSpotlightIndexing(lockEnabled: true, spotlightWhileLockedEnabled: true))
+}
+
 @Test func appLockPolicyAtExactlyGraceDoesNotLock() {
     // Documented choice: elapsed time exactly equal to the grace interval does
     // NOT lock — only strictly-greater-than-grace elapsed time locks. This
