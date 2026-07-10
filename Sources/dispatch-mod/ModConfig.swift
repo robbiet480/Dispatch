@@ -7,13 +7,22 @@ import Foundation
 /// `~/.dispatch-mod/` or from environment variables at runtime.
 ///
 /// Resolution order (env wins over file):
-///   - `DISPATCH_MOD_KEY_ID`      — key ID from CloudKit Console
+///   - `DISPATCH_MOD_KEY_ID`      — key ID from CloudKit Console (quick
+///     override path; wins for ANY environment)
 ///   - `DISPATCH_MOD_KEY_PATH`    — path to the EC private key PEM
 ///   - `DISPATCH_MOD_CONTAINER`   — container ID (default iCloud.io.robbie.Dispatch)
 ///   - `DISPATCH_MOD_ENV`         — `development` (default) or `production`
-///   - `~/.dispatch-mod/config.json` — {"keyID": "...", "keyPath": "...",
-///     "container": "...", "environment": "..."}; keyPath defaults to
-///     `~/.dispatch-mod/eckey.pem`.
+///   - `~/.dispatch-mod/config.json` — {"keyID": "...", "keyIDProduction": "...",
+///     "keyPath": "...", "container": "...", "environment": "..."}; keyPath
+///     defaults to `~/.dispatch-mod/eckey.pem`.
+///
+/// Per-environment key IDs (verified live 2026-07-09): server-to-server
+/// public keys are registered PER ENVIRONMENT in the Console, and each
+/// registration gets its own key ID — the Development key ID returns
+/// AUTHENTICATION_FAILED against Production until the same public key is
+/// registered under Production. `keyIDProduction` holds the Production
+/// registration's key ID and falls back to `keyID` when absent; the private
+/// key (`keyPath`) is the same PEM for both.
 struct ModConfig {
     static let defaultContainer = "iCloud.io.robbie.Dispatch"
     /// Apple Developer team that owns the container — only used by `setup`
@@ -30,6 +39,9 @@ struct ModConfig {
 
     struct ConfigFile: Decodable {
         var keyID: String?
+        /// Key ID of the SAME public key registered under Production
+        /// (registrations are per-environment). Falls back to `keyID`.
+        var keyIDProduction: String?
         var keyPath: String?
         var container: String?
         var environment: String?
@@ -56,6 +68,9 @@ struct ModConfig {
                        {"keyID": "<key id from Console>"}
                      (container defaults to \(ModConfig.defaultContainer),
                       environment defaults to development).
+                     Key registrations are PER ENVIRONMENT: for production,
+                     register the same public key under Production too and add
+                     its key ID as "keyIDProduction" (falls back to "keyID").
                 Environment variables DISPATCH_MOD_KEY_ID / DISPATCH_MOD_KEY_PATH /
                 DISPATCH_MOD_CONTAINER / DISPATCH_MOD_ENV override the file.
                 """
@@ -72,23 +87,28 @@ struct ModConfig {
         environmentOverride: String? = nil
     ) throws -> ModConfig {
         let fileURL = URL(fileURLWithPath: configDirectory).appendingPathComponent("config.json")
-        var file = ConfigFile(keyID: nil, keyPath: nil, container: nil, environment: nil)
+        var file = ConfigFile()
         if let data = try? Data(contentsOf: fileURL) {
             file = (try? JSONDecoder().decode(ConfigFile.self, from: data)) ?? file
         }
 
-        guard let keyID = env["DISPATCH_MOD_KEY_ID"] ?? file.keyID, !keyID.isEmpty else {
-            throw ConfigError.missing("key ID (DISPATCH_MOD_KEY_ID or keyID in ~/.dispatch-mod/config.json)")
+        let environment = environmentOverride ?? env["DISPATCH_MOD_ENV"] ?? file.environment ?? "development"
+        guard environment == "development" || environment == "production" else {
+            throw ConfigError.badEnvironment(environment)
+        }
+        guard let keyID = resolveKeyID(environment: environment, env: env, file: file) else {
+            throw ConfigError.missing(
+                environment == "production"
+                    ? "key ID for production (DISPATCH_MOD_KEY_ID, or keyIDProduction/keyID in "
+                        + "~/.dispatch-mod/config.json — s2s key registrations are per-environment, "
+                        + "see docs/moderation.md)"
+                    : "key ID (DISPATCH_MOD_KEY_ID or keyID in ~/.dispatch-mod/config.json)")
         }
         let rawKeyPath = env["DISPATCH_MOD_KEY_PATH"] ?? file.keyPath
             ?? "\(configDirectory)/eckey.pem"
         let keyPath = (rawKeyPath as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: keyPath) else {
             throw ConfigError.missing("private key PEM at \(keyPath)")
-        }
-        let environment = environmentOverride ?? env["DISPATCH_MOD_ENV"] ?? file.environment ?? "development"
-        guard environment == "development" || environment == "production" else {
-            throw ConfigError.badEnvironment(environment)
         }
         return ModConfig(
             keyID: keyID,
@@ -97,6 +117,21 @@ struct ModConfig {
             environment: environment,
             teamID: env["DISPATCH_MOD_TEAM_ID"] ?? file.teamID ?? defaultTeamID
         )
+    }
+
+    /// Environment-aware key-ID resolution. Server-to-server key
+    /// registrations are per-environment (each yields its own key ID), so
+    /// production prefers `keyIDProduction`, falling back to `keyID`.
+    /// `DISPATCH_MOD_KEY_ID` wins unconditionally (the quick override path).
+    static func resolveKeyID(
+        environment: String,
+        env: [String: String],
+        file: ConfigFile
+    ) -> String? {
+        if let id = env["DISPATCH_MOD_KEY_ID"], !id.isEmpty { return id }
+        if environment == "production", let id = file.keyIDProduction, !id.isEmpty { return id }
+        if let id = file.keyID, !id.isEmpty { return id }
+        return nil
     }
 
     func makeSigner() throws -> CKWebServicesSigner {

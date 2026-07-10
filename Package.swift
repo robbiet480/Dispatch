@@ -23,7 +23,9 @@ let package = Package(
         ),
         .testTarget(
             name: "DispatchKitTests",
-            dependencies: ["DispatchKit"],
+            // dispatch-mod dependency: lets the tests exercise the tool's
+            // config resolution (per-environment key IDs) directly.
+            dependencies: ["DispatchKit", "dispatch-mod"],
             resources: [.copy("Fixtures")]
         ),
     ]

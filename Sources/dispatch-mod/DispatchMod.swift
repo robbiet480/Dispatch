@@ -24,8 +24,9 @@ struct DispatchMod {
                                are safe — see docs/catalog/README.md)
       setup                    Bootstrap a CloudKit environment: import the
                                repo-canonical schema.ckdb via `xcrun cktool`
-                               (types, indexes, roles), verify with probes,
-                               print remaining manual steps
+                               (types, indexes, roles; Development only —
+                               Production schema deploys via the Console),
+                               verify with probes, print remaining manual steps
                                (--export to snapshot the live schema instead;
                                see `dispatch-mod setup --help`)
       help                     Show this help
@@ -133,7 +134,8 @@ struct DispatchMod {
                 }
                 try Setup.run(
                     environmentOverride: envOverride,
-                    export: flag("--export", in: &arguments)
+                    export: flag("--export", in: &arguments),
+                    strict: flag("--strict", in: &arguments)
                 )
             case "import":
                 let dryRun = flag("--dry-run", in: &arguments)
