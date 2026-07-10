@@ -23,14 +23,28 @@ final class PeopleUITests: XCTestCase {
             : app.staticTexts["Sensors"].firstMatch
         XCTAssertTrue(sensorsLink.waitForExistence(timeout: 10))
         sensorsLink.tap()
+        // The CONTACTS section sits below the fold of the sensors list, and
+        // SwiftUI's lazy List doesn't REALIZE off-screen rows at all — the
+        // toggle (and its identifier) doesn't exist in the accessibility
+        // tree until scrolled into view, so scroll-until-exists, don't
+        // wait-then-scroll.
         let toggle = app.switches["contacts-suggestions-toggle"].firstMatch
-        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
-        var scrollsRemaining = 6
-        while !toggle.isHittable, scrollsRemaining > 0 {
+        var scrollsRemaining = 8
+        while !toggle.exists, scrollsRemaining > 0 {
             app.swipeUp()
             scrollsRemaining -= 1
         }
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10),
+                      "contacts toggle never appeared after scrolling the sensors list")
+        // SwiftUI exposes the whole Toggle ROW as the switch element, so a
+        // plain tap() lands at row center and does NOT flip it — tap the
+        // trailing edge where the actual switch knob sits, then verify.
         toggle.tap()
+        if (toggle.value as? String) != "1" {
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        }
+        XCTAssertEqual(toggle.value as? String, "1",
+                       "contacts suggestions toggle did not switch on")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
