@@ -95,6 +95,9 @@ extension SensorKind {
         case .healthCaffeine: "Caffeine"
         case .healthMedications: "Medications"
         case .healthActivityRings: "Activity Rings"
+        // Media is phone-only in v1 (plan 26) — named here only because the
+        // switch is exhaustive; no watch provider exists for it.
+        case .media: "Media"
         }
     }
 }
