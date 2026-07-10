@@ -152,6 +152,17 @@ import Testing
     #expect(CatalogValidation.validate(prompt: "p", typeRaw: 0, choices: [], creditName: nil).isEmpty)
 }
 
+@Test func validationLimitsFlagReason() {
+    let long = String(repeating: "r", count: CatalogValidation.flagReasonMaxLength + 1)
+    #expect(CatalogValidation.validateFlagReason(long)
+        == [.flagReasonTooLong(limit: CatalogValidation.flagReasonMaxLength)])
+    // Trimmed before the length check; at-limit and empty reasons pass.
+    let padded = "  " + String(repeating: "r", count: CatalogValidation.flagReasonMaxLength) + "  "
+    #expect(CatalogValidation.validateFlagReason(padded).isEmpty)
+    #expect(CatalogValidation.validateFlagReason("Spam").isEmpty)
+    #expect(CatalogValidation.validateFlagReason("").isEmpty)
+}
+
 @Test func validationCollectsMultipleErrors() {
     let errors = CatalogValidation.validate(
         prompt: "", typeRaw: QuestionType.multipleChoice.rawValue, choices: ["only"]

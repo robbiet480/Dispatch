@@ -15,6 +15,7 @@ public enum CatalogValidationError: Error, Equatable, Sendable {
     case duplicateChoice(String)
     case choicesNotAllowed
     case creditNameTooLong(limit: Int)
+    case flagReasonTooLong(limit: Int)
 
     /// Human-readable description for form errors and mod-tool output.
     public var message: String {
@@ -39,6 +40,8 @@ public enum CatalogValidationError: Error, Equatable, Sendable {
             "Only multiple-choice questions carry choices."
         case .creditNameTooLong(let limit):
             "Credit name must be \(limit) characters or fewer."
+        case .flagReasonTooLong(let limit):
+            "Flag reason must be \(limit) characters or fewer."
         }
     }
 }
@@ -49,6 +52,7 @@ public enum CatalogValidation {
     public static let choicesMinimumCount = 2
     public static let choicesMaxCount = 20
     public static let creditNameMaxLength = 50
+    public static let flagReasonMaxLength = 500
 
     /// Validate the structural shape of a question headed for (or from) the
     /// catalog. Returns every violation, not just the first, so forms can
@@ -104,6 +108,16 @@ public enum CatalogValidation {
         }
 
         return errors
+    }
+
+    /// Validate a flag reason: trimmed, bounded at `flagReasonMaxLength`
+    /// characters — symmetric with the prompt/choice/credit bounds above.
+    /// Empty reasons are allowed (the write site substitutes a default).
+    public static func validateFlagReason(_ reason: String) -> [CatalogValidationError] {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count > flagReasonMaxLength
+            ? [.flagReasonTooLong(limit: flagReasonMaxLength)]
+            : []
     }
 
     /// Trimmed, persistence-ready copies of the user-entered values. Empty

@@ -100,6 +100,8 @@ final class CatalogStore {
     }
 
     func flag(catalogRecordName: String, reason: String) async throws {
+        let errors = CatalogValidation.validateFlagReason(reason)
+        guard errors.isEmpty else { throw CatalogProviderError.validation(errors) }
         let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         try await provider.flag(
             catalogRecordName: catalogRecordName,

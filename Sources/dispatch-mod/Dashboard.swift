@@ -15,6 +15,19 @@ struct Dashboard {
     let client: CloudKitWebClient
     let port: UInt16
 
+    /// Random per-run session token. Embedded in the served page and required
+    /// (via `X-Dispatch-Mod-Token`) on every `/api/*` POST, so a hostile web
+    /// page can't drive the signing endpoints cross-origin (CSRF) and a
+    /// DNS-rebinding page can't call them either (it can never read the token:
+    /// rebinding defeats the same-origin *check* on responses it triggers, but
+    /// the token only ships in OUR page served from OUR socket).
+    let sessionToken = Dashboard.makeSessionToken()
+
+    static func makeSessionToken() -> String {
+        var generator = SystemRandomNumberGenerator()
+        return (0..<4).map { _ in String(format: "%016llx", generator.next() as UInt64) }.joined()
+    }
+
     func serve() throws {
         let serverSocket = socket(AF_INET, SOCK_STREAM, 0)
         guard serverSocket >= 0 else { throw DashboardError.socket("socket() failed") }
@@ -64,12 +77,25 @@ struct Dashboard {
         let path = target.split(separator: "?").first.map(String.init) ?? target
         let query = queryItems(of: target)
 
-        let response: (status: String, contentType: String, body: Data)
-        do {
-            response = try route(method: method, path: path, query: query)
-        } catch {
-            response = ("500 Internal Server Error", "application/json",
-                        jsonData(["error": "\(error)"]))
+        var response: (status: String, contentType: String, body: Data)
+        // DNS-rebinding guard: a rebound hostname resolves to us but carries
+        // the attacker's Host header. Only our literal loopback origin passes.
+        if headerValue("Host", in: request.headers) != "127.0.0.1:\(port)" {
+            response = ("403 Forbidden", "application/json",
+                        jsonData(["error": "bad Host header (use http://127.0.0.1:\(port))"]))
+        } else if method == "POST", path.hasPrefix("/api/"),
+                  headerValue("X-Dispatch-Mod-Token", in: request.headers) != sessionToken {
+            // CSRF guard: mutating endpoints require the per-run token that
+            // only the page served by this process knows.
+            response = ("403 Forbidden", "application/json",
+                        jsonData(["error": "missing or invalid session token"]))
+        } else {
+            do {
+                response = try route(method: method, path: path, query: query)
+            } catch {
+                response = ("500 Internal Server Error", "application/json",
+                            jsonData(["error": "\(error)"]))
+            }
         }
         var header = "HTTP/1.1 \(response.status)\r\n"
         header += "Content-Type: \(response.contentType); charset=utf-8\r\n"
@@ -85,7 +111,8 @@ struct Dashboard {
     ) throws -> (String, String, Data) {
         switch (method, path) {
         case ("GET", "/"):
-            return ("200 OK", "text/html", Data(Self.pageHTML.utf8))
+            let page = Self.pageHTML.replacingOccurrences(of: "__SESSION_TOKEN__", with: sessionToken)
+            return ("200 OK", "text/html", Data(page.utf8))
         case ("GET", "/api/pending"):
             let pending = try client.pendingSubmissions().map { submission in
                 [
@@ -134,6 +161,17 @@ struct Dashboard {
         (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
     }
 
+    private func headerValue(_ name: String, in rawHeaders: String) -> String? {
+        for line in rawHeaders.split(separator: "\r\n").dropFirst() {
+            let sides = line.split(separator: ":", maxSplits: 1)
+            guard sides.count == 2,
+                  sides[0].trimmingCharacters(in: .whitespaces).lowercased() == name.lowercased()
+            else { continue }
+            return sides[1].trimmingCharacters(in: .whitespaces)
+        }
+        return nil
+    }
+
     private func queryItems(of target: String) -> [String: String] {
         guard let questionMark = target.firstIndex(of: "?") else { return [:] }
         var items: [String: String] = [:]
@@ -179,28 +217,44 @@ struct Dashboard {
     <h2>Flags</h2>
     <table id="flags"><thead><tr><th>Catalog record</th><th>Reason</th><th>Flagged</th><th></th></tr></thead><tbody></tbody></table>
     <script>
+    const TOKEN = '__SESSION_TOKEN__';
     const status = (m) => document.getElementById('status').textContent = m;
     async function api(path, opts) {
-      const res = await fetch(path, opts);
+      const res = await fetch(path, Object.assign({headers: {'X-Dispatch-Mod-Token': TOKEN}}, opts));
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || res.status);
       return body;
     }
     function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+    // Record names are untrusted public-DB input: they only ever reach the
+    // page as esc()'d text or as data bound via addEventListener closures —
+    // never interpolated into inline handlers or attributes.
+    function bindActions(tbody, rows, actions) {
+      rows.forEach((row, i) => {
+        tbody.rows[i].querySelectorAll('button').forEach((button, j) => {
+          const [kind, idField] = actions[j];
+          button.addEventListener('click', () => act(kind, row[idField]));
+        });
+      });
+    }
     async function refresh() {
       status('Loading…');
       try {
         const [pending, flags] = await Promise.all([api('/api/pending'), api('/api/flags')]);
-        document.querySelector('#pending tbody').innerHTML = pending.map(p => `
+        const pendingBody = document.querySelector('#pending tbody');
+        pendingBody.innerHTML = pending.map(p => `
           <tr><td>${esc(p.prompt)}</td><td>${esc(p.type)}</td><td>${esc(p.choices)}</td>
           <td>${esc(p.creditName) || '<span class=muted>anonymous</span>'}</td><td>${esc(p.submittedAt)}</td>
-          <td><button class="approve" onclick="act('approve','${p.recordName}')">Approve</button>
-          <button class="reject" onclick="act('reject','${p.recordName}')">Reject</button></td></tr>`
+          <td><button class="approve">Approve</button>
+          <button class="reject">Reject</button></td></tr>`
         ).join('') || '<tr><td colspan=6 class=muted>Nothing pending.</td></tr>';
-        document.querySelector('#flags tbody').innerHTML = flags.map(f => `
+        bindActions(pendingBody, pending, [['approve', 'recordName'], ['reject', 'recordName']]);
+        const flagsBody = document.querySelector('#flags tbody');
+        flagsBody.innerHTML = flags.map(f => `
           <tr><td>${esc(f.catalogRecordName)}</td><td>${esc(f.reason)}</td><td>${esc(f.flaggedAt)}</td>
-          <td><button class="reject" onclick="act('resolve-flag','${f.recordName}')">Resolve</button></td></tr>`
+          <td><button class="reject">Resolve</button></td></tr>`
         ).join('') || '<tr><td colspan=4 class=muted>No flags.</td></tr>';
+        bindActions(flagsBody, flags, [['resolve-flag', 'recordName']]);
         status('');
       } catch (e) { status('Error: ' + e.message); }
     }

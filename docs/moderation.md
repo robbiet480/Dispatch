@@ -13,6 +13,22 @@ into the catalog. The app contains no code path that writes `CatalogQuestion`;
 with the Console permissions below, clients *cannot* self-approve by
 construction.
 
+## Bootstrap sequencing (chicken-and-egg order)
+
+Record types only exist once a first record of that type is written, so the
+setup below has a required order:
+
+1. **Submit a question from a dev build** → creates `SubmittedQuestion`.
+   (The browse screen may show an error until `CatalogQuestion` exists —
+   harmless; the app now treats a missing record type as an empty catalog.)
+2. **Create the server-to-server key** (§1) → the first
+   `dispatch-mod approve` creates `CatalogQuestion` (or create the type
+   manually in Console).
+3. **`QuestionFlag`:** flag the first catalog entry from the app (or create
+   the type manually) — it can't be created before a catalog entry exists.
+4. **Then** apply the permission matrix + indexes (§3a/§3b).
+5. **Deploy Development → Production** (§3c).
+
 ## 1. Create the server-to-server key (one time)
 
 1. Generate the key pair locally (the private key never leaves your Mac and
@@ -82,6 +98,13 @@ The server-to-server key bypasses these role permissions — that is what makes
 approval server-only. Double-check `CatalogQuestion` has NO create permission
 for World or Authenticated.
 
+**Verify the matrix, don't just set it:** from a device signed into a
+**second Apple ID** (not the container owner — owner accounts can have
+elevated access), run a Development build and confirm that querying
+`SubmittedQuestion` records fails / returns nothing. If another account can
+read the submission queue, the World/Authenticated read permission above was
+not applied correctly.
+
 ### 3b. Indexes
 
 Console → Schema → Indexes (Development):
@@ -117,9 +140,24 @@ swift run dispatch-mod serve --port 9000 --env production
 
 `approve` validates the submission structurally (same `CatalogValidation` the
 app uses), creates the `CatalogQuestion` with a fresh record name, then
-deletes the submission. `reject` just deletes. The dashboard is a localhost
-web page served by the tool itself; every CloudKit call is signed locally and
-the key never leaves the machine.
+deletes the submission. `reject` just deletes. If the post-approve submission
+delete fails, the tool prints the leftover submission's record name — reject
+it manually; do **not** re-approve it (that would duplicate the catalog
+entry). The dashboard is a localhost web page served by the tool itself;
+every CloudKit call is signed locally and the key never leaves the machine.
+
+Dashboard hardening (beyond binding to 127.0.0.1 only):
+
+- **Session token (CSRF guard):** each `serve` run generates a random token,
+  embeds it in the served page, and rejects any `/api/*` POST that doesn't
+  present it in `X-Dispatch-Mod-Token`. A hostile web page in your browser
+  cannot forge moderation actions — it never learns the token.
+- **Host-header check (DNS-rebinding guard):** requests whose `Host` header
+  isn't exactly `127.0.0.1:<port>` are rejected, so a rebound hostname that
+  resolves to localhost still can't reach the endpoints.
+- **Output escaping:** all record fields (including record names, which are
+  untrusted public-database input) are HTML-escaped or bound via
+  `addEventListener` — never interpolated into inline handlers.
 
 Smoke test after key setup (safe on an empty database):
 `swift run dispatch-mod list` — an empty listing (`Pending submissions (0)`)

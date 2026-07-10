@@ -21,3 +21,7 @@ xcuserdata/
 .superpowers/
 Dispatch.xcodeproj/
 scripts/asc-config.local
+
+# Moderation keys — never commit (belt-and-braces; keys belong in ~/.dispatch-mod/)
+*.pem
+.dispatch-mod/

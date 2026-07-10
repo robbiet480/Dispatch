@@ -1,6 +1,9 @@
 import CloudKit
 import DispatchKit
 import Foundation
+import OSLog
+
+private let catalogLog = Logger(subsystem: "io.robbie.Dispatch", category: "catalog")
 
 /// Moderation boundary (plan 20): the app NEVER writes `CatalogQuestion`
 /// records. This provider can create `SubmittedQuestion` and `QuestionFlag`
@@ -81,6 +84,13 @@ final class CloudKitCatalogProvider: CatalogProviding {
                 )
             }
         } catch {
+            // Before the Console setup / first approve, the CatalogQuestion
+            // record type doesn't exist in this environment and the query
+            // errors. That's an EMPTY catalog, not a user-facing failure.
+            if Self.isMissingRecordType(error) {
+                catalogLog.info("CatalogQuestion record type missing (pre-setup); showing empty catalog: \(error)")
+                return ([], nil)
+            }
             throw CatalogProviderError.network(underlying: Self.friendlyMessage(for: error))
         }
 
@@ -171,6 +181,24 @@ final class CloudKitCatalogProvider: CatalogProviding {
         if let approvedAt = record["approvedAt"] as? Date { fields["approvedAt"] = .date(approvedAt) }
         if let tags = record["tags"] as? [String] { fields["tags"] = .stringList(tags) }
         return CatalogQuestion(recordName: record.recordID.recordName, fields: fields)
+    }
+
+    /// CloudKit reports a query against a record type that doesn't exist in
+    /// the environment's schema as `.invalidArguments` (BAD_REQUEST) with a
+    /// server message like "Did not find record type: CatalogQuestion";
+    /// `.unknownItem` is accepted too (belt-and-braces — some paths report
+    /// missing schema objects with it). Matched on the message so a genuinely
+    /// malformed query still surfaces as an error.
+    static func isMissingRecordType(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError,
+              ckError.code == .invalidArguments || ckError.code == .unknownItem else { return false }
+        let details = [
+            ckError.localizedDescription,
+            ckError.userInfo[NSLocalizedFailureReasonErrorKey] as? String,
+            ckError.userInfo["ServerErrorDescription"] as? String,
+            ckError.userInfo["CKErrorServerDescriptionKey"] as? String,
+        ].compactMap { $0 }.joined(separator: " ").lowercased()
+        return details.contains("record type")
     }
 
     private static func friendlyMessage(for error: Error) -> String {

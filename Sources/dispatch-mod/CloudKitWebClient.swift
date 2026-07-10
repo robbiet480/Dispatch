@@ -199,7 +199,17 @@ struct CloudKitWebClient {
                 ] as [String: Any],
             ] as [String: Any]],
         ])
-        try delete(recordName: submissionRecordName, recordType: CatalogRecordType.submittedQuestion)
+        do {
+            try delete(recordName: submissionRecordName, recordType: CatalogRecordType.submittedQuestion)
+        } catch {
+            FileHandle.standardError.write(Data("""
+            WARNING: catalog entry \(catalog.recordName) was created, but deleting the \
+            submission failed (\(error)). Leftover submission: \(submissionRecordName)
+            Reject it manually — `dispatch-mod reject \(submissionRecordName)` — do NOT \
+            re-approve it (that would duplicate the catalog entry).
+
+            """.utf8))
+        }
         return catalog
     }
 
