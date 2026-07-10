@@ -19,6 +19,11 @@ struct SurveyFlowView: View {
     /// tap that beats the debounce timer.
     @State private var flushRegistry = PendingFlushRegistry()
     @State private var isShowingDiscardConfirmation = false
+    /// Pending yes/no auto-advance (Reporter parity): tapping Yes or No
+    /// advances after a short beat so the checkmark is visible first.
+    /// Cancelled/superseded by any newer tap; a page-index guard inside the
+    /// task makes it a no-op if the user already navigated manually.
+    @State private var autoAdvanceTask: Task<Void, Never>?
     let kind: ReportKind
     let trigger: ReportTrigger
     var overrideDate: Date? = nil
@@ -64,6 +69,7 @@ struct SurveyFlowView: View {
         VStack(spacing: 0) {
             ProgressView(value: Double(controller.survey.currentIndex + 1),
                          total: Double(max(controller.survey.pages.count, 1)))
+                .tint(.white)
                 .padding()
                 .accessibilityIdentifier("survey-progress")
 
@@ -87,7 +93,17 @@ struct SurveyFlowView: View {
                             }
                             QuestionPageView(page: page,
                                              value: controller.survey.answerValue(for: page.id),
-                                             onAnswer: { controller.survey.answer($0, for: page.id) },
+                                             onAnswer: { value in
+                                                 controller.survey.answer(value, for: page.id)
+                                                 // Yes/No auto-advance (Reporter
+                                                 // parity): a selection — not a
+                                                 // deselect — moves on by itself.
+                                                 if page.question.type == .yesNo,
+                                                    case .options(let options) = value,
+                                                    !options.isEmpty {
+                                                     scheduleAutoAdvance(controller)
+                                                 }
+                                             },
                                              flushRegistry: flushRegistry)
                         }
                     }
@@ -102,23 +118,13 @@ struct SurveyFlowView: View {
                 Spacer()
                 Text("\(controller.survey.currentIndex + 1) / \(max(controller.survey.pages.count, 1))")
                     .font(.footnote)
+                    .accessibilityIdentifier("survey-page-counter")
                 Spacer()
                 Button(controller.survey.isLastPage ? "DONE" : "NEXT") {
+                    autoAdvanceTask?.cancel()
                     flushRegistry.flushAll()
                     if controller.survey.isLastPage {
-                        if let report = try? controller.save(in: modelContext) {
-                            // A filed report satisfies any past-due prompt:
-                            // cancel their pending nag reminders.
-                            notificationScheduler.reportFiled()
-                            // Post-save backup hook (plan 16): same 20h
-                            // staleness gate as scene-active — at most one
-                            // backup a day, off-main, never blocks dismiss.
-                            backupManager.backUpIfStale()
-                            // Webhook hook (plan 24): enqueue + immediate
-                            // drain; no-ops unless a webhook is configured.
-                            webhookManager.enqueueAndDrain(reportID: report.uniqueIdentifier)
-                        }
-                        dismiss()
+                        completeSurvey(controller)
                     } else {
                         controller.survey.advance()
                     }
@@ -126,6 +132,10 @@ struct SurveyFlowView: View {
                 .accessibilityIdentifier("survey-next")
             }
             .font(.subheadline.weight(.semibold))
+            // House toolbar style: default blue washes out on the themed
+            // (teal/coral/…) background in both light and dark — the survey
+            // chrome is always white over the theme color.
+            .tint(.white)
             .padding()
         }
         .background {
@@ -141,6 +151,46 @@ struct SurveyFlowView: View {
             Button("Cancel", role: .cancel) {}
             Button("Discard", role: .destructive) { dismiss() }
         }
+    }
+
+    /// Advances (or completes, on the last page) shortly after a yes/no tap
+    /// so the selection checkmark is visible before the page moves. The
+    /// index guard makes the task a no-op if the user swiped or tapped
+    /// NEXT/BACK in the meantime — auto-advance never double-navigates.
+    private func scheduleAutoAdvance(_ controller: SurveyController) {
+        autoAdvanceTask?.cancel()
+        let scheduledIndex = controller.survey.currentIndex
+        autoAdvanceTask = Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled,
+                  controller.survey.currentIndex == scheduledIndex,
+                  !isShowingDiscardConfirmation else { return }
+            flushRegistry.flushAll()
+            if controller.survey.isLastPage {
+                completeSurvey(controller)
+            } else {
+                controller.survey.advance()
+            }
+        }
+    }
+
+    /// Shared DONE path: saves the report, runs the post-save hooks, and
+    /// dismisses. Reached from the DONE button and from a yes/no
+    /// auto-advance on the last page.
+    private func completeSurvey(_ controller: SurveyController) {
+        if let report = try? controller.save(in: modelContext) {
+            // A filed report satisfies any past-due prompt:
+            // cancel their pending nag reminders.
+            notificationScheduler.reportFiled()
+            // Post-save backup hook (plan 16): same 20h
+            // staleness gate as scene-active — at most one
+            // backup a day, off-main, never blocks dismiss.
+            backupManager.backUpIfStale()
+            // Webhook hook (plan 24): enqueue + immediate
+            // drain; no-ops unless a webhook is configured.
+            webhookManager.enqueueAndDrain(reportID: report.uniqueIdentifier)
+        }
+        dismiss()
     }
 
     private var backdatedNote: some View {

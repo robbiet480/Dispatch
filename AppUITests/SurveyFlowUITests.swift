@@ -1,6 +1,87 @@
 import XCTest
 
 final class SurveyFlowUITests: XCTestCase {
+    /// Launches the app and opens the survey; returns the page counter
+    /// element ("1 / 7") once the first page is up.
+    @MainActor
+    private func openSurvey(_ app: XCUIApplication) -> XCUIElement {
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["report-count"].waitForExistence(timeout: 10))
+        app.buttons["report-button"].tap()
+        XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
+                      || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
+
+        let counter = app.staticTexts["survey-page-counter"]
+        XCTAssertTrue(counter.waitForExistence(timeout: 10))
+        return counter
+    }
+
+    /// Waits for the "N / M" page counter to reach `page`.
+    @MainActor
+    private func waitForPage(_ page: Int, counter: XCUIElement,
+                             _ message: String, file: StaticString = #filePath,
+                             line: UInt = #line) {
+        let predicate = NSPredicate(format: "label BEGINSWITH %@", "\(page) /")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: counter)
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: 5), .completed,
+                       "\(message) (counter shows '\(counter.label)')", file: file, line: line)
+    }
+
+    /// Yes/No auto-advance (Reporter parity): tapping Yes must record the
+    /// answer and move to the next page on its own — no NEXT tap.
+    @MainActor
+    func testYesNoTapAutoAdvances() throws {
+        let app = XCUIApplication()
+        let counter = openSurvey(app)
+        XCTAssertTrue(counter.label.hasPrefix("1 /"), "survey did not start on page 1")
+
+        let yes = app.buttons["Yes"]
+        XCTAssertTrue(yes.waitForExistence(timeout: 10), "first page is not the yes/no question")
+        yes.tap()
+
+        // Deliberately no survey-next tap here.
+        waitForPage(2, counter: counter, "tapping Yes did not auto-advance")
+    }
+
+    /// Swiping left-to-right goes back to the previous question, and the
+    /// answer given before leaving it is still selected.
+    @MainActor
+    func testSwipeBackShowsPreviousQuestionWithPreservedAnswer() throws {
+        let app = XCUIApplication()
+        let counter = openSurvey(app)
+
+        let yes = app.buttons["Yes"]
+        XCTAssertTrue(yes.waitForExistence(timeout: 10))
+        yes.tap()
+        waitForPage(2, counter: counter, "tapping Yes did not auto-advance")
+
+        app.swipeRight()
+        waitForPage(1, counter: counter, "back swipe did not return to page 1")
+
+        XCTAssertTrue(yes.waitForExistence(timeout: 5))
+        XCTAssertTrue(yes.isSelected, "Yes answer was not preserved after swiping back")
+    }
+
+    /// Forward swipe has NEXT-button semantics: both advance from the same
+    /// page to the same next page (NEXT is ungated, so the swipe is too).
+    @MainActor
+    func testSwipeForwardMatchesNextButton() throws {
+        let app = XCUIApplication()
+        let counter = openSurvey(app)
+
+        // Forward swipe with no answer given — exactly what NEXT allows.
+        app.swipeLeft()
+        waitForPage(2, counter: counter, "forward swipe did not advance")
+
+        // Round-trip: back swipe, then NEXT reaches the same page the swipe did.
+        app.swipeRight()
+        waitForPage(1, counter: counter, "back swipe did not return to page 1")
+        app.buttons["survey-next"].tap()
+        waitForPage(2, counter: counter, "NEXT did not land on the same page as the forward swipe")
+    }
+
     @MainActor
     func testCompleteReportFlowSavesReport() throws {
         let app = XCUIApplication()

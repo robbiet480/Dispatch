@@ -256,6 +256,9 @@ struct ChoiceListView: View {
                 }
                 .buttonStyle(.plain)
                 .opacity(selected.isEmpty || selected.contains(choice) ? 1 : 0.5)
+                // Expose selection to assistive tech (and UI tests): the
+                // checkmark image alone is invisible to both.
+                .accessibilityAddTraits(selected.contains(choice) ? .isSelected : [])
                 Divider()
             }
         }
