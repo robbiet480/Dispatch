@@ -196,7 +196,7 @@ struct HomeView: View {
                     .foregroundStyle(.white.opacity(0.6))
                     .accessibilityIdentifier("report-count")
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
             Rectangle()
                 .fill(Color.white.opacity(0.25))
                 .frame(height: 0.5)
@@ -318,7 +318,7 @@ struct HomeView: View {
             }
             .accessibilityIdentifier("settings-button")
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 20)
         // Compact: snug under the status bar — the safe-area inset already
         // clears it, so only a hairline of breathing room is added.
         .padding(.top, isCompact ? 2 : 8)
@@ -394,7 +394,7 @@ struct HomeView: View {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 20)
         // The reserved strip: minHeight (not a hard frame) so accessibility
         // text sizes can grow the controls instead of clipping them. Compact
         // shrinks to the 44pt tap-target floor and — iOS 26 toolbar style —

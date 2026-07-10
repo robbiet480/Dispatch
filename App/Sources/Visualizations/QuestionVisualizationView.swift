@@ -17,7 +17,7 @@ struct QuestionVisualizationView: View {
                 .kerning(1.2)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 20)
                 .padding(.top, 10)
                 .padding(.bottom, 12)
                 // XCUI + VoiceOver read the label, not the rendered glyphs:
@@ -26,7 +26,7 @@ struct QuestionVisualizationView: View {
                 .accessibilityLabel(question.prompt)
 
             content
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 20)
                 // Dots no longer overlay pages (plan 29 reserved strip) —
                 // just breathing room above the toolbar.
                 .padding(.bottom, 8)
@@ -287,7 +287,7 @@ struct TokenFrequencyView: View {
                     .accessibilityLabel(spokenList)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 20)
         }
         .accessibilityIdentifier("viz-token-frequency")
     }
@@ -332,7 +332,7 @@ struct RankedRowsView: View {
                             .foregroundStyle(.white.opacity(0.8))
                     }
                     .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 20)
                     .background(Color.white.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .padding(.bottom, 4)
