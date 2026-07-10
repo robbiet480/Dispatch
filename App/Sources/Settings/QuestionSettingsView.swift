@@ -128,6 +128,7 @@ extension QuestionType {
         case .people: "People"
         case .number: "Number"
         case .note: "Note"
+        case .time: "Time"
         }
     }
 }

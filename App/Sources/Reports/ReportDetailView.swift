@@ -250,6 +250,9 @@ struct ReportDetailView: View {
            let text = location.text, !text.isEmpty {
             return text
         }
+        if let time = response.timeResponse {
+            return time.displayText()
+        }
         return nil
     }
 

@@ -265,6 +265,9 @@ struct SurveyFlowView: View {
             return page.inputStyle == .textField ? page.id : nil
         case .yesNo, .multipleChoice:
             return nil
+        case .time:
+            // Wheel/Now/Yesterday — no keyboard (plan 28).
+            return nil
         }
     }
 
