@@ -71,54 +71,52 @@ struct OptionSharesBarsView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            HStack(alignment: .bottom, spacing: 3) {
+            VStack(spacing: 2) {
                 ForEach(Array(shares.enumerated()), id: \.offset) { index, entry in
-                    ZStack(alignment: .bottomLeading) {
-                        RoundedRectangle(cornerRadius: 8)
+                    ZStack(alignment: .bottom) {
+                        RoundedRectangle(cornerRadius: 6)
                             .fill(tint(for: index))
 
-                        VStack(alignment: .leading) {
+                        HStack {
+                            Text(entry.option)
+                                .lineLimit(2)
                             Spacer()
-                            HStack {
-                                Text(entry.option)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.white)
-                                    .lineLimit(2)
-                                    // Bands have data-driven fixed heights
-                                    // (min 28pt) — at accessibility Dynamic
-                                    // Type sizes the label must shrink
-                                    // rather than clip against the band.
-                                    .minimumScaleFactor(0.5)
-                                Spacer()
-                                Text(percentString(entry.share))
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.5)
-                            }
-                            .padding(10)
+                            Text(percentString(entry.share))
+                                .lineLimit(1)
                         }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        // Blocks have data-driven heights (min 28pt) — at
+                        // accessibility Dynamic Type sizes the labels must
+                        // shrink rather than clip against the block.
+                        .minimumScaleFactor(0.5)
+                        .padding(10)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(height: max(proxy.size.height * entry.share, 28))
-                    .frame(maxWidth: .infinity)
-                    // One element per band: "No, 69 percent" — the visual
-                    // encodes share as bar height, which VoiceOver can't see.
+                    // One element per block: "No, 69 percent" — the visual
+                    // encodes share as block height, which VoiceOver can't see.
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(entry.option), \(Int((entry.share * 100).rounded())) percent")
                 }
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .accessibilityIdentifier("viz-option-shares")
     }
 
+    /// Index 0 lightens 8% off the theme background so the first block reads
+    /// against it; each later block darkens 10% per index (plan 29 shading).
+    /// Contrast pass (plan 29 Task 4): verified in the sim across all five
+    /// themes — white labels stay legible on the lightened index-0 block,
+    /// including the flagged chartreuse/gray risks (chartreuse is the low
+    /// end but matches every other white-on-chartreuse home element), so
+    /// the uniform no-lighten fallback was NOT needed.
     private func tint(for index: Int) -> Color {
         let base = ThemeColor.color(theme)
-        // Darker tint per index, like the original app's stacked-bar shading.
-        let darkenAmount = Double(index) * 0.12
-        return base.opacity(1.0).blended(withBlack: darkenAmount)
+        return index == 0
+            ? base.blended(withWhite: 0.08)
+            : base.blended(withBlack: Double(index) * 0.10)
     }
 
     private func percentString(_ share: Double) -> String {
@@ -138,6 +136,22 @@ private extension Color {
             red: red * (1 - clampedAmount),
             green: green * (1 - clampedAmount),
             blue: blue * (1 - clampedAmount),
+            opacity: alpha
+        )
+    }
+
+    /// Blends toward white by `amount` (0...1) — the index-0 block lightens
+    /// off the theme background so it reads against it (plan 29).
+    func blended(withWhite amount: Double) -> Color {
+        guard amount > 0 else { return self }
+        let resolved = UIColor(self)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let clampedAmount = min(max(amount, 0), 0.9)
+        return Color(
+            red: red + (1 - red) * clampedAmount,
+            green: green + (1 - green) * clampedAmount,
+            blue: blue + (1 - blue) * clampedAmount,
             opacity: alpha
         )
     }

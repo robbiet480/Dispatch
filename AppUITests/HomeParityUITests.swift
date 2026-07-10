@@ -50,4 +50,30 @@ final class HomeParityUITests: XCTestCase {
         XCTAssertLessThanOrEqual(optionShares.frame.maxY, reportButton.frame.minY,
                                  "chart content must not enter the reserved bottom strip")
     }
+
+    /// Task 4: option shares render as vertically STACKED full-width blocks
+    /// (Reporter parity), not side-by-side columns — and each option keeps its
+    /// per-block accessibility element.
+    @MainActor
+    func testOptionSharesBlocksStackVertically() throws {
+        let app = launchApp()
+
+        let optionShares = app.otherElements["viz-option-shares"].firstMatch
+        XCTAssertTrue(optionShares.waitForExistence(timeout: 15))
+
+        // Per-block a11y elements read "<Option>, NN percent". Queried
+        // app-wide: the `.ignore` container flattening can hoist the block
+        // elements out of the identified container's XCUI subtree.
+        let blocks = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ENDSWITH ' percent'"))
+        XCTAssertGreaterThanOrEqual(blocks.count, 2,
+                                    "expected at least two option blocks with percent labels")
+
+        let first = blocks.element(boundBy: 0).frame
+        let second = blocks.element(boundBy: 1).frame
+        XCTAssertEqual(first.minX, second.minX, accuracy: 1.0,
+                       "stacked blocks share the same leading edge")
+        XCTAssertGreaterThan(second.minY, first.maxY - 1.0,
+                             "blocks must stack vertically, not sit side by side")
+    }
 }
