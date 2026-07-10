@@ -28,7 +28,15 @@ import SwiftData
 @MainActor
 @Observable
 final class RemoteChangeObserver {
+    /// Defaults key recording when the FIRST remote-change event was ever
+    /// observed on this install — the "a sync has happened" marker consumed
+    /// by BackupManager's first-launch guard (an automatic backup taken
+    /// before the initial CloudKit import completes snapshots an empty
+    /// store). Events only arrive while subscribed, i.e. sync-active.
+    static let firstRemoteChangeKey = "sync.firstRemoteChangeDate"
+
     private let container: ModelContainer
+    private let defaults: UserDefaults
     private let isTestEnvironment: Bool
     /// Whether the launched container is actually CloudKit-backed. When it
     /// isn't (toggle off, or fallback after a CloudKit construction failure),
@@ -71,11 +79,13 @@ final class RemoteChangeObserver {
 
     init(
         container: ModelContainer,
+        defaults: UserDefaults,
         isTestEnvironment: Bool,
         isSyncActive: Bool,
         onRemoteChangesApplied: @escaping @MainActor ([Date]) -> Void
     ) {
         self.container = container
+        self.defaults = defaults
         self.isTestEnvironment = isTestEnvironment
         self.isSyncActive = isSyncActive
         self.onRemoteChangesApplied = onRemoteChangesApplied
@@ -114,6 +124,11 @@ final class RemoteChangeObserver {
             return
         }
         lastEventDate = Date()
+        // First-ever sync activity on this install: persist the marker the
+        // backup first-launch guard reads (write-once).
+        if defaults.object(forKey: Self.firstRemoteChangeKey) == nil {
+            defaults.set(Date().timeIntervalSince1970, forKey: Self.firstRemoteChangeKey)
+        }
         scheduleHandler()
     }
 

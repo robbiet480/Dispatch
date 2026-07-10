@@ -153,3 +153,50 @@ private let slug = "iPhone17-1-ab12cd34"
     #expect(Set(scorchedEarth) == Set(myNames))
     #expect(scorchedEarth.allSatisfy { !theirNames.contains($0) && !legacyNames.contains($0) })
 }
+
+// MARK: - first-launch auto-backup guard
+
+/// The iPad first-launch bug: the auto-backup ran before initial CloudKit
+/// sync pulled any reports, snapshotting 7 seeded questions and zero
+/// reports. The guard defers the AUTOMATIC backup while the store is fresh,
+/// sync is enabled, and no sync activity has ever been observed.
+@Test func autoBackupDefersOnlyForFreshSyncingNeverSyncedStores() {
+    let now = date(2026, 7, 10, 12, 0)
+    let fresh = now.addingTimeInterval(-5 * 60) // 5 min old store
+    let old = now.addingTimeInterval(-2 * 24 * 3600)
+
+    // The bug scenario: defer.
+    #expect(BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: fresh, syncEnabled: true, hasSyncedBefore: false, now: now))
+
+    // Any leg missing ⇒ proceed.
+    #expect(!BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: old, syncEnabled: true, hasSyncedBefore: false, now: now))
+    #expect(!BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: fresh, syncEnabled: false, hasSyncedBefore: false, now: now))
+    #expect(!BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: fresh, syncEnabled: true, hasSyncedBefore: true, now: now))
+    // Unknown creation date (in-memory stores, attribute lookup failure).
+    #expect(!BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: nil, syncEnabled: true, hasSyncedBefore: false, now: now))
+}
+
+@Test func autoBackupGuardBoundaries() {
+    let now = date(2026, 7, 10, 12, 0)
+    // Just inside the 30-minute grace ⇒ defer; exactly at it ⇒ proceed.
+    #expect(BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: now.addingTimeInterval(-30 * 60 + 1), syncEnabled: true,
+        hasSyncedBefore: false, now: now))
+    #expect(!BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: now.addingTimeInterval(-30 * 60), syncEnabled: true,
+        hasSyncedBefore: false, now: now))
+    // "Created in the future" (clock rollback): age unknowable — stay safe
+    // and defer; the manual path remains available and the clock catches up.
+    #expect(BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: now.addingTimeInterval(3600), syncEnabled: true,
+        hasSyncedBefore: false, now: now))
+    // Custom grace is honored.
+    #expect(!BackupRotation.shouldDeferAutomaticBackup(
+        storeCreatedAt: now.addingTimeInterval(-120), syncEnabled: true,
+        hasSyncedBefore: false, now: now, grace: 60))
+}

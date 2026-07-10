@@ -16,6 +16,30 @@ public enum BackupRotation {
     static let filenamePrefix = "dispatch-backup-"
     static let filenameSuffix = ".json"
 
+    /// How long after store creation the AUTOMATIC backup defers to initial
+    /// CloudKit sync (first-launch race): a first-launch auto-backup that
+    /// runs before the initial sync finishes snapshots a near-empty store
+    /// (seeded questions, zero reports) — a uselessly misleading "backup".
+    /// 30 minutes comfortably covers a normal initial import; after that we
+    /// back up regardless (sync may simply be off/broken, and SOME backup
+    /// beats none). Manual "Back Up Now" is never deferred — user intent wins.
+    public static let initialSyncGracePeriod: TimeInterval = 30 * 60
+
+    /// True when the AUTOMATIC backup should be skipped because the store is
+    /// fresh and initial sync is plausibly still incomplete: the store was
+    /// created within `grace` of `now` (or "created" in the future — clock
+    /// rollback, age unknowable, stay safe), sync is enabled, and no
+    /// successful sync activity has ever been observed. Any of: an old
+    /// store, sync disabled, a prior sync marker, or an unknown creation
+    /// date (nil — e.g. in-memory test stores) ⇒ proceed.
+    public static func shouldDeferAutomaticBackup(storeCreatedAt: Date?, syncEnabled: Bool,
+                                                  hasSyncedBefore: Bool, now: Date,
+                                                  grace: TimeInterval = initialSyncGracePeriod) -> Bool {
+        guard syncEnabled, !hasSyncedBefore, let storeCreatedAt else { return false }
+        if storeCreatedAt > now { return true }
+        return now.timeIntervalSince(storeCreatedAt) < grace
+    }
+
     /// True when a new backup should be written: never backed up, the last
     /// backup is at least `threshold` old, or the recorded date is in the
     /// future (clock rollback — treat the marker as untrustworthy).

@@ -48,6 +48,17 @@ final class BackupManager {
     /// directory re-enables it (the unit-testable path).
     @ObservationIgnored private let isSkipped: Bool
 
+    /// First-launch race guard inputs (kit-side decision — see
+    /// BackupRotation.shouldDeferAutomaticBackup): when the on-disk store
+    /// file was created (nil when unknown / in-memory) and whether the
+    /// launched container is CloudKit-backed. A fresh-store + sync-enabled +
+    /// never-synced launch must NOT auto-backup — the iPad first-launch bug
+    /// wrote a "backup" with 7 seeded questions and ZERO reports because it
+    /// ran before the initial CloudKit import finished. Manual "Back Up Now"
+    /// is never gated by this.
+    @ObservationIgnored private let storeCreatedAt: Date?
+    @ObservationIgnored private let isSyncActive: Bool
+
     /// This device's backup-filename slug (model + persisted per-install
     /// short ID): multiple devices write into the SAME iCloud Drive folder,
     /// so filenames must be per-device and rotation scoped to this slug —
@@ -85,9 +96,12 @@ final class BackupManager {
     }
 
     init(container: ModelContainer, defaults: UserDefaults, isTestEnvironment: Bool,
-         directory: URL? = nil, iCloudDirectory: URL? = nil) {
+         directory: URL? = nil, iCloudDirectory: URL? = nil,
+         storeCreatedAt: Date? = nil, isSyncActive: Bool = false) {
         self.container = container
         self.defaults = defaults
+        self.storeCreatedAt = storeCreatedAt
+        self.isSyncActive = isSyncActive
         isSkipped = isTestEnvironment && directory == nil
         self.directory = directory
             ?? URL.documentsDirectory.appendingPathComponent("Backups", isDirectory: true)
@@ -142,6 +156,19 @@ final class BackupManager {
     func backUpIfStale(now: Date = Date()) {
         guard !isSkipped, isEnabled, !isBackingUp,
               BackupRotation.isDue(lastBackupDate: lastBackupDate, now: now) else { return }
+        // First-launch race guard (kit-side, tested): a fresh store with
+        // sync enabled and no sync activity ever observed is plausibly
+        // mid-initial-import — an auto-backup now would snapshot seeded
+        // questions and zero reports. Retried on every scene-active; the
+        // grace period bounds the deferral. backUpNow() skips this on
+        // purpose: manual intent wins.
+        if BackupRotation.shouldDeferAutomaticBackup(
+            storeCreatedAt: storeCreatedAt, syncEnabled: isSyncActive,
+            hasSyncedBefore: defaults.object(forKey: RemoteChangeObserver.firstRemoteChangeKey) != nil,
+            now: now) {
+            backupLog.info("automatic backup deferred: store is fresh and initial sync hasn't been observed yet")
+            return
+        }
         performBackup(now: now)
     }
 

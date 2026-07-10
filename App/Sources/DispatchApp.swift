@@ -55,7 +55,7 @@ struct DispatchApp: App {
         // Container construction consults the sync policy (defaults suite +
         // test environment), so defaults selection above must precede it.
         let syncPolicy = SyncPolicy(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
-        let (madeContainer, cloudKitActive) = Self.makeContainer(
+        let (madeContainer, cloudKitActive, storeURL) = Self.makeContainer(
             syncEnabled: syncPolicy.shouldSync, inMemory: isTestEnvironment
         )
         container = madeContainer
@@ -132,8 +132,18 @@ struct DispatchApp: App {
 
         // Automatic rotating backups (plan 16): foreground-scheduled (scene
         // active + report save), off-main export, no background tasks.
+        // storeCreatedAt (the store file's on-disk creation date — the
+        // cheapest honest "fresh install" signal; the fresh-install path
+        // creates the file during this same launch) + cloudKitActive feed
+        // the first-launch guard: never auto-backup a fresh store before
+        // initial sync has been observed. nil for in-memory test stores.
+        let storeCreatedAt = storeURL.flatMap {
+            (try? FileManager.default.attributesOfItem(
+                atPath: $0.path(percentEncoded: false)))?[.creationDate] as? Date
+        }
         backupManager = BackupManager(
-            container: container, defaults: appDefaults, isTestEnvironment: isTestEnvironment
+            container: container, defaults: appDefaults, isTestEnvironment: isTestEnvironment,
+            storeCreatedAt: storeCreatedAt, isSyncActive: cloudKitActive
         )
 
         // Report webhooks (plan 24): queue-and-drain. The queue and the
@@ -169,6 +179,7 @@ struct DispatchApp: App {
         let awakeForReplan = awakeStore
         remoteChangeObserver = RemoteChangeObserver(
             container: container,
+            defaults: appDefaults,
             isTestEnvironment: isTestEnvironment,
             isSyncActive: cloudKitActive
         ) { recentReportDates in
@@ -543,7 +554,7 @@ struct DispatchApp: App {
     /// existing test isolation model.
     private static func makeContainer(
         syncEnabled: Bool, inMemory: Bool = false
-    ) -> (ModelContainer, cloudKitActive: Bool) {
+    ) -> (ModelContainer, cloudKitActive: Bool, storeURL: URL?) {
         let schema = Schema(DispatchStore.allModels)
         if inMemory {
             do {
@@ -552,7 +563,7 @@ struct DispatchApp: App {
                 )
                 let container = try ModelContainer(for: schema, configurations: [config])
                 syncLog.info("in-memory container active (test environment)")
-                return (container, cloudKitActive: false)
+                return (container, cloudKitActive: false, storeURL: nil)
             } catch {
                 fatalError("failed to open in-memory model container: \(error)")
             }
@@ -569,7 +580,7 @@ struct DispatchApp: App {
                 )
                 let container = try ModelContainer(for: schema, configurations: [config])
                 syncLog.info("CloudKit-mirrored container active (\(SyncPolicy.containerIdentifier, privacy: .public))")
-                return (container, cloudKitActive: true)
+                return (container, cloudKitActive: true, storeURL: storeURL)
             } catch {
                 syncLog.error("CloudKit container construction failed, falling back to local: \(error, privacy: .public)")
             }
@@ -578,7 +589,7 @@ struct DispatchApp: App {
             let config = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
             let container = try ModelContainer(for: schema, configurations: [config])
             syncLog.info("local (non-CloudKit) container active")
-            return (container, cloudKitActive: false)
+            return (container, cloudKitActive: false, storeURL: storeURL)
         } catch {
             // Same hard-failure semantics the app has always had for an
             // unopenable local store (previously `try!` at this call site) —
