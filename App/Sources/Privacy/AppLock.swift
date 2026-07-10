@@ -25,6 +25,20 @@ public final class AppLockStore: @unchecked Sendable {
     /// Backgrounding this long or longer re-locks the app on return.
     public static let backgroundGraceInterval: TimeInterval = 60
 
+    /// URLs opened while locked/covered wait here until a successful unlock
+    /// (see LockedURLQueue in DispatchKit for the tested semantics). The
+    /// Spotify OAuth callback lands via onOpenURL while the privacy cover is
+    /// still up — processing it invisibly behind the cover while the unlock
+    /// prompt may have been system-cancelled is exactly the "stranded on the
+    /// lock screen" bug this queue fixes.
+    private var urlQueue = LockedURLQueue()
+
+    /// Observable token AppLockView watches to (re-)present the Face ID
+    /// prompt: bumped whenever a URL arrives while locked, because the
+    /// view's single onAppear auto-attempt can be system-cancelled during a
+    /// URL-driven activation and nothing else would re-present it.
+    public private(set) var unlockPromptRequestCount = 0
+
     public let isTestEnvironment: Bool
 
     public init(defaults: UserDefaults = .standard, isTestEnvironment: Bool? = nil) {
@@ -100,6 +114,29 @@ public final class AppLockStore: @unchecked Sendable {
         ) {
             isLocked = true
         }
+    }
+
+    /// Queues `url` when the app is locked or covered-for-backgrounding.
+    /// Returns `true` when queued (the caller must not route it now — drain
+    /// after unlock via `drainPendingURLs()`), `false` when the app is fully
+    /// visible and the URL should be routed immediately. When already locked,
+    /// also requests a fresh unlock prompt so returning via an OAuth callback
+    /// always fires Face ID rather than stranding the user on the lock screen.
+    public func deferURLIfNeeded(_ url: URL) -> Bool {
+        guard urlQueue.deferIfNeeded(url, isLocked: isLocked, isCovered: isCovered) else {
+            return false
+        }
+        if isLocked {
+            unlockPromptRequestCount += 1
+        }
+        return true
+    }
+
+    /// Returns queued URLs in arrival order and empties the queue. Call only
+    /// once the app is neither locked nor covered; a failed/cancelled unlock
+    /// must NOT drain — the URLs stay queued for the next attempt.
+    public func drainPendingURLs() -> [URL] {
+        urlQueue.drain()
     }
 
     /// Attempts biometric/passcode authentication. In test mode, always
@@ -224,6 +261,16 @@ struct AppLockView: View {
             // would race ahead of any UI test assertion that the lock view
             // is shown. Tests must explicitly tap app-lock-unlock-button,
             // matching how a real user dismisses the lock screen.
+            guard !appLockStore.isTestEnvironment else { return }
+            unlock()
+        }
+        // A URL opened while locked (e.g. the Spotify OAuth callback) bumps
+        // this counter: the onAppear attempt above is single-shot and can be
+        // system-cancelled mid-activation when the app is opened via URL, so
+        // the callback return must re-present the prompt itself. The
+        // isAuthenticating guard in unlock() keeps this from double-prompting
+        // over an attempt that is still in flight.
+        .onChange(of: appLockStore.unlockPromptRequestCount) { _, _ in
             guard !appLockStore.isTestEnvironment else { return }
             unlock()
         }

@@ -7,6 +7,7 @@ import UIKit
 import UserNotifications
 
 private let seedLog = Logger(subsystem: "io.robbie.Dispatch", category: "seed")
+private let urlLog = Logger(subsystem: "io.robbie.Dispatch", category: "url")
 private let migrationLog = Logger(subsystem: "io.robbie.Dispatch", category: "migration")
 
 @main
@@ -285,22 +286,25 @@ struct DispatchApp: App {
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onOpenURL { url in
-                    // dispatch://report — home/lock screen WIDGET TAPS only
-                    // (widgetURL/Link). Per Apple's widget docs ("Respond to
-                    // user interactions"), tap-to-open-app from a widget is
-                    // URL-based by design, so the scheme stays for those. The
-                    // Control Center control no longer routes through here —
-                    // it uses StartReportControlIntent (an OpenIntent in both
-                    // targets) whose perform() runs in-app.
-                    // dispatch-spotify://callback — Spotify auth redirect
-                    // (plan 26). Routed FIRST, on its own scheme, so the
-                    // widget-tap guard below stays untouched.
-                    if url.scheme == "dispatch-spotify" {
-                        spotifyController.handleCallback(url: url)
+                    // Lock gate first: a URL arriving while the app is locked
+                    // or covered (e.g. the dispatch-spotify://callback OAuth
+                    // return after >grace in the Spotify app) is queued, never
+                    // processed invisibly behind the cover — and, when locked,
+                    // re-requests the Face ID prompt so the return can't
+                    // strand the user on the lock screen. Queued URLs route
+                    // after a successful unlock (or on returning to the
+                    // foreground without locking); a cancelled/failed unlock
+                    // keeps them queued for the next attempt.
+                    if appLockStore.deferURLIfNeeded(url) {
+                        urlLog.info("onOpenURL deferred behind lock/cover: \(url.scheme ?? "?", privacy: .public)")
                         return
                     }
-                    guard url.scheme == "dispatch", url.host() == "report" else { return }
-                    surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .widget)
+                    urlLog.info("onOpenURL routing immediately: \(url.scheme ?? "?", privacy: .public)")
+                    route(url: url)
+                }
+                .onChange(of: appLockStore.isLocked) { _, isLocked in
+                    guard !isLocked else { return }
+                    drainDeferredURLs()
                 }
                 .onAppear {
                     if appDefaults.bool(forKey: OnboardingFlag.key) {
@@ -365,6 +369,11 @@ struct DispatchApp: App {
                             privacyCoverWindow.show()
                         } else {
                             privacyCoverWindow.hide()
+                            // Covered-but-never-locked return (within grace):
+                            // isLocked never flips, so the onChange drain
+                            // doesn't fire — route anything queued while the
+                            // cover was up now that content is visible again.
+                            drainDeferredURLs()
                         }
                     case .inactive, .background:
                         // Synchronous, same handler — the cover must be up
@@ -480,6 +489,38 @@ struct DispatchApp: App {
                 }
         }
         .modelContainer(container)
+    }
+
+    /// Routes an opened URL once it is allowed to be processed (app neither
+    /// locked nor covered — see the onOpenURL lock gate).
+    ///
+    /// dispatch://report — home/lock screen WIDGET TAPS only (widgetURL/
+    /// Link). Per Apple's widget docs ("Respond to user interactions"),
+    /// tap-to-open-app from a widget is URL-based by design, so the scheme
+    /// stays for those. The Control Center control no longer routes through
+    /// here — it uses StartReportControlIntent (an OpenIntent in both
+    /// targets) whose perform() runs in-app.
+    /// dispatch-spotify://callback — Spotify auth redirect (plan 26). Routed
+    /// FIRST, on its own scheme, so the widget-tap guard below stays
+    /// untouched.
+    private func route(url: URL) {
+        if url.scheme == "dispatch-spotify" {
+            spotifyController.handleCallback(url: url)
+            return
+        }
+        guard url.scheme == "dispatch", url.host() == "report" else { return }
+        surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .widget)
+    }
+
+    /// Routes every URL queued behind the lock/cover, in arrival order.
+    private func drainDeferredURLs() {
+        let urls = appLockStore.drainPendingURLs()
+        if !urls.isEmpty {
+            urlLog.info("draining \(urls.count, privacy: .public) deferred URL(s) after unlock/uncover")
+        }
+        for url in urls {
+            route(url: url)
+        }
     }
 
     /// Builds the app's ModelContainer against the SAME default store URL in
