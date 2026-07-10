@@ -24,6 +24,8 @@ public final class Report {
     public var photos: [PhotoRecord] = []
     public var health: [HealthReading] = []
     public var focus: FocusState?
+    /// What was audibly playing at report time (plan 26); nil = nothing audible.
+    public var media: MediaSample?
     public var stateOfMindSampleIDs: [String] = []
     /// The PromptGroup this report was filed against (group-scoped survey);
     /// nil for ordinary global reports. Additive, plan 12.

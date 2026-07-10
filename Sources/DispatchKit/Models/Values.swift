@@ -64,6 +64,66 @@ public enum ConnectionType: Int, Codable, Sendable, CaseIterable {
     }
 }
 
+public enum MediaSource: String, Codable, Sendable {
+    case appleMusic, spotify, otherAudio
+    public var displayName: String {
+        switch self {
+        case .appleMusic: "Apple Music"
+        case .spotify: "Spotify"
+        case .otherAudio: "Other audio"
+        }
+    }
+}
+
+public enum MediaPlaybackState: Int, Codable, Sendable {
+    case stopped = 0, playing = 1, paused = 2
+}
+
+/// What was audibly playing at report time (plan 26). Source and playback
+/// state are stored raw (the Report.connection/connectionType precedent):
+/// unknown values from future exports import, persist, and re-export
+/// untouched. A nil `Report.media` means nothing was audible — the provider
+/// emits no sample for silence so payloads stay lean.
+///
+/// NOTE (plan-26 deviation, 2026-07-10): the plan named these `sourceRaw`/
+/// `playbackStateRaw` with renamed CodingKeys ("source"/"playbackState").
+/// SwiftData's composite-value storage persists stored properties by NAME and
+/// silently DROPS properties whose names don't match a coding key (observed:
+/// source/playbackState came back empty after a save/fetch round-trip; the
+/// synthesized decoder then trapped with SIGTRAP). So the stored properties
+/// carry the wire names directly and the typed accessors are `sourceType`/
+/// `playbackStateType` — same raw-leniency contract, SwiftData-safe.
+public struct MediaSample: Codable, Hashable, Sendable {
+    /// Raw MediaSource value; unknown values are preserved verbatim.
+    public var source: String
+    public var title: String?
+    public var artist: String?
+    public var album: String?
+    /// Raw MediaPlaybackState value; unknown values are preserved verbatim.
+    public var playbackState: Int
+
+    public init(source: MediaSource, title: String? = nil, artist: String? = nil,
+                album: String? = nil, playbackState: MediaPlaybackState = .playing) {
+        self.source = source.rawValue
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.playbackState = playbackState.rawValue
+    }
+
+    public var sourceType: MediaSource? { MediaSource(rawValue: source) }
+    public var playbackStateType: MediaPlaybackState? { MediaPlaybackState(rawValue: playbackState) }
+
+    /// Report-detail line, e.g. "Song — Artist, via Spotify"; the other-audio
+    /// floor has no metadata and renders as "Audio playing".
+    public var detailLine: String {
+        guard sourceType != .otherAudio else { return "Audio playing" }
+        let song = [title, artist].compactMap(\.self).joined(separator: " — ")
+        let via = sourceType.map { ", via \($0.displayName)" } ?? ""
+        return song.isEmpty ? "Media playing\(via)" : "\(song)\(via)"
+    }
+}
+
 public struct AudioSample: Codable, Hashable, Sendable {
     public var avg: Double
     public var peak: Double

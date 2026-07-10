@@ -79,6 +79,7 @@ public enum V2Importer {
             report.photos = dto.photos ?? []
             report.health = dto.health ?? []
             report.focus = dto.focus
+            report.media = dto.media
             report.stateOfMindSampleIDs = dto.stateOfMindSampleIDs ?? []
             report.promptGroupID = dto.promptGroupID
             // Provenance travels verbatim (plan 19): imported reports keep

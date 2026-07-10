@@ -41,3 +41,9 @@ import Testing
     #expect(SensorFailureHint.disabledHint(for: .weather) == "Turn Weather back on in Settings → Sensors.")
     #expect(SensorFailureHint.disabledHint(for: .healthSteps) == "Turn Steps back on in Settings → Sensors.")
 }
+
+@Test func mediaHintPassesReasonThrough() {
+    #expect(SensorFailureHint.hint(for: .media, reason: "Nothing playing") == "Nothing playing")
+    #expect(SensorFailureHint.hint(for: .media, reason: nil) == "Unable to detect Media.")
+    #expect(SensorFailureHint.disabledHint(for: .media) == "Turn Media back on in Settings → Sensors.")
+}

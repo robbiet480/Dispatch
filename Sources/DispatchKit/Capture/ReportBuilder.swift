@@ -75,6 +75,7 @@ public enum ReportBuilder {
             case .connection(let raw): report.connection = raw
             case .focus(let state): report.focus = state
             case .health(let readings): health.append(contentsOf: readings)
+            case .media(let sample): report.media = sample
             }
         }
         report.health = health.sorted { $0.type < $1.type }

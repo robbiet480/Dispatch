@@ -167,3 +167,51 @@ import Testing
     let exportB = try V2Exporter.exportData(from: contextB)
     #expect(export == exportB)
 }
+
+/// Plan-26 media field: round-trips when set, OMITTED from JSON when nil,
+/// and absent-key v2 payloads (pre-media exports) import with nil.
+@Test func mediaFieldRoundTripsAndToleratesAbsence() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let withMedia = Report()
+    withMedia.uniqueIdentifier = "r-media"
+    withMedia.media = MediaSample(source: .spotify, title: "Song", artist: "Artist",
+                                  album: "Album", playbackState: .paused)
+    contextA.insert(withMedia)
+    let silent = Report()
+    silent.uniqueIdentifier = "r-silent"
+    contextA.insert(silent)
+    try contextA.save()
+
+    let export = try V2Exporter.exportData(from: contextA)
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(export, into: contextB)
+    let imported = try contextB.fetch(FetchDescriptor<Report>())
+
+    let media = try #require(imported.first { $0.uniqueIdentifier == "r-media" }?.media)
+    #expect(media.sourceType == .spotify)
+    #expect(media.title == "Song")
+    #expect(media.artist == "Artist")
+    #expect(media.album == "Album")
+    #expect(media.playbackStateType == .paused)
+    #expect(imported.first { $0.uniqueIdentifier == "r-silent" }?.media == nil)
+
+    // Nil media is omitted, not null — check via the silent report's JSON object.
+    let json = try #require(String(data: export, encoding: .utf8))
+    #expect(!json.contains("\"media\":null"))
+
+    // Absence tolerance: a pre-media v2 report imports with nil media.
+    let legacy = Data("""
+    {"schemaVersion": 2, "questions": [], "reports": [{
+        "uniqueIdentifier": "r-old", "date": "2026-07-10T00:00:00Z",
+        "timeZone": "GMT", "kind": "regular", "trigger": "manual",
+        "isBackdated": false, "isDraft": false, "wasInBackground": false
+    }]}
+    """.utf8)
+    let containerC = try DispatchStore.inMemoryContainer()
+    let contextC = ModelContext(containerC)
+    _ = try V2Importer.importExport(legacy, into: contextC)
+    let old = try #require(try contextC.fetch(FetchDescriptor<Report>()).first)
+    #expect(old.media == nil)
+}

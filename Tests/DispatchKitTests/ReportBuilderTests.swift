@@ -107,3 +107,14 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
                                        in: context)
     #expect(plain.promptGroupID == nil)
 }
+
+/// Plan-26: a captured media payload lands on report.media.
+@Test func mediaOutcomeLandsOnReport() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let sample = MediaSample(source: .spotify, title: "Song 2", artist: "Blur")
+    let report = try ReportBuilder.save(
+        kind: .regular, trigger: .manual, date: .now, timeZone: .current,
+        outcomes: [.media: .captured(.media(sample))], answers: [], in: context)
+    #expect(report.media == sample)
+}

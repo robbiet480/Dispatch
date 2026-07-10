@@ -75,6 +75,7 @@ public enum V2Exporter {
         dto.photos = r.photos.isEmpty ? nil : r.photos
         dto.health = r.health.isEmpty ? nil : r.health
         dto.focus = r.focus
+        dto.media = r.media
         dto.stateOfMindSampleIDs = r.stateOfMindSampleIDs.isEmpty ? nil : r.stateOfMindSampleIDs
         dto.promptGroupID = r.promptGroupID
         dto.sourceDeviceModel = r.sourceDeviceModel

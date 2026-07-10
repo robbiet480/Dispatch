@@ -200,3 +200,21 @@ import Testing
     let exportB = try V2Exporter.exportData(from: contextB)
     #expect(exportA == exportB)
 }
+
+/// Plan-26 media survives export → import → export byte-identically.
+@Test func mediaRoundTripIsLossless() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let report = Report()
+    report.uniqueIdentifier = "r-media-roundtrip"
+    report.media = MediaSample(source: .appleMusic, title: "Song", artist: "Artist")
+    contextA.insert(report)
+    try contextA.save()
+    let exportA = try V2Exporter.exportData(from: contextA)
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(exportA, into: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB)
+    #expect(exportA == exportB)
+}

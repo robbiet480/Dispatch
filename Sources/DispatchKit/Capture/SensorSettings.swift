@@ -2,7 +2,7 @@ import Foundation
 
 /// Every capturable context source, each independently toggleable.
 public enum SensorKind: String, Codable, CaseIterable, Sendable {
-    case location, weather, altitude, photos, audio, battery, connection, focus
+    case location, weather, altitude, photos, audio, battery, connection, focus, media
     case healthSteps, healthFlights, healthHeart, healthHRV, healthRestingHeart
     case healthSleep, healthWorkouts, healthCaffeine, healthMedications
     case healthActivityRings
