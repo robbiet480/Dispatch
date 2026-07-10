@@ -68,8 +68,17 @@ Verify: kit suite + both build-for-testing destinations. Commit `feat: keyboard 
 
 ### Task 6: iPad UI-suite pass + wrap
 
-- [ ] **Files:** `AppUITests/*.swift` (only what the iPad run surfaces — idiom-tolerant fixes, identifiers untouched).
+- [x] **Files:** `AppUITests/*.swift` (only what the iPad run surfaces — idiom-tolerant fixes, identifiers untouched).
 
 **Contract:** the FULL existing UI suite passes on an iPad simulator (`iPad Pro 11-inch (M4)`) — run synchronously, tee'd to a log — and stays green on iPhone (`iPhone 16 Pro`). Fix what the run surfaces; no test deleted or weakened (assertions may branch by idiom, never vanish). Wrap: completion notes in this doc, rebase on main (expect `project.yml` conflicts from the watch PR — resolve additively), open the PR referencing #21.
 
 Verify: `swift test`; full UI suite green on iPad + iPhone. Commit `test: iPad UI-suite pass (plan 27)`.
+
+---
+
+## Completion notes (2026-07-10)
+
+- All six tasks landed; zero kit changes (the no-schema, app-side-only bet held — `swift test` untouched at 386 green throughout).
+- The first full iPad run surfaced exactly one defect class: the sidebar's `List(selection:)`-tagged rows didn't surface as `report-row` button elements, failing three `SurveyFlowUITests` cases at the open-the-saved-report step. Fixed app-side (sidebar rows are now Buttons driving the selection binding, with a selected-row background) — NO test file needed changes, and identifiers stayed untouched, a stronger outcome than the anticipated idiom-tolerant test branches.
+- Final verification: full UI suite green on iPad Pro 11-inch (M4) (run 2, single pass) AND iPhone 17 Pro; build-for-testing green on both destinations; built Info.plist verified (UIDeviceFamily [1,2], per-idiom orientations).
+- `@FocusState` needed `SwiftUI.` qualification in ReportsListView — DispatchKit declares a `FocusState` model type (focus sensor value) that shadows it.
