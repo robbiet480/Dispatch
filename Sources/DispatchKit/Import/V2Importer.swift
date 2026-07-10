@@ -44,6 +44,10 @@ public enum V2Importer {
             question.visualizationRaw = dto.visualization
             question.defaultAnswerString = dto.defaultAnswerString
             question.allowsMultipleSelectionRaw = dto.allowsMultipleSelection
+            question.inputStyleRaw = dto.inputStyle
+            question.inputMin = dto.inputMin
+            question.inputMax = dto.inputMax
+            question.inputStep = dto.inputStep
             summary.questionsImported += 1
         }
 

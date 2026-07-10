@@ -57,12 +57,19 @@ public struct V2Question: Codable {
     public var visualization: String?
     public var defaultAnswerString: String?
     public var allowsMultipleSelection: Bool?
+    /// Optional number-input-style additions (plan 21). Same nil-omission
+    /// contract as the plan-11 fields above.
+    public var inputStyle: String?
+    public var inputMin: Double?
+    public var inputMax: Double?
+    public var inputStep: Double?
 
     public init(uniqueIdentifier: String, prompt: String, questionType: Int,
                 placeholderString: String?, choices: [String]?, sortOrder: Int,
                 isEnabled: Bool, stateOfMindKind: String?, reportKinds: [ReportKind],
                 visualization: String? = nil, defaultAnswerString: String? = nil,
-                allowsMultipleSelection: Bool? = nil) {
+                allowsMultipleSelection: Bool? = nil, inputStyle: String? = nil,
+                inputMin: Double? = nil, inputMax: Double? = nil, inputStep: Double? = nil) {
         self.uniqueIdentifier = uniqueIdentifier
         self.prompt = prompt
         self.questionType = questionType
@@ -75,6 +82,10 @@ public struct V2Question: Codable {
         self.visualization = visualization
         self.defaultAnswerString = defaultAnswerString
         self.allowsMultipleSelection = allowsMultipleSelection
+        self.inputStyle = inputStyle
+        self.inputMin = inputMin
+        self.inputMax = inputMax
+        self.inputStep = inputStep
     }
 }
 

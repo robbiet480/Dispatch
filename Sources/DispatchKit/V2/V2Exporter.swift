@@ -15,7 +15,10 @@ public enum V2Exporter {
                        stateOfMindKind: q.stateOfMindKind, reportKinds: q.reportKinds,
                        visualization: q.visualizationRaw,
                        defaultAnswerString: q.defaultAnswerString,
-                       allowsMultipleSelection: q.allowsMultipleSelectionRaw)
+                       allowsMultipleSelection: q.allowsMultipleSelectionRaw,
+                       inputStyle: q.inputStyleRaw,
+                       inputMin: q.inputMin, inputMax: q.inputMax,
+                       inputStep: q.inputStep)
         }
 
         let reports = try context.fetch(

@@ -45,6 +45,11 @@ import Testing
     #expect(!json.contains("\"visualization\""))
     #expect(!json.contains("\"defaultAnswerString\""))
     #expect(!json.contains("\"allowsMultipleSelection\""))
+    // Plan-21 input-style fields share the same nil-omission contract.
+    #expect(!json.contains("\"inputStyle\""))
+    #expect(!json.contains("\"inputMin\""))
+    #expect(!json.contains("\"inputMax\""))
+    #expect(!json.contains("\"inputStep\""))
 }
 
 /// Plan-11 fields round-trip through export → import → export when set, and
@@ -89,6 +94,10 @@ import Testing
     #expect(old.visualizationRaw == nil)
     #expect(old.defaultAnswerString == nil)
     #expect(old.allowsMultipleSelectionRaw == nil)
+    #expect(old.inputStyleRaw == nil)
+    #expect(old.inputMin == nil)
+    #expect(old.inputMax == nil)
+    #expect(old.inputStep == nil)
 }
 
 /// A report with no responses must export with the "responses" key OMITTED —
