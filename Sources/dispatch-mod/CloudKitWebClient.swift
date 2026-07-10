@@ -151,6 +151,16 @@ struct CloudKitWebClient {
             .compactMap { QuestionFlag(recordName: $0.0, fields: $0.1) }
     }
 
+    /// Diagnostic: strongly-consistent fetch of any record by name, returned
+    /// as the raw server dictionary (record fields or serverErrorCode).
+    func rawLookup(recordName: String) throws -> [String: Any] {
+        let response = try post(
+            operation: "records/lookup",
+            body: ["records": [["recordName": recordName]]]
+        )
+        return (response["records"] as? [[String: Any]])?.first ?? response
+    }
+
     func lookupSubmission(recordName: String) throws -> SubmittedQuestion {
         let response = try post(
             operation: "records/lookup",
@@ -189,7 +199,7 @@ struct CloudKitWebClient {
         let catalog = submission.approved(
             recordName: UUID().uuidString, approvedAt: Date(), tags: tags
         )
-        _ = try post(operation: "records/modify", body: [
+        let createResponse = try post(operation: "records/modify", body: [
             "operations": [[
                 "operationType": "create",
                 "record": [
@@ -199,6 +209,12 @@ struct CloudKitWebClient {
                 ] as [String: Any],
             ] as [String: Any]],
         ])
+        // records/modify returns HTTP 200 with PER-RECORD results; an
+        // operation failure arrives as serverErrorCode inside the records
+        // array, not as a transport error. Discarding this response once
+        // caused real data loss (create silently failed, submission was
+        // then deleted — 2026-07-09). Verify before touching the submission.
+        try Self.verifyModifyResponse(createResponse, recordName: catalog.recordName)
         do {
             try delete(recordName: submissionRecordName, recordType: CatalogRecordType.submittedQuestion)
         } catch {
@@ -222,12 +238,29 @@ struct CloudKitWebClient {
     }
 
     private func delete(recordName: String, recordType: String) throws {
-        _ = try post(operation: "records/modify", body: [
+        let response = try post(operation: "records/modify", body: [
             "operations": [[
                 "operationType": "forceDelete",
                 "record": ["recordType": recordType, "recordName": recordName] as [String: Any],
             ] as [String: Any]],
         ])
+        try Self.verifyModifyResponse(response, recordName: recordName)
+    }
+
+    /// records/modify reports per-record failures inside an HTTP-200 body.
+    /// Throws when the operation for `recordName` carries a serverErrorCode.
+    static func verifyModifyResponse(_ response: [String: Any], recordName: String) throws {
+        guard let records = response["records"] as? [[String: Any]] else {
+            throw ClientError.malformedResponse("modify response missing records array")
+        }
+        for record in records where (record["recordName"] as? String) == recordName {
+            if let code = record["serverErrorCode"] as? String {
+                let reason = record["reason"] as? String ?? "no reason given"
+                throw ClientError.server(code: code, reason: "\(recordName): \(reason)")
+            }
+            return // found our record, no error
+        }
+        throw ClientError.malformedResponse("modify response did not include \(recordName)")
     }
 }
 #endif

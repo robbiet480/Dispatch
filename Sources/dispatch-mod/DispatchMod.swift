@@ -93,6 +93,17 @@ struct DispatchMod {
                 try run(envOverride) { client in
                     try Dashboard(client: client, port: port).serve()
                 }
+            case "lookup":
+                // Strongly-consistent fetch by recordName (any record type) —
+                // diagnostic for eventual-consistency confusion in queries and
+                // the Console UI. Prints the raw record dictionary.
+                guard let recordName = arguments.first else {
+                    fail("lookup needs a recordName")
+                }
+                try run(envOverride) { client in
+                    let raw = try client.rawLookup(recordName: recordName)
+                    print(raw)
+                }
             case "import":
                 let dryRun = flag("--dry-run", in: &arguments)
                 guard let path = arguments.first else {
