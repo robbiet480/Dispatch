@@ -13,8 +13,9 @@ app, so this policy is blunt about exactly where it lives.
   database**. There is no Dispatch server.
 - **No analytics, no ads, no tracking, no third-party SDKs.** The app
   makes no network connections except to Apple services (iCloud,
-  Apple's weather service, push notifications) and — only if you
-  explicitly submit a question set — the shared community catalog.
+  Apple's weather service, push notifications), the shared community
+  catalog (only if you explicitly submit a question set), and — only
+  if you configure one — a webhook endpoint you choose yourself.
 - **No account.** Nothing to sign up for; we never see your email or
   name.
 - You can **export** everything (JSON/CSV), and **Delete All Data**
@@ -90,20 +91,70 @@ for moderation (rate limits, takedowns); it is not your name, email,
 or Apple ID, and it is never displayed. Don't put personal information
 in a submitted question set; submissions are public.
 
+## Contacts (optional, off by default)
+
+"People" in Dispatch are names — by default typed by you, with no
+Contacts access at all. Two optional features use your contact book:
+
+- **Contact suggestions** (Settings → Sensors → Suggest from Contacts;
+  **default: off**) asks for Contacts permission and matches what you
+  type against contact names to show name-and-photo suggestion chips.
+- **Linking a person to a contact** (Settings → People) uses the
+  system contact picker, which hands Dispatch only the single contact
+  you pick and requires no Contacts permission.
+
+What is stored: if you pick a contact, its display name becomes the
+person's name in your data (and syncs like any other answer). The
+*link* — the contact's device-local identifier plus normalized
+email/phone match keys used to re-find it — is stored **only on that
+device** and is never synced or exported. Contact photos are fetched
+live from your contact book each time they are shown and are never
+copied or persisted. No other contact data is read or stored, and
+nothing from your contact book is ever transmitted anywhere.
+
+## Webhooks (optional, off by default)
+
+Settings → Data → Advanced → Webhook can POST a JSON copy of each
+completed report to **one URL that you choose** — a home-automation
+server, your own service, anything. Plainly:
+
+- Entirely opt-in: nothing is sent unless you enter a URL and enable
+  it. You can turn it off or change the destination at any time; the
+  configuration is device-local and never syncs.
+- What is sent is whatever your reports contain: your answers and any
+  sensor context you have enabled (including Health readings, if those
+  sensors are on). A "Send All Reports" action can send your history.
+- **We operate no server and receive nothing.** The data goes directly
+  from your device to the endpoint you configured; what that endpoint
+  does with it is between you and its operator.
+- Optional protections: with a secret set, requests carry an
+  HMAC-SHA256 signature, and an Encrypt Payload option wraps the JSON
+  in AES-256-GCM with a key derived from your secret. The secret is
+  stored in the device Keychain (this-device-only).
+- HTTPS is required for endpoints on the open internet; plain HTTP is
+  allowed only for local-network destinations (localhost, `.local`
+  hosts, private-range addresses). Choosing an endpoint — and securing
+  the transport and storage behind it — is your responsibility.
+
 ## What Dispatch does NOT do
 
 - No analytics or telemetry of any kind. Not even crash reporting
   beyond Apple's own opt-in system diagnostics.
 - No advertising, no tracking, no fingerprinting, no data sales.
 - No third-party services or SDKs. The dependency list is empty.
-- No accounts, and Contacts are never accessed — "people" in Dispatch
-  are names you type yourself.
+- No accounts. Contacts are read only if you turn on the optional
+  suggestions feature above (off by default), and even then nothing
+  from your contact book leaves your device.
 
 ## Your data, your controls
 
 - **Export** — Settings → Data exports everything as JSON or CSV.
-- **Automatic backups** — daily rotating JSON backups are written to
-  the Files app on your device (on by default, can be disabled).
+- **Automatic backups** — daily rotating JSON backups (on by default,
+  can be disabled). By default they are written both to the Files app
+  on your device and to a visible "Dispatch" folder in **your iCloud
+  Drive** — so, like sync, backup files (including any health readings
+  in your reports) reach your own iCloud storage unless you set the
+  backup destination to device-only in Settings → Data → Backups.
 - **Delete** — Settings → Data → Delete All Data erases every record
   on the device and, while sync is on, propagates the erasure to your
   private iCloud database. Note: if you delete the *app* without

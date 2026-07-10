@@ -26,6 +26,27 @@ or deny it.*
    never displayed) → declared collected, **not linked to you** — the
    identifier is not tied to the user's identity in any way available
    to us; documented here in case a reviewer asks.
+5. **Contacts: Not Collected.** The optional contact-suggestions
+   feature (off by default) and the person↔contact linker read names/
+   photos on device only; the link cache (contact identifier +
+   email/phone match keys) is device-local, never synced or exported,
+   and thumbnails are live-fetched, never persisted. Under Apple's
+   definition, data processed on device that is never transmitted is
+   not "collected" — and it is not collected by the developer in any
+   sense. If a chosen contact's *name* is inserted as a person, that
+   name syncs as part of the already-declared User Content, not as
+   contact data.
+6. **Webhooks change nothing in the label.** The optional webhook
+   feature transmits report data only to a single endpoint the user
+   configures themselves (off by default, device-local config). The
+   developer and no third-party partner receive anything; a
+   user-directed transfer to the user's own chosen destination is not
+   developer/partner collection under Apple's definitions. The already-
+   declared report categories cover the data involved; documented here
+   for the reviewer.
+7. Backups (default destination: local + the user's own iCloud Drive)
+   ride the same reasoning as sync: user's own iCloud storage, covered
+   by the categories already declared as collected/linked.
 
 ## Answer sheet (App Store Connect → App Privacy)
 
@@ -43,11 +64,11 @@ or deny it.*
 
 | ASC data type | Answer | Why |
 |---|---|---|
-| Contact Info (name, email, phone…) | Not collected | No accounts; Contacts framework never used — "people" are typed free text |
+| Contact Info (name, email, phone…) | Not collected | No accounts; nothing identifying the user is transmitted |
 | Identifiers (User ID / Device ID) | Not collected | No IDFA/IDFV use; CloudKit's internal record keying is Apple infrastructure, not an app-visible identifier |
 | Purchases / Financial Info | Not collected | No commerce, no IAP |
 | Browsing / Search History | Not collected | In-app search runs on device only |
-| Contacts / Emails or Text Messages | Not collected | Never accessed |
+| Contacts / Emails or Text Messages | Not collected | Optional on-device suggestion/link features only (off by default); contact data never leaves the device (framing decision 5) |
 | Photos or Videos | Not collected | Only counts + metadata are stored (declared under User Content above); image content is never read, copied, or uploaded |
 | Audio Data | Not collected | Microphone is sampled to a single dB figure; no recording exists at any point (declared under User Content as the numeric value) |
 | Usage Data / Diagnostics | Not collected | Zero analytics/telemetry/crash SDKs |
@@ -61,12 +82,15 @@ or deny it.*
 | No analytics/third parties | Tracking: No; Usage Data: not collected | "What Dispatch does NOT do" | No third-party dependency exists (`Package.swift` has none; no analytics imports) |
 | Audio is a dB number only | Audio Data: not collected | "Ambient sound level" bullet | `AudioProvider` computes level only; purpose string states it (`project.yml`) |
 | Photos: metadata/count only | Photos: not collected; metadata under User Content | "Photo activity" bullet | `PhotosProvider` stores `PhotoRecord` metadata, no image data |
-| No Contacts access | Contact Info: not collected | "no accounts / Contacts never accessed" | No `import Contacts` anywhere |
+| Contact data never leaves the device (suggestions/link optional, off by default) | Contacts: not collected (framing decision 5) | "Contacts (optional, off by default)" section | `ContactSuggestionProvider` (on-device matching, toggle default OFF), `ContactLinkCache` (app-group defaults, never synced), thumbnails live-fetched only — PR #13 |
+| Webhooks send report data only to a user-chosen endpoint; developer receives nothing | No label change (framing decision 6) | "Webhooks (optional, off by default)" section | `WebhookManager`/`WebhookQueuePolicy` (opt-in URL, https or local-only http, Keychain secret, device-local config) — PR #12 |
+| Backups reach the user's own iCloud Drive by default | Covered by declared categories (framing decision 7) | "Automatic backups" bullet | `BackupDestination` default `.both`, local-guaranteed fallback (plan 25, commit `9e1a321`) |
 | Catalog submissions public, opt-in, pseudonymous | User Content flow 2: collected, not linked | "Community question catalog" section | `CatalogSubmitView` → public DB; moderation via creator record name only |
 | Location goes to Apple weather | Location: collected, linked | "Apple services → Weather" | `WeatherProvider` (WeatherKit) |
 | Delete-all erases iCloud copy | n/a (retention isn't a label field) | "Your data, your controls" | `DeleteAllData` + CloudKit mirroring propagation (commit `2c196fb`) |
 
-Checked 2026-07-09 against this branch. **Re-run this table if the
-health sidecar fallback (Mitigation A) ever lands** — Health & Fitness
-would flip to "not collected" and the policy's iCloud section must be
-rewritten the same day.
+Checked 2026-07-10 against this branch plus the person-identity
+(PR #13) and webhooks (PR #12) branches merging alongside. **Re-run
+this table if the health sidecar fallback (Mitigation A) ever lands** —
+Health & Fitness would flip to "not collected" and the policy's iCloud
+section must be rewritten the same day.

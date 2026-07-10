@@ -61,6 +61,19 @@ PERMISSIONS, ONE BY ONE
 - Focus status: records whether a Focus was active when a report was
   filed; an optional Focus Filter (set up in iOS Settings → Focus)
   lets each Focus mute chosen prompt groups.
+- Contacts (OPTIONAL, default off): Settings → Sensors → "Suggest
+  from Contacts" is the only place the permission is requested. When
+  on, typing in a "who are you with?" question matches contact names
+  on device and shows name/photo chips. Contact matching and the
+  person↔contact link cache are entirely device-local; contact photos
+  are fetched live and never stored; nothing from the contact book is
+  uploaded or synced. Settings → People can also link a person via
+  the system contact picker, which needs no permission at all.
+- Local Network (only if a webhook is configured): the optional
+  webhook feature (Settings → Data → Advanced → Webhook, default off)
+  lets the user POST their reports to a URL they choose; plain-HTTP
+  targets are restricted to local-network hosts, hence the purpose
+  string. No connection is made unless the user configures one.
 
 HEALTH DATA AND ICLOUD (proactive disclosure)
 Dispatch syncs via SwiftData's CloudKit mirroring to the user's OWN
@@ -71,15 +84,28 @@ disclosed in the privacy policy, the App Privacy labels, and the app
 description. Our reading of 5.1.3(ii): these are contextual snapshot
 readings attached to the user's own self-tracking entries in their
 private database — not a wholesale copy of Health data to iCloud, and
-nothing is ever accessible to the developer or any third party. Users
-who prefer zero off-device health data can disable sync (fully
-functional) and Delete All Data propagates erasure to iCloud.
+nothing is ever accessible to the developer or any third party. The
+automatic backup files (default destination: the user's own iCloud
+Drive plus the local Files app) carry the same report data and the
+same reasoning. Users who prefer zero off-device health data can
+disable sync and set backups to device-only (fully functional), and
+Delete All Data propagates erasure to iCloud.
 
 BACKGROUND MODES
 remote-notification only — CloudKit's standard silent change pushes.
 Workout-end and visit-arrival prompt triggers use HealthKit background
 delivery and CLVisit relaunches respectively (no location background
 mode needed or present).
+
+WEBHOOKS (user-directed data egress, opt-in)
+Off by default and configured entirely by the user. When enabled it
+sends the user's own report JSON directly from the device to the
+single endpoint they entered (their home-automation hub, their own
+server). We operate no server and receive nothing. HTTPS is required
+for non-local endpoints; optional HMAC signing and AES-256-GCM payload
+encryption are available, with the user's secret held in the device
+Keychain. All crypto is OS-provided (CryptoKit), consistent with
+ITSAppUsesNonExemptEncryption = NO.
 
 COMMUNITY CATALOG (user-generated content)
 Settings → Questions → Catalog browses shared question sets from a
