@@ -189,3 +189,28 @@ private func attachTokens(_ texts: [String], questionIdentifier: String? = nil, 
     #expect(ReportFilter.FilterCriterion.person("Ada").displayText
         == ReportFilter.FilterCriterion.token("Ada").displayText)
 }
+
+// MARK: - Person registry resolution (plan 22)
+
+@Test func personCriterionResolvesAlternateNamesThroughRegistry() {
+    let robert = PersonEntity()
+    robert.text = "Robert"
+    robert.alternateNames = ["Bob"]
+
+    // Report filed under the OLD name matches a filter on the current name…
+    let oldNameReport = makeReport()
+    attachTokens(["Bob"], questionIdentifier: "q-people", to: oldNameReport)
+    #expect(ReportFilter.matches(report: oldNameReport, criteria: [.person("Robert")],
+                                 peopleQuestionIDs: ["q-people"], people: [robert]))
+    // …and vice versa (criterion by alias matches display-name reports).
+    let newNameReport = makeReport()
+    attachTokens(["Robert"], questionIdentifier: "q-people", to: newNameReport)
+    #expect(ReportFilter.matches(report: newNameReport, criteria: [.person("Bob")],
+                                 peopleQuestionIDs: ["q-people"], people: [robert]))
+    // Without the registry, the old-name report does not match.
+    #expect(!ReportFilter.matches(report: oldNameReport, criteria: [.person("Robert")],
+                                  peopleQuestionIDs: ["q-people"]))
+    // Unrelated names still don't match.
+    #expect(!ReportFilter.matches(report: oldNameReport, criteria: [.person("Grace")],
+                                  peopleQuestionIDs: ["q-people"], people: [robert]))
+}

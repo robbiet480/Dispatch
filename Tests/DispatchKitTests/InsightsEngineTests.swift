@@ -396,3 +396,35 @@ private func manySignalsFixture() -> ([Report], [Question]) {
         }
     }
 }
+
+// MARK: - Person registry resolution (plan 22)
+
+/// Half the "with" reports name "Angela", half "Angie" — each alone is below
+/// the 10-report side guard, so no person insight surfaces. With the registry
+/// resolving the alias, they unify into one 12-report signal displayed by the
+/// current display name.
+@Test func personSignalsResolveAliasesThroughRegistry() throws {
+    let questions = [makeQuestion(id: "q-who", prompt: "Who are you with?", type: .people)]
+    var reports: [Report] = []
+    for index in 0..<12 {
+        let name = index.isMultiple(of: 2) ? "Angela" : "Angie"
+        reports.append(makeReport(
+            date: day(index),
+            responses: [makeResponse(question: "q-who", tokens: [name])],
+            health: [HealthReading(type: "steps", value: 9_000 + Double(index) * 10, unit: "count")]))
+        reports.append(makeReport(
+            date: day(100 + index),
+            responses: [makeResponse(question: "q-who", tokens: [])],
+            health: [HealthReading(type: "steps", value: 3_000 + Double(index) * 10, unit: "count")]))
+    }
+    let angela = PersonEntity()
+    angela.text = "Angela"
+    angela.alternateNames = ["Angie"]
+
+    let unresolved = InsightsEngine.compute(reports: reports, questions: questions)
+    #expect(!unresolved.contains { $0.title.contains("Angela") || $0.title.contains("Angie") })
+
+    let resolved = InsightsEngine.compute(reports: reports, questions: questions, people: [angela])
+    #expect(resolved.contains { $0.title.contains("see Angela") })
+    #expect(!resolved.contains { $0.title.contains("Angie") })
+}

@@ -5,6 +5,9 @@ import SwiftUI
 struct HomeView: View {
     @Query private var reports: [Report]
     @Query(sort: \Question.sortOrder) private var questions: [Question]
+    /// Person registry (plan 22): people visualizations/filters resolve
+    /// alternate names through it.
+    @Query private var people: [PersonEntity]
     @Environment(ThemeStore.self) private var themeStore
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(VisualizationFilterStore.self) private var filterStore
@@ -45,7 +48,14 @@ struct HomeView: View {
         // canonicalKey, not displayText: kind-aware, so swapping a person
         // filter for a same-named token filter still changes the memo key.
         let criteria = filterStore.criteria.map(\.canonicalKey).joined(separator: ",")
-        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)"
+        // Person registry fingerprint (plan 22): renames/merges change how
+        // people visualizations aggregate, so they must refire the rebuild.
+        let peopleFingerprint = people.reduce(into: 0) { partial, person in
+            partial ^= person.uniqueIdentifier.hashValue
+            partial ^= person.text.hashValue
+            partial ^= person.alternateNames.joined(separator: "\u{1F}").hashValue
+        }
+        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)|\(peopleFingerprint)"
     }
 
     /// Content-filtered reports feeding the viz pages. Only computed inside
@@ -55,7 +65,8 @@ struct HomeView: View {
         guard !criteria.isEmpty else { return reports }
         let peopleQuestionIDs = Set(questions.filter { $0.type == .people }.map(\.uniqueIdentifier))
         return reports.filter {
-            ReportFilter.matches(report: $0, criteria: criteria, peopleQuestionIDs: peopleQuestionIDs)
+            ReportFilter.matches(report: $0, criteria: criteria,
+                                 peopleQuestionIDs: peopleQuestionIDs, people: people)
         }
     }
 
@@ -63,7 +74,8 @@ struct HomeView: View {
         let matching = filteredReports()
         var next: [String: QuestionVisualization] = [:]
         for question in visibleQuestions {
-            next[question.uniqueIdentifier] = VisualizationData.build(for: question, reports: matching)
+            next[question.uniqueIdentifier] = VisualizationData.build(for: question, reports: matching,
+                                                                      people: people)
         }
         // Only replace values that actually changed so QuestionVisualizationView identity/diffing
         // (via Equatable QuestionVisualization) stays cheap for unaffected pages.

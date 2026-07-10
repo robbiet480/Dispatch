@@ -73,3 +73,31 @@ private let sample: [(text: String, usageCount: Int)] = [
     #expect(TokenSuggester.suggest(query: "a", candidates: [], excluding: []).isEmpty)
     #expect(TokenSuggester.suggest(query: "", candidates: [], excluding: []).isEmpty)
 }
+
+// MARK: - People path (plan 22)
+
+private func makePerson(_ text: String, alternates: [String] = [], usage: Int = 0) -> PersonEntity {
+    let person = PersonEntity()
+    person.text = text
+    person.alternateNames = alternates
+    person.usageCount = usage
+    return person
+}
+
+@Test func peopleSuggestionsMatchAliasesWithoutDuplicateChips() {
+    let people = [makePerson("Robert", alternates: ["Bob", "Bobby"], usage: 5),
+                  makePerson("Alex", usage: 3)]
+    // Query hits two alternate names of the SAME person → one chip, display name.
+    #expect(TokenSuggester.suggestPeople(query: "bob", people: people, excluding: []) == ["Robert"])
+    // Query hitting the display name works as before.
+    #expect(TokenSuggester.suggestPeople(query: "rob", people: people, excluding: []) == ["Robert"])
+    // Empty query ranks by usage over display names only.
+    #expect(TokenSuggester.suggestPeople(query: "", people: people, excluding: []) == ["Robert", "Alex"])
+}
+
+@Test func peopleSuggestionsExcludeByAnyName() {
+    let people = [makePerson("Robert", alternates: ["Bob"], usage: 5)]
+    // A token already added under the alias must not resurface the person.
+    #expect(TokenSuggester.suggestPeople(query: "rob", people: people, excluding: ["bob"]).isEmpty)
+    #expect(TokenSuggester.suggestPeople(query: "bob", people: people, excluding: ["Robert"]).isEmpty)
+}

@@ -429,3 +429,41 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
     #expect(reloaded.isVisible("q-1"))
     #expect(VisualizationFilterStore(defaults: defaults).isVisible("q-1"))
 }
+
+// MARK: - Person registry resolution (plan 22)
+
+@Test func peopleFrequencyUnifiesRenamedPersonThroughRegistry() {
+    let question = makeQuestion(id: "q-people", prompt: "Who are you with?", type: .people)
+    let reports = [
+        makeReport(responses: [makeResponse(questionIdentifier: "q-people",
+                                            tokens: [TokenValue(text: "Bob")])]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-people",
+                                            tokens: [TokenValue(text: "Robert")])]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-people",
+                                            tokens: [TokenValue(text: "Alex")])]),
+    ]
+    let robert = PersonEntity()
+    robert.text = "Robert"
+    robert.alternateNames = ["Bob"]
+
+    // Without the registry: three separate bars.
+    guard case .frequency(_, let unresolvedDistinct) =
+        VisualizationData.build(for: question, reports: reports) else {
+        Issue.record("expected frequency")
+        return
+    }
+    #expect(unresolvedDistinct == 3)
+
+    // With the registry: "Bob" resolves into "Robert" — one bar, current
+    // display name, counts summed.
+    guard case .frequency(let items, let distinct) =
+        VisualizationData.build(for: question, reports: reports, people: [robert]) else {
+        Issue.record("expected frequency")
+        return
+    }
+    #expect(distinct == 2)
+    #expect(items.first?.text == "Robert")
+    #expect(items.first?.count == 2)
+    #expect(items.map(\.text).contains("Alex"))
+    #expect(!items.map(\.text).contains("Bob"))
+}

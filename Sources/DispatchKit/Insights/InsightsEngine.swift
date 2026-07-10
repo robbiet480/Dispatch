@@ -79,7 +79,10 @@ public enum InsightsEngine {
 
     /// Computes insights over ALL reports (drafts excluded). `questions`
     /// supplies the type split and choice labels, exactly as in DigestStats.
-    public static func compute(reports: [Report], questions: [Question]) -> [Insight] {
+    /// `people` is the person registry (plan 22): person signals resolve
+    /// alternate names to one canonical person, displayed by current name.
+    public static func compute(reports: [Report], questions: [Question],
+                               people: [PersonEntity] = []) -> [Insight] {
         // Stable report order so indices (and therefore every set/dictionary
         // downstream) are reproducible for identical input.
         let filed = reports.filter { !$0.isDraft }
@@ -98,7 +101,10 @@ public enum InsightsEngine {
             return byPrompt[response.questionPrompt]
         }
 
-        var categoricals = buildCategoricalSignals(filed: filed, question: question(for:))
+        // Deterministic resolution order regardless of fetch order.
+        let registry = people.sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
+        var categoricals = buildCategoricalSignals(filed: filed, question: question(for:),
+                                                   people: registry)
         let numerics = buildNumericSignals(filed: filed, question: question(for:))
 
         // Prefilter + cap: keep signals that can possibly pass the side
@@ -160,7 +166,7 @@ public enum InsightsEngine {
     }
 
     private static func buildCategoricalSignals(
-        filed: [Report], question: (Response) -> Question?
+        filed: [Report], question: (Response) -> Question?, people: [PersonEntity] = []
     ) -> [CategoricalSignal] {
         let allIndices = Set(filed.indices)
 
@@ -223,14 +229,16 @@ public enum InsightsEngine {
                                            sourceKey: Self.sourceKey(for: resolved))
                     }
                 case .people:
-                    // PLAN 22 INTEGRATION POINT: person signals resolve plain
-                    // token text for now. When the person registry lands,
-                    // alias→canonical-person resolution slots in right here so
-                    // "Angie" and "Angela" merge into one signal.
+                    // Person registry resolution (plan 22): alias →
+                    // canonical person, so "Angie" and "Angela" merge into
+                    // one signal keyed and displayed by the CURRENT display
+                    // name. Unresolved names stay themselves.
                     questionResponded[questionKey, default: []].insert(index)
                     for token in response.tokens ?? [] {
-                        personPresent[token.text, default: []].insert(index)
-                        personOwners[token.text, default: []].insert(questionKey)
+                        let name = PersonResolver.person(matching: token.text, in: people)?.text
+                            ?? token.text
+                        personPresent[name, default: []].insert(index)
+                        personOwners[name, default: []].insert(questionKey)
                     }
                 default:
                     // Untyped responses (question deleted) count as tokens —
