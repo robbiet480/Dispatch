@@ -16,6 +16,12 @@ keywords 100, promotional text 170.*
 | Secondary category | Health & Fitness | Honest signal given the Health integration |
 | Price | Free | No IAP |
 | Privacy Policy URL | `https://robbiet480.github.io/Dispatch/privacy-policy` | GitHub Pages, see docs/privacy-policy.md hosting note |
+| Support URL | `https://github.com/robbiet480/Dispatch/issues` | Issues tracker doubles as support |
+| Marketing URL | `https://github.com/robbiet480/Dispatch` | Repo README is the product page |
+
+*The Identity table and the fenced blocks below are machine-read by
+`scripts/asc-listing.swift` — keep the field names and code fences
+intact when editing.*
 
 ## Description
 
