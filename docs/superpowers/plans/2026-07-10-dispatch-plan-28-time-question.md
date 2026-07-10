@@ -284,3 +284,21 @@ struct TimeInput: View {
 - [ ] Full suites green (`swift test`, app build-for-testing, UI suite at the merge gate); note test-count delta from the previous plan's final report.
 - [ ] Self-review the whole branch diff before handing to review: (a) no `default:` added to any QuestionType/AnswerValue switch; (b) `timeResponse` nil-omission + `dayOffset`-0 omission proven by tests; (c) CSV non-time columns byte-identical (test pins it); (d) no `Date`/epoch stored anywhere for the answer value; (e) grep `numericResponse` consumers (`InsightsEngine`, `DigestStats`, `VisualizationData`) to confirm none accidentally ingest time answers; (f) accessibility identifiers `time-picker`, `time-now`, `time-yesterday` present.
 - [ ] Completion note in this doc (what shipped, divergences, test counts, the Task 5 outcome). Whole-branch review follows (controller-driven).
+
+---
+
+## Completion note (2026-07-10, branch `plan-28-time-question`)
+
+**Shipped, task by task:**
+- **Task 1 (kit):** `QuestionType.time = 7`; `TimeAnswer { minutesSinceMidnight, dayOffset }` with `clampedMinutes`/`hhmm`/`displayText(locale:)`/`now(_:calendar:)`; `Response.timeResponse`, `AnswerValue.time`, `V2Response.timeResponse`; exporter/importer wiring. All exactly per the plan's code blocks.
+- **Task 2 (kit):** CSV companion `(day offset)` column per time question; `flatten` emits `hhmm`; `docs/moderation.md` notes time questions accepted in submissions (forward-lenient for old builds). Catalog needed NO source change — raw 7 resolves structurally through `QuestionType(rawValue:)`; pinned with a dedicated test.
+- **Task 3 (kit):** `QuestionVisualization.timePoints`, `buildTimePoints`, `circularMeanMinutes` (with arithmetic fallback for zero-resultant pairs), `==` extension.
+- **Task 4 (app):** `TimeInputView.swift` (`TimeInput` + `YesterdayChip`); `.time` case in `QuestionPageView.answerBody`; `QuestionType.displayName` → "Time"; `ReportDetailView.answerText`; `TimePointsView` PointMark scatter with 0…1440 y-domain and circular-average rule; **plus `SurveyFlowView.keyboardPageID`** (an exhaustive switch the compiler flagged beyond the plan's named list — returns nil, no keyboard). Two UI tests added (Now+Yesterday saves; untouched records nothing).
+- **Task 5 (watch): DONE — PR #26 (watch app) is merged on main.** Added a crown-scrollable `timeControls` (digital-crown over 0…1439 in 5-min detents, seeded to now) + a Yesterday `Toggle` + File, in the `switch question.type` at `WatchQuestionView.inputControls`. Files `.time` through the existing `WatchReportFiler`/`ReportBuilder` path — zero extra kit work. a11y ids `watch-time-readout`/`watch-time-yesterday`/`watch-file-time`.
+
+**Divergences from the plan:**
+- Task 1's Step 4 requires the kit suite green, but adding `QuestionType.time` breaks `VisualizationData.build`'s exhaustive switch (the real aggregation is Task 3). Resolved by landing an explicit `case .time: return .empty` placeholder in Task 1 (NOT a `default:`), replaced with `buildTimePoints` in Task 3. No behavior change between commits — the app target doesn't build until Task 4 anyway.
+- `SurveyFlowView.keyboardPageID` was an extra exhaustive switch beyond the plan's enumerated sites; handled with an explicit `case .time: return nil`.
+- `displayText` tests normalize U+202F/U+00A0 (newer OSes put a narrow no-break space before AM/PM) so the assertions track meaning, not the platform's space glyph.
+
+**Verification:** kit `swift test` green (XCTest suite passes; swift-testing side records 0 issues — the signal-5 runner-exit crash is the documented flake). App `xcodebuild build-for-testing` (iPhone 17 Pro sim, DispatchApp scheme, which also builds Watch + Widgets + UITests): **TEST BUILD SUCCEEDED**. Full UI suite deliberately NOT run — reserved for the merge gate. New tests: ~22 kit (TimeAnswer 10, RawValueFallback +1, ReportBuilder +1, V2Export +2, CSVExport +1, Catalog +1, VisualizationData +6) + 2 UI.
