@@ -45,6 +45,14 @@ descending; timestamps are staggered so the file's first entry shows newest).
 Prompts already in the catalog are skipped case-insensitively, so re-running
 after a partial failure or with an extended seed file is safe.
 
+## dispatch-starter-seed.json
+
+44 original questions written for Dispatch (2026-07-10) to complement the
+Tumblr set: themes it predates (phone/screen habits, remote work, energy
+levels, boundaries, evening reflection) and heavier use of the `people`,
+`location`, and `number` types. No prompt overlaps with the Tumblr set
+(suite-enforced). Credit: "Dispatch starter set".
+
 ## reporter-tumblr-seed.json
 
 100 questions scraped 2026-07-09 from the community question blog for the

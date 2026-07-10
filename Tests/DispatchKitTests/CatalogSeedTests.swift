@@ -103,24 +103,33 @@ private func seedData(_ json: String) -> Data { Data(json.utf8) }
     #expect(question.tags == ["day"])
 }
 
-// MARK: - The shipped Reporter/Tumblr seed file
+// MARK: - The shipped seed files
 
-private func shippedSeedURL() -> URL {
+private func shippedSeedURL(_ filename: String) -> URL {
     // Tests run from the package root; docs/ sits beside Sources/.
     URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()  // Tests/DispatchKitTests
         .deletingLastPathComponent()  // Tests
         .deletingLastPathComponent()  // package root
-        .appendingPathComponent("docs/catalog/reporter-tumblr-seed.json")
+        .appendingPathComponent("docs/catalog/\(filename)")
 }
 
-@Test func shippedReporterTumblrSeedIsValid() throws {
-    let data = try Data(contentsOf: shippedSeedURL())
+@Test(arguments: [("reporter-tumblr-seed.json", 100), ("dispatch-starter-seed.json", 44)])
+func shippedSeedIsValid(filename: String, count: Int) throws {
+    let data = try Data(contentsOf: shippedSeedURL(filename))
     let drafts = try CatalogSeed.parse(data)
-    #expect(drafts.count == 100)
-    // Every draft carries the source credit (default or explicit).
+    #expect(drafts.count == count)
+    // Every draft carries a credit (default or explicit).
     #expect(drafts.allSatisfy { $0.credit?.isEmpty == false })
-    // Context tags are one of the blog's wake/day/sleep vocabulary.
+    // Context tags stick to the wake/day/sleep vocabulary.
     let allowedTags: Set<String> = ["wake", "day", "sleep"]
     #expect(drafts.allSatisfy { !$0.tags.isEmpty && $0.tags.allSatisfy(allowedTags.contains) })
+}
+
+@Test func shippedSeedFilesDoNotOverlap() throws {
+    let tumblr = try CatalogSeed.parse(Data(contentsOf: shippedSeedURL("reporter-tumblr-seed.json")))
+    let starter = try CatalogSeed.parse(Data(contentsOf: shippedSeedURL("dispatch-starter-seed.json")))
+    let tumblrPrompts = Set(tumblr.map { $0.prompt.lowercased() })
+    let overlap = starter.filter { tumblrPrompts.contains($0.prompt.lowercased()) }
+    #expect(overlap.isEmpty, "starter prompts duplicated from the Tumblr set: \(overlap.map(\.prompt))")
 }
