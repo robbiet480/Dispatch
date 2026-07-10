@@ -15,6 +15,10 @@ struct HomeView: View {
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(\.notificationPrefs) private var notificationPrefs
     @Environment(AppLockStore.self) private var appLockStore
+    /// Plan 27: layout (grid vs pager) keys off the size class — NOT the
+    /// idiom — so iPad Split View/Slide Over at compact width degrades to
+    /// the iPhone pager automatically.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isShowingFilter = false
     @State private var visualizations: [String: QuestionVisualization] = [:]
     @State private var selectedQuestionID: String?
@@ -182,29 +186,66 @@ struct HomeView: View {
                 .foregroundStyle(.white.opacity(0.7))
             Spacer()
         } else {
-            TabView(selection: $selectedQuestionID) {
+            Group {
+                if horizontalSizeClass == .regular {
+                    visualizationGrid
+                } else {
+                    visualizationPager
+                }
+            }
+            .task(id: visualizationTaskID) {
+                rebuildVisualizations()
+                // If the previously selected page's question was hidden/disabled (or this is
+                // the first render), fall back to the first visible page. Leaving `selection`
+                // pointed at a tag that no longer exists in the ForEach can leave the TabView
+                // showing stale content instead of truly removing that page. (Harmless in the
+                // grid layout — selection only matters to the pager — but kept unconditional
+                // so a size-class change back to compact lands on a valid page.)
+                if selectedQuestionID == nil || !visibleQuestions.contains(where: { $0.uniqueIdentifier == selectedQuestionID }) {
+                    selectedQuestionID = visibleQuestions.first?.uniqueIdentifier
+                }
+            }
+        }
+    }
+
+    private var visualizationPager: some View {
+        TabView(selection: $selectedQuestionID) {
+            ForEach(visibleQuestions, id: \.uniqueIdentifier) { question in
+                QuestionVisualizationView(
+                    question: question,
+                    visualization: visualizations[question.uniqueIdentifier] ?? .empty,
+                    theme: theme
+                )
+                .tag(Optional(question.uniqueIdentifier))
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .always))
+        .indexViewStyle(.page(backgroundDisplayMode: .always))
+    }
+
+    /// Plan 27 (regular width): every visible question's visualization at
+    /// once as a two-column card grid — an iPad-sized screen shouldn't hide
+    /// N−1 visualizations behind pager swipes. Consumes the same memoized
+    /// `visualizations` dictionary as the pager.
+    private var visualizationGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)],
+                      spacing: 16) {
                 ForEach(visibleQuestions, id: \.uniqueIdentifier) { question in
                     QuestionVisualizationView(
                         question: question,
                         visualization: visualizations[question.uniqueIdentifier] ?? .empty,
                         theme: theme
                     )
-                    .tag(Optional(question.uniqueIdentifier))
+                    .frame(height: 340)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
-            .task(id: visualizationTaskID) {
-                rebuildVisualizations()
-                // If the previously selected page's question was hidden/disabled (or this is
-                // the first render), fall back to the first visible page. Leaving `selection`
-                // pointed at a tag that no longer exists in the ForEach can leave the TabView
-                // showing stale content instead of truly removing that page.
-                if selectedQuestionID == nil || !visibleQuestions.contains(where: { $0.uniqueIdentifier == selectedQuestionID }) {
-                    selectedQuestionID = visibleQuestions.first?.uniqueIdentifier
-                }
-            }
+            .padding(.horizontal)
         }
+        .accessibilityIdentifier("viz-grid")
     }
 
     private var topBar: some View {
