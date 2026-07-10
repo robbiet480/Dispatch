@@ -128,12 +128,8 @@ struct HomeView: View {
                             .accessibilityIdentifier("report-count")
                         Spacer()
                     } else {
-                        filterPill
+                        filterBar
                         visualizationPages
-                        Text("\(reports.count) reports")
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                            .accessibilityIdentifier("report-count")
                     }
                     bottomBar
                 }
@@ -154,27 +150,46 @@ struct HomeView: View {
             }
     }
 
-    private var filterPill: some View {
+    /// Plan 29 parity: left-aligned "+ Filter Visualizations…" row with a
+    /// hairline divider (replaces the centered pill). The report count lives
+    /// on the row's trailing edge so the chart owns everything below.
+    private var filterBar: some View {
         let activeCount = filterStore.criteria.count
-        return Button {
-            isShowingFilter = true
-        } label: {
-            // Explicit singular/plural — the ^[…](inflect:) markup only
-            // inflects when the string lands in a LocalizedStringKey, which
-            // a ternary like this silently defeats (it becomes String).
-            Text(activeCount == 0
-                 ? "Filter Visualizations…"
-                 : (activeCount == 1 ? "1 filter active" : "\(activeCount) filters active"))
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.15))
-                .clipShape(Capsule())
+        return VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    isShowingFilter = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.square")
+                            .font(.subheadline)
+                        // Explicit singular/plural — the ^[…](inflect:) markup only
+                        // inflects when the string lands in a LocalizedStringKey,
+                        // which a ternary like this silently defeats (it becomes
+                        // String).
+                        Text(activeCount == 0
+                             ? "Filter Visualizations…"
+                             : (activeCount == 1 ? "1 filter active" : "\(activeCount) filters active"))
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityIdentifier("viz-filter-button")
+
+                Text("\(reports.count) reports")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .accessibilityIdentifier("report-count")
+            }
+            .padding(.horizontal)
+            Rectangle()
+                .fill(Color.white.opacity(0.25))
+                .frame(height: 0.5)
         }
-        .accessibilityIdentifier("viz-filter-button")
-        .padding(.bottom, 8)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder
@@ -270,6 +285,18 @@ struct HomeView: View {
 
             Spacer()
 
+            // Decorative centered app glyph (plan 29 parity) — matches the
+            // original Reporter's non-interactive top-bar icon. Hidden from
+            // VoiceOver; still queryable as an image by identifier.
+            Image("HomeGlyph")
+                .resizable()
+                .frame(width: 30, height: 30)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .accessibilityHidden(true)
+                .accessibilityIdentifier("home-glyph")
+
+            Spacer()
+
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape")
                     .font(.title2)
@@ -277,7 +304,8 @@ struct HomeView: View {
             }
             .accessibilityIdentifier("settings-button")
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder
