@@ -142,7 +142,13 @@ struct QuestionEditorView: View {
                     .listRowBackground(Color.white.opacity(0.12))
                 }
 
-                if !VisualizationStyle.compatibleStyles(for: type).isEmpty {
+                // Only offer the picker when the type has a REAL choice — 2+
+                // compatible styles. With one (or none), "Automatic" and the
+                // lone style are identical, so the dropdown is just noise.
+                // Every type currently has ≤1 style, so this hides the section
+                // today; it reappears automatically if a type ever gains a
+                // second compatible style.
+                if VisualizationStyle.compatibleStyles(for: type).count > 1 {
                     Section {
                         Picker("Visualization", selection: $visualization) {
                             Text("Automatic (\(automaticStyleName))").tag(VisualizationStyle?.none)
@@ -210,7 +216,7 @@ struct QuestionEditorView: View {
                     } header: {
                         sectionHeader("DEFAULT ANSWER")
                     } footer: {
-                        Text("Filed automatically when you leave this question empty.")
+                        Text("Filled automatically when you leave this question empty.")
                             .foregroundStyle(.white.opacity(0.7))
                             .listRowBackground(Color.clear)
                     }
