@@ -13,6 +13,79 @@ into the catalog. The app contains no code path that writes `CatalogQuestion`;
 with the Console permissions below, clients *cannot* self-approve by
 construction.
 
+## Automated setup (`dispatch-mod setup`)
+
+The Console odyssey below (§2–§3 plus the moderator role) is now automated
+where CloudKit tooling allows. The manual sections are preserved as the
+reference truth and as the fallback when `cktool` is unavailable.
+
+```sh
+swift run dispatch-mod setup                     # bootstrap Development
+swift run dispatch-mod setup --env production    # bootstrap Production (issue #8)
+swift run dispatch-mod setup --export            # snapshot live schema → schema.ckdb
+```
+
+`setup` drives `xcrun cktool` (ships with Xcode 13+) to import the
+repo-canonical schema `Sources/dispatch-mod/schema.ckdb` — record types,
+field indexes, the `moderator` security role and every grant in §3a —
+then verifies with the same list queries the moderation commands use, and
+finally prints the steps that remain manual. It is additive-only: it never
+runs `cktool reset-schema` (which wipes Development data) and never deletes
+records.
+
+**What the schema language can and cannot express** (verified against
+Apple's `sample-cloudkit-tooling` examples and real `cktool export-schema`
+output, 2026-07-09):
+
+| Concern | In `.ckdb`? | How |
+|---|---|---|
+| Record types + fields | ✅ | `RECORD TYPE X ( field STRING, … )` |
+| Indexes (§3b) | ✅ | `QUERYABLE` / `SORTABLE` / `SEARCHABLE` after the field type |
+| The `createdUserRecordName` trap | ✅ | `"___createdBy" REFERENCE QUERYABLE` — third name for the same field: Console UI says `createdUserRecordName`, server errors say `createdBy`, the schema language says `___createdBy` |
+| Permission matrix (§3a) | ✅ | `GRANT READ TO "_world"`, `GRANT CREATE TO "_icloud"`, `GRANT READ, WRITE TO "_creator"` |
+| Custom security roles | ✅ | `CREATE ROLE moderator;` + `GRANT CREATE, WRITE TO moderator` |
+| Role → **user** assignment | ❌ | Console only, once per environment (see the moderator section below) — `setup` prints the exact instruction with the key's `whoami` identity embedded |
+| Server-to-server / management keys | ❌ | Console only (§1 and below) |
+
+`Tests/DispatchKitTests/ModSchemaTests.swift` pins `schema.ckdb` to the
+documented matrix/indexes so an export can't silently drop them.
+
+> **Provenance:** `schema.ckdb` was authored from this document's
+> battle-tested truth (grammar validated against Apple's published examples),
+> not yet round-tripped through a live `cktool export-schema` — no management
+> token existed on this machine at authoring time. After minting a token, run
+> `swift run dispatch-mod setup --export` against Development once, diff, and
+> commit — that makes the file export-canonical.
+
+### Management token (one time, for `setup` only)
+
+`cktool` schema operations need a CloudKit **management token** (distinct
+from the §1 server-to-server key, which signs data-plane requests):
+
+1. [CloudKit Console](https://icloud.developer.apple.com/dashboard/account/tokens)
+   → Tokens & Keys → **Management Tokens** → ＋.
+2. `xcrun cktool save-token --type management` (stores in the login
+   keychain; `--method file` writes `~/.config/cktool` instead, or export
+   `CLOUDKIT_MANAGEMENT_TOKEN`).
+
+`setup` detects a missing token (via `cktool get-teams`), skips the import,
+and prints these instructions rather than failing.
+
+`setup` reads the same `~/.dispatch-mod/config.json` as the other
+subcommands; the additional optional key `"teamID"` (env:
+`DISPATCH_MOD_TEAM_ID`) is the Apple Developer team that owns the container
+and defaults to the personal team.
+
+### What `setup` still tells you to do by hand
+
+- Mint the management token (above) if absent.
+- Assign the `moderator` role to the server key's user record — per
+  environment, in Console (the grammar has no role→user statement; role
+  *definitions* deploy with the schema, *assignments* never do).
+- Verify the permission matrix from a second Apple ID (§3a).
+- For Production: re-run `setup --env production`, then repeat the role
+  assignment there (`whoami --env production` — the identity may differ).
+
 ## Bootstrap sequencing (chicken-and-egg order)
 
 Record types only exist once a first record of that type is written, so the

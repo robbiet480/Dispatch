@@ -1,0 +1,52 @@
+DEFINE SCHEMA
+
+    CREATE ROLE moderator;
+
+    RECORD TYPE CatalogQuestion (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        approvedAt      TIMESTAMP SORTABLE,
+        choicesJSON     STRING,
+        credit          STRING,
+        prompt          STRING,
+        tags            LIST<STRING>,
+        typeRaw         INT64,
+        GRANT CREATE, WRITE TO moderator,
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE SubmittedQuestion (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE QUERYABLE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        choicesJSON     STRING,
+        creditName      STRING,
+        prompt          STRING,
+        submittedAt     TIMESTAMP SORTABLE,
+        typeRaw         INT64,
+        GRANT READ, WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ, WRITE TO moderator
+    );
+
+    RECORD TYPE QuestionFlag (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE QUERYABLE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        catalogRecordName STRING,
+        flaggedAt       TIMESTAMP SORTABLE,
+        reason          STRING,
+        GRANT READ TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ, WRITE TO moderator
+    );

@@ -14,7 +14,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "DispatchKit"),
-        .executableTarget(name: "dispatch-mod", dependencies: ["DispatchKit"]),
+        // schema.ckdb is the repo-canonical CloudKit schema consumed by
+        // `dispatch-mod setup` via cktool at runtime, not compiled in.
+        .executableTarget(
+            name: "dispatch-mod",
+            dependencies: ["DispatchKit"],
+            exclude: ["schema.ckdb"]
+        ),
         .testTarget(
             name: "DispatchKitTests",
             dependencies: ["DispatchKit"],
