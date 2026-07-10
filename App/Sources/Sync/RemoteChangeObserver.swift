@@ -52,6 +52,17 @@ final class RemoteChangeObserver {
     /// the replan, so a report filed on another device (the watch quick
     /// answer in particular) quiets an in-flight nag chain here.
     private let onRemoteChangesApplied: @MainActor ([Date]) -> Void
+    /// Plan 37: fired for each observable sync event so `SyncDiagnostics` can
+    /// record it — a `remoteChange` record at event observation, and a
+    /// `pipelineError` record (sanitized) if the pipeline throws. Default is a
+    /// no-op so nothing else depends on it. Dedupe passes are forwarded via
+    /// `onDedupePass` (they carry a `DedupeSummary` for the lifetime totals).
+    private let onDiagnosticsEvent: @MainActor (SyncEventRecord) -> Void
+    /// Plan 37: fired after every successful pipeline pass (zero-removal
+    /// included) with the pass summary and its completion date, so
+    /// `SyncDiagnostics` records the `dedupePass` event and folds the counts
+    /// into its lifetime totals. Default no-op.
+    private let onDedupePass: @MainActor (DedupeSummary, Date) -> Void
 
     /// Upper bound for the recent-report fetch: the maximum possible nag
     /// chain lifetime under NotificationPrefs' clamps (delay ≤ 120min +
@@ -82,13 +93,17 @@ final class RemoteChangeObserver {
         defaults: UserDefaults,
         isTestEnvironment: Bool,
         isSyncActive: Bool,
-        onRemoteChangesApplied: @escaping @MainActor ([Date]) -> Void
+        onRemoteChangesApplied: @escaping @MainActor ([Date]) -> Void,
+        onDiagnosticsEvent: @escaping @MainActor (SyncEventRecord) -> Void = { _ in },
+        onDedupePass: @escaping @MainActor (DedupeSummary, Date) -> Void = { _, _ in }
     ) {
         self.container = container
         self.defaults = defaults
         self.isTestEnvironment = isTestEnvironment
         self.isSyncActive = isSyncActive
         self.onRemoteChangesApplied = onRemoteChangesApplied
+        self.onDiagnosticsEvent = onDiagnosticsEvent
+        self.onDedupePass = onDedupePass
     }
 
     /// Subscribes to remote-change notifications (sync-active only) and
@@ -124,6 +139,12 @@ final class RemoteChangeObserver {
             return
         }
         lastEventDate = Date()
+        // Plan 37: surface the observed store-change burst on the diagnostics
+        // timeline (a fact, not inferred progress).
+        onDiagnosticsEvent(SyncEventRecord(
+            date: Date(), kindRaw: SyncEventKind.remoteChange.rawValue,
+            succeeded: nil, detail: nil
+        ))
         // First-ever sync activity on this install: persist the marker the
         // backup first-launch guard reads (write-once).
         if defaults.object(forKey: Self.firstRemoteChangeKey) == nil {
@@ -163,12 +184,16 @@ final class RemoteChangeObserver {
         let container = self.container
         let fullPipeline = isSyncActive
         let lookbackStart = Date().addingTimeInterval(-Self.recentReportLookback)
-        let result: (summary: DedupeSummary, recentReportDates: [Date])? =
+        // Result carries either the pass outcome or a PRE-SANITIZED error
+        // string (SyncEventRecord.sanitize) — sanitizing inside the detached
+        // task keeps a raw error from ever crossing back to the diagnostics
+        // sink (plan 37 privacy note).
+        let outcome: Result<(summary: DedupeSummary, recentReportDates: [Date]), PipelineFailure> =
             await Task.detached(priority: .utility) {
                 do {
                     let context = ModelContext(container)
                     let summary = try SyncDedupe.run(in: context)
-                    guard fullPipeline else { return (summary, []) }
+                    guard fullPipeline else { return .success((summary, [])) }
                     try VocabularyBuilder.rebuild(in: context)
                     let reports = try context.fetch(FetchDescriptor<Report>())
                     SpotlightIndexer.rebuildAll(reports: reports)
@@ -179,18 +204,39 @@ final class RemoteChangeObserver {
                     let recentDates = reports
                         .filter { !$0.isDraft && $0.date > lookbackStart }
                         .map(\.date)
-                    return (summary, recentDates)
+                    return .success((summary, recentDates))
                 } catch {
                     syncLog.error("remote-change pipeline failed: \(error, privacy: .public)")
-                    return nil
+                    return .failure(PipelineFailure(sanitized: SyncEventRecord.sanitize(error: error)))
                 }
             }.value
 
-        if let result, result.summary.totalRemoved > 0 {
-            syncLog.info("remote-change pass removed \(result.summary.totalRemoved, privacy: .public) duplicate rows")
+        switch outcome {
+        case .success(let result):
+            if result.summary.totalRemoved > 0 {
+                syncLog.info("remote-change pass removed \(result.summary.totalRemoved, privacy: .public) duplicate rows")
+            }
+            // Plan 37: record every pass (zero removals included) so the
+            // diagnostics dedupe totals accumulate and the timeline shows
+            // "we ran and found nothing" as evidence.
+            onDedupePass(result.summary, Date())
+            if fullPipeline {
+                onRemoteChangesApplied(result.recentReportDates)
+            }
+        case .failure(let failure):
+            onDiagnosticsEvent(SyncEventRecord(
+                date: Date(), kindRaw: SyncEventKind.pipelineError.rawValue,
+                succeeded: false, detail: failure.sanitized
+            ))
+            if fullPipeline {
+                onRemoteChangesApplied([])
+            }
         }
-        if fullPipeline {
-            onRemoteChangesApplied(result?.recentReportDates ?? [])
-        }
+    }
+
+    /// Sendable carrier for a pre-sanitized pipeline error string crossing back
+    /// from the detached pipeline task.
+    private struct PipelineFailure: Error {
+        let sanitized: String
     }
 }

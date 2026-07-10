@@ -31,6 +31,7 @@ struct DispatchApp: App {
     let backupManager: BackupManager
     let webhookManager: WebhookManager
     let remoteChangeObserver: RemoteChangeObserver
+    let syncDiagnostics: SyncDiagnostics
     let spotifyController = SpotifyController()
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
@@ -187,21 +188,31 @@ struct DispatchApp: App {
         // Locals (not self) captured — self isn't fully initialized yet.
         let prefsForReplan = notificationPrefs
         let awakeForReplan = awakeStore
+        // Plan 37: the diagnostics sink. Constructed always (the screen is
+        // reachable with sync off), but only subscribes to CloudKit events
+        // when sync is active and never under test (see the .task wiring in
+        // the scene). Under test it rides the isolated per-launch appDefaults
+        // suite selected above.
+        let diagnostics = SyncDiagnostics(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
+        syncDiagnostics = diagnostics
         remoteChangeObserver = RemoteChangeObserver(
             container: container,
             defaults: appDefaults,
             isTestEnvironment: isTestEnvironment,
-            isSyncActive: cloudKitActive
-        ) { recentReportDates in
-            // Synced-report nag reconciliation (plan 19) BEFORE the replan,
-            // so the replan reads the updated lastActedAt — a report filed
-            // on the watch (or another phone) quiets past-due nag chains
-            // exactly as an in-app save would.
-            scheduler.syncedReportsArrived(reportDates: recentReportDates)
-            scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
-            workoutObserver.refresh()
-            madeVisitObserver.refresh()
-        }
+            isSyncActive: cloudKitActive,
+            onRemoteChangesApplied: { recentReportDates in
+                // Synced-report nag reconciliation (plan 19) BEFORE the replan,
+                // so the replan reads the updated lastActedAt — a report filed
+                // on the watch (or another phone) quiets past-due nag chains
+                // exactly as an in-app save would.
+                scheduler.syncedReportsArrived(reportDates: recentReportDates)
+                scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
+                workoutObserver.refresh()
+                madeVisitObserver.refresh()
+            },
+            onDiagnosticsEvent: { event in diagnostics.record(event) },
+            onDedupePass: { summary, date in diagnostics.recordDedupePass(summary, at: date) }
+        )
 
         seedDefaultQuestionsIfNeeded()
         // Screenshot fixture (plan 23): test-environment-gated like every
@@ -290,6 +301,14 @@ struct DispatchApp: App {
         // SyncDedupe pass (debounced with the observer's first fire).
         // Test-gated internally.
         remoteChangeObserver.start()
+
+        // Plan 37: CloudKit event observation for the diagnostics timeline —
+        // same gate as the remote-change subscription (a local-only store has
+        // no CloudKit events by definition). Internally guards against the
+        // test environment and double-subscription.
+        if cloudKitActive {
+            syncDiagnostics.startCloudKitObservation()
+        }
     }
 
     var body: some Scene {
@@ -308,6 +327,7 @@ struct DispatchApp: App {
                 .environment(backupManager)
                 .environment(webhookManager)
                 .environment(remoteChangeObserver)
+                .environment(syncDiagnostics)
                 .environment(spotifyController)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
@@ -512,6 +532,41 @@ struct DispatchApp: App {
                     // (or sync) after the diagnostic run.
                     context.delete(question)
                     try? context.save()
+                }
+                .task {
+                    guard ProcessInfo.processInfo.arguments.contains("--probe-cloudkit-events") else { return }
+                    // Plan 37 diagnostic: is NSPersistentCloudKitContainer's
+                    // eventChangedNotification reachable through SwiftData's
+                    // CloudKit mirroring stack when subscribed with object:nil
+                    // (SwiftData never exposes the container)? Same empirical
+                    // question plan 13 answered for NSPersistentStoreRemoteChange
+                    // via --probe-remote-change. Subscribe, save a report while
+                    // running, and grep `simctl launch --console-pty` output
+                    // for CLOUDKIT-EVENT-PROBE lines. RUN ON A SIGNED-IN
+                    // iCloud DEVICE with sync active — a simulator without an
+                    // iCloud account produces no events and is inconclusive.
+                    let observer = NotificationCenter.default.addObserver(
+                        forName: NSPersistentCloudKitContainer.eventChangedNotification,
+                        object: nil, queue: .main
+                    ) { note in
+                        guard let event = note.userInfo?[
+                            NSPersistentCloudKitContainer.eventNotificationUserInfoKey
+                        ] as? NSPersistentCloudKitContainer.Event else { return }
+                        let typeName: String
+                        switch event.type {
+                        case .setup: typeName = "setup"
+                        case .import: typeName = "import"
+                        case .export: typeName = "export"
+                        @unknown default: typeName = "unknown"
+                        }
+                        let ended = event.endDate != nil
+                        print("CLOUDKIT-EVENT-PROBE: type=\(typeName) ended=\(ended) succeeded=\(event.succeeded) error=\(event.error.map { "\($0)" } ?? "nil")")
+                        syncLog.info("CLOUDKIT-EVENT-PROBE: type=\(typeName, privacy: .public) ended=\(ended, privacy: .public) succeeded=\(event.succeeded, privacy: .public)")
+                    }
+                    // Leave the observer live for the session; the probe is a
+                    // manual diagnostic run, not a steady-state subscription.
+                    _ = observer
+                    print("CLOUDKIT-EVENT-PROBE: subscribed (object:nil) — file a report to elicit export events")
                 }
         }
         .modelContainer(container)
