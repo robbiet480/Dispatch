@@ -168,6 +168,16 @@ struct DispatchApp: App {
         }
 
         seedDefaultQuestionsIfNeeded()
+        // Screenshot fixture (plan 23): test-environment-gated like every
+        // launch argument — the in-memory store guarantee above means this
+        // can never touch (or sync) real data.
+        if isTestEnvironment, arguments.contains("--demo-data") {
+            do {
+                try DemoData.seed(into: ModelContext(container))
+            } catch {
+                seedLog.error("demo-data seeding failed: \(error, privacy: .public)")
+            }
+        }
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
         }
