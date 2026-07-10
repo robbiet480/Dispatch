@@ -104,6 +104,12 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.white.opacity(0.12))
 
+            NavigationLink(destination: PeopleListView()) {
+                settingsLabel("People")
+            }
+            .listRowBackground(Color.white.opacity(0.12))
+            .accessibilityIdentifier("people-settings-link")
+
             NavigationLink(destination: SensorSettingsView(defaults: appDefaults)) {
                 settingsLabel("Sensors")
             }
