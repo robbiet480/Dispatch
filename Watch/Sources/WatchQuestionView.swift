@@ -16,6 +16,11 @@ struct WatchQuestionView: View {
     @State private var state: FilingState = .idle
     @State private var numberValue: Double = 0
     @State private var text: String = ""
+    /// Time-question input (plan 28): minutes-since-midnight scrolled by the
+    /// digital crown in 5-minute detents, plus a yesterday toggle. Seeded to
+    /// "now" on appear.
+    @State private var timeMinutes: Double = 0
+    @State private var timeYesterday = false
     @State private var filingTask: Task<Void, Never>?
 
     enum FilingState: Equatable {
@@ -55,6 +60,8 @@ struct WatchQuestionView: View {
                     step: question.inputStep
                 )
                 numberValue = config.min
+            } else if question.type == .time {
+                timeMinutes = Double(TimeAnswer.now().minutesSinceMidnight)
             }
         }
         .onDisappear { filingTask?.cancel() }
@@ -74,6 +81,8 @@ struct WatchQuestionView: View {
             }
         case .number:
             numberControls
+        case .time:
+            timeControls
         case .tokens, .people, .note, .location:
             textControls
         }
@@ -109,6 +118,38 @@ struct WatchQuestionView: View {
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("watch-file-number")
         }
+    }
+
+    /// Minimal crown-scrollable time input (plan 28 watch). A large readout
+    /// scrubbed by the digital crown over 0…1439 minutes in 5-minute detents,
+    /// a compact Yesterday toggle, and File. Files `.time` through the shared
+    /// AnswerValue path — the phone reconciles it via v2 sync with no extra work.
+    private var timeControls: some View {
+        VStack(spacing: 8) {
+            Text(currentTimeAnswer.displayText())
+                .font(.title3)
+                .monospacedDigit()
+                .focusable()
+                .digitalCrownRotation(
+                    $timeMinutes, from: 0, through: 1439, by: 5,
+                    sensitivity: .medium, isContinuous: false
+                )
+                .accessibilityLabel("Time for \(question.prompt)")
+                .accessibilityValue(currentTimeAnswer.displayText())
+                .accessibilityIdentifier("watch-time-readout")
+            Toggle("Yesterday", isOn: $timeYesterday)
+                .accessibilityIdentifier("watch-time-yesterday")
+            Button("File") {
+                file(.time(currentTimeAnswer))
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("watch-file-time")
+        }
+    }
+
+    private var currentTimeAnswer: TimeAnswer {
+        TimeAnswer(minutesSinceMidnight: Int(timeMinutes.rounded()),
+                   dayOffset: timeYesterday ? -1 : 0)
     }
 
     private var textControls: some View {
