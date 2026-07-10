@@ -37,3 +37,28 @@ import Testing
     #expect(CSVExporter.escape("plain") == "plain")
     #expect(CSVExporter.escape("line\nbreak") == "\"line\nbreak\"")
 }
+
+/// Plan 26: `connection` is APPENDED to the end of the sensor columns (after
+/// photoCount, before question prompts) so consumers' column prefix is stable.
+@Test func csvIncludesTrailingConnectionColumn() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let fiveG = Report()
+    fiveG.uniqueIdentifier = "r-5g"
+    fiveG.connection = 4
+    context.insert(fiveG)
+    let noConnection = Report()
+    noConnection.uniqueIdentifier = "r-nil-connection"
+    noConnection.date = fiveG.date.addingTimeInterval(60)
+    context.insert(noConnection)
+    try context.save()
+
+    let csv = try CSVExporter.exportCSV(from: context)
+    let lines = csv.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    #expect(lines[0].hasSuffix("photoCount,connection"))
+
+    let columns = lines[0].split(separator: ",").map(String.init)
+    let connectionIndex = try #require(columns.firstIndex(of: "connection"))
+    #expect(lines[1].split(separator: ",", omittingEmptySubsequences: false).map(String.init)[connectionIndex] == "5G")
+    #expect(lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)[connectionIndex] == "")
+}

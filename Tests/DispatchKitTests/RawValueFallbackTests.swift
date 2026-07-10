@@ -17,3 +17,12 @@ import Testing
     #expect(question.type == .tokens)
     #expect(question.reportKinds == [.wake])
 }
+
+/// Plan-26 additive raws resolve; genuinely unknown raws still fall back to nil.
+@Test func plan26ConnectionRawsResolve() {
+    let report = Report()
+    report.connection = 8
+    #expect(report.connectionType == .satellite)
+    report.connection = 99
+    #expect(report.connectionType == nil)
+}

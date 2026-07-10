@@ -12,11 +12,56 @@ public enum ReportTrigger: String, Codable, Sendable, CaseIterable {
     case watch
 }
 
-/// Raw values match the original Reporter export (gist.github.com/dbreunig/9315705).
-public enum ConnectionType: Int, Codable, Sendable {
+/// Raw values 0–2 match the original Reporter export (gist.github.com/dbreunig/9315705).
+/// 3+ are additive (plan 26) — NEVER renumber existing cases; old reports keep coarse values.
+public enum ConnectionType: Int, Codable, Sendable, CaseIterable {
     case cellular = 0
     case wifi = 1
     case none = 2
+    case wired = 3
+    case cellular5G = 4
+    case cellularLTE = 5
+    case cellular3G = 6
+    case cellular2G = 7
+    case satellite = 8
+
+    public var displayName: String {
+        switch self {
+        case .none: "None"
+        case .wifi: "Wi-Fi"
+        case .wired: "Wired"
+        case .cellular5G: "5G"
+        case .cellularLTE: "LTE"
+        case .cellular3G: "3G"
+        case .cellular2G: "2G"
+        case .cellular: "Cellular"
+        case .satellite: "Satellite"
+        }
+    }
+
+    /// Maps a CTRadioAccessTechnology* constant VALUE to a cellular generation.
+    /// Pure string table so DispatchKit stays CoreTelephony-free; the provider
+    /// passes serviceCurrentRadioAccessTechnology's value straight through.
+    /// (The constants' runtime values equal their names — verified at implementation;
+    /// see ConnectionProvider.classify.)
+    public static func cellular(fromRadioAccessTechnology technology: String?) -> ConnectionType {
+        switch technology {
+        case "CTRadioAccessTechnologyNR", "CTRadioAccessTechnologyNRNSA":
+            .cellular5G
+        case "CTRadioAccessTechnologyLTE":
+            .cellularLTE
+        case "CTRadioAccessTechnologyWCDMA", "CTRadioAccessTechnologyHSDPA",
+             "CTRadioAccessTechnologyHSUPA", "CTRadioAccessTechnologyCDMAEVDORev0",
+             "CTRadioAccessTechnologyCDMAEVDORevA", "CTRadioAccessTechnologyCDMAEVDORevB",
+             "CTRadioAccessTechnologyeHRPD":
+            .cellular3G
+        case "CTRadioAccessTechnologyEdge", "CTRadioAccessTechnologyGPRS",
+             "CTRadioAccessTechnologyCDMA1x":
+            .cellular2G
+        default:
+            .cellular
+        }
+    }
 }
 
 public struct AudioSample: Codable, Hashable, Sendable {
