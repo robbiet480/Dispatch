@@ -276,6 +276,7 @@ struct PromptGroupEditorView: View {
                 } footer: {
                     Text("Disabled groups keep their questions but never fire notifications.")
                         .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
             }
@@ -325,6 +326,7 @@ struct PromptGroupEditorView: View {
         } footer: {
             Text("Tap to add questions in the order they should be asked.")
                 .foregroundStyle(.white.opacity(0.7))
+                .listRowBackground(Color.clear)
         }
         .listRowBackground(Color.white.opacity(0.12))
     }

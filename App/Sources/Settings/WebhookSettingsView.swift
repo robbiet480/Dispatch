@@ -60,6 +60,7 @@ struct WebhookSettingsView: View {
                 } footer: {
                     Text(configFooter)
                         .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 
@@ -123,6 +124,7 @@ struct WebhookSettingsView: View {
                     Text(privacyFooter)
                         .foregroundStyle(.white.opacity(0.7))
                         .accessibilityIdentifier("webhook-privacy-note")
+                        .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
             }

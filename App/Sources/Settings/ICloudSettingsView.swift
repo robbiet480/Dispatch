@@ -48,6 +48,7 @@ struct ICloudSettingsView: View {
                     Text("Takes effect after reopening Dispatch.")
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.6))
+                        .listRowBackground(Color.clear)
                 }
 
                 Section {

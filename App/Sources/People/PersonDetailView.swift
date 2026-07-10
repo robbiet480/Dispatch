@@ -93,6 +93,7 @@ struct PersonDetailView: View {
             Text("Renaming keeps history: past reports keep the old name but count as the same person everywhere.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
+                .listRowBackground(Color.clear)
         }
         .listRowBackground(Color.white.opacity(0.12))
     }
@@ -131,6 +132,7 @@ struct PersonDetailView: View {
             Text("Links are per-device and never synced. The photo comes from the linked contact.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
+                .listRowBackground(Color.clear)
         }
         .listRowBackground(Color.white.opacity(0.12))
     }

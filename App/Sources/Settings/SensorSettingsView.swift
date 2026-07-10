@@ -83,6 +83,7 @@ struct SensorSettingsView: View {
                     Text("Set up in the Settings app: Focus → choose a mode → Focus Filters → Add Filter → Dispatch. Apple provides no way to do this from inside an app.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
+                        .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 
@@ -102,10 +103,12 @@ struct SensorSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.6))
                             .accessibilityIdentifier("contacts-denied-hint")
+                            .listRowBackground(Color.clear)
                     } else {
                         Text("Shows names and photos from your Contacts when answering people questions. Contact links never leave this device.")
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.6))
+                            .listRowBackground(Color.clear)
                     }
                 }
                 .listRowBackground(Color.white.opacity(0.12))

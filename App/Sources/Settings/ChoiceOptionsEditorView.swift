@@ -63,6 +63,7 @@ struct ChoiceOptionsEditorView: View {
                 } footer: {
                     Text("Tap an option to edit it. Drag to reorder. Swipe to delete.")
                         .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 
@@ -77,6 +78,7 @@ struct ChoiceOptionsEditorView: View {
                 } footer: {
                     Text("When not allowed, picking an option replaces the previous selection.")
                         .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
             }

@@ -109,6 +109,7 @@ struct QuestionEditorView: View {
                     if isTypeLocked {
                         Text("Type is locked because this question already has responses.")
                             .foregroundStyle(.white.opacity(0.7))
+                            .listRowBackground(Color.clear)
                     }
                 }
                 .listRowBackground(Color.white.opacity(0.12))
@@ -180,6 +181,7 @@ struct QuestionEditorView: View {
                         if inputStyle != .textField {
                             Text("Blank fields use the style's defaults. Invalid values (minimum not below maximum, step of zero) are ignored.")
                                 .foregroundStyle(.white.opacity(0.7))
+                                .listRowBackground(Color.clear)
                         }
                     }
                     .listRowBackground(Color.white.opacity(0.12))
@@ -193,6 +195,7 @@ struct QuestionEditorView: View {
                     } footer: {
                         Text("Filed automatically when you leave this question empty.")
                             .foregroundStyle(.white.opacity(0.7))
+                            .listRowBackground(Color.clear)
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                 }
@@ -213,6 +216,7 @@ struct QuestionEditorView: View {
                     } footer: {
                         Text("When on, each answer to this question also logs a State of Mind entry to Apple Health.")
                             .foregroundStyle(.white.opacity(0.7))
+                            .listRowBackground(Color.clear)
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                 }
@@ -231,6 +235,7 @@ struct QuestionEditorView: View {
                 } footer: {
                     Text("At least one report kind is required.")
                         .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.clear)
                 }
             }
             .scrollContentBackground(.hidden)

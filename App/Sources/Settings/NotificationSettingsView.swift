@@ -253,6 +253,7 @@ struct NotificationSettingsView: View {
             Text("Follow-up reminders are Time Sensitive and can break through Focus modes. They stop as soon as you act on a prompt or file a report.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
+                .listRowBackground(Color.clear)
         }
     }
 
@@ -273,6 +274,7 @@ struct NotificationSettingsView: View {
             Text("A Sunday-evening notification that opens your weekly digest. The digest itself is always available from Settings.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
+                .listRowBackground(Color.clear)
         }
     }
 

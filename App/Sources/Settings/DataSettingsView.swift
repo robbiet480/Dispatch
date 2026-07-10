@@ -204,6 +204,7 @@ struct DataSettingsView: View {
             Text(backupCaption)
                 .foregroundStyle(.white.opacity(0.7))
                 .accessibilityIdentifier("backup-caption")
+                .listRowBackground(Color.clear)
         }
         .listRowBackground(Color.white.opacity(0.12))
     }

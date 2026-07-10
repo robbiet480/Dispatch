@@ -54,6 +54,7 @@ struct VisualizationFilterView: View {
                     } footer: {
                         Text("Results are only shown for entries matching all filters.")
                             .foregroundStyle(.white.opacity(0.7))
+                            .listRowBackground(Color.clear)
                     }
                     .listRowBackground(Color.white.opacity(0.12))
 
@@ -67,6 +68,7 @@ struct VisualizationFilterView: View {
                     } footer: {
                         Text("Hidden questions don't appear as visualization pages.")
                             .foregroundStyle(.white.opacity(0.7))
+                            .listRowBackground(Color.clear)
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                 }
