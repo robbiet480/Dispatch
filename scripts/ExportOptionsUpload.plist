@@ -18,6 +18,15 @@
 		<string>Dispatch App Store</string>
 		<key>io.robbie.Dispatch.widgets</key>
 		<string>Dispatch Widgets App Store</string>
+		<!-- Plan 19 watch targets. These profiles must be created via the ASC
+		     API (plan-25 recipe) AFTER registering both bundle IDs and
+		     enabling capabilities: watch app = App Groups + iCloud (CloudKit)
+		     + HealthKit + WeatherKit; widgets = App Groups only. Until then,
+		     export (not archive) fails for archives containing the watch app. -->
+		<key>io.robbie.Dispatch.watchkitapp</key>
+		<string>Dispatch Watch App Store</string>
+		<key>io.robbie.Dispatch.watchkitapp.widgets</key>
+		<string>Dispatch Watch Widgets App Store</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>
