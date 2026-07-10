@@ -11,6 +11,7 @@ struct DataSettingsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(BackupManager.self) private var backupManager
     @Environment(WebhookManager.self) private var webhookManager
+    @Environment(SpotifyController.self) private var spotifyController
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(\.notificationPrefs) private var notificationPrefs
@@ -359,6 +360,9 @@ struct DataSettingsView: View {
         // Webhook secret (plan 24, PR #12 review): a credential in the
         // Keychain, outside both defaults suites — wipe it here explicitly.
         webhookManager.clearSecretForDataWipe()
+        // Spotify token (plan 26, PR #25 review): same credential pattern —
+        // Keychain items survive even app deletion, so wipe + state reset.
+        spotifyController.clearCredentialForDataWipe()
         if isTestEnvironment {
             // Tests run everything against the single isolated suite.
             DeleteAllData.clearAppGroupDefaults(appDefaults)

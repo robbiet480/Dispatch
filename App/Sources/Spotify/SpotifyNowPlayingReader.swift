@@ -20,7 +20,7 @@ final class SpotifyNowPlayingReader: SpotifyNowPlayingReading {
     nonisolated init() {}
 
     func currentSample() async -> MediaSample? {
-        guard let token = SpotifyTokenStore.load(), let config = SpotifyConfig.load() else { return nil }
+        guard let token = SpotifyTokenStore().load(), let config = SpotifyConfig.load() else { return nil }
         // One session object per read; nothing is reused across captures.
         return await SpotifyReadSession().read(token: token, config: config)
     }

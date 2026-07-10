@@ -21,7 +21,7 @@ enum SpotifyReaderFactory {
     static func current() -> any SpotifyNowPlayingReading {
         let arguments = ProcessInfo.processInfo.arguments
         guard !arguments.contains("--mock-sensors"), !arguments.contains("--ui-testing"),
-              SpotifyConfig.isConfigured, SpotifyTokenStore.load() != nil
+              SpotifyConfig.isConfigured, SpotifyTokenStore().load() != nil
         else { return NoSpotify() }
         return SpotifyNowPlayingReader()
     }
