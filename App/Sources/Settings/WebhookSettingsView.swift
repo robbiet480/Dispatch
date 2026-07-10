@@ -107,11 +107,16 @@ struct WebhookSettingsView: View {
                         Text("Last delivery")
                             .foregroundStyle(.white.opacity(0.7))
                         Spacer()
+                        // Identifier on the Text itself, matching the house
+                        // pattern (backup-caption): XCUI exposes a plain
+                        // HStack inside a List row as a cell, so an
+                        // identifier on the stack is unreachable via
+                        // otherElements — staticTexts is what tests query.
                         Text(manager.lastDeliveryStatus ?? "None yet")
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("webhook-status")
                     }
-                    .accessibilityIdentifier("webhook-status")
                 } header: {
                     sectionHeader("DELIVERY")
                 } footer: {
