@@ -84,6 +84,10 @@ public enum VisualizationData {
             return buildPlaces(responses: responses)
         case .note:
             return buildRecentNotes(responses: responses, reports: reports)
+        case .time:
+            // Placeholder until Task 3 lands the hour-of-day aggregation; keeps
+            // the kit exhaustive-and-compiling without a `default:`.
+            return .empty
         }
     }
 

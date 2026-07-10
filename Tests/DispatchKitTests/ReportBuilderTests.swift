@@ -81,6 +81,26 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
     }
 }
 
+@Test func timeAnswerLandsOnTimeResponse() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let answers: [AnswerDraft] = [
+        AnswerDraft(question: ref("q-time", "What time did you last eat?", .time),
+                    value: .time(TimeAnswer(minutesSinceMidnight: 555, dayOffset: -1))),
+        AnswerDraft(question: ref("q-time-skip", "Bedtime?", .time), value: .skipped),
+    ]
+    let report = try ReportBuilder.save(kind: .regular, trigger: .manual, date: Date(),
+                                        timeZone: .current, outcomes: [:],
+                                        answers: answers, in: context)
+    #expect(report.responses?.count == 2)
+    let byPrompt = Dictionary(uniqueKeysWithValues: (report.responses ?? []).map { ($0.questionPrompt, $0) })
+    let answered = try #require(byPrompt["What time did you last eat?"])
+    #expect(answered.timeResponse?.minutesSinceMidnight == 555)
+    #expect(answered.timeResponse?.dayOffset == -1)
+    let skipped = try #require(byPrompt["Bedtime?"])
+    #expect(skipped.timeResponse == nil)
+}
+
 @Test func lastReportDateReturnsMostRecent() throws {
     let container = try DispatchStore.inMemoryContainer()
     let context = ModelContext(container)

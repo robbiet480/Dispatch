@@ -106,6 +106,7 @@ public enum V2Importer {
                 response.locationResponse = rdto.locationResponse
                 response.numericResponse = rdto.numericResponse
                 response.textResponses = rdto.textResponses
+                response.timeResponse = rdto.timeResponse
                 response.report = report
                 summary.responsesImported += 1
             }
