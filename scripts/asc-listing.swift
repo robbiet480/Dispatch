@@ -246,7 +246,8 @@ func announce(_ what: String) {
 /// substitute placeholder IDs so the printed plan stays complete.
 @discardableResult
 func call(_ method: String, _ path: String, body: [String: Any]? = nil,
-          tolerate404: Bool = false, describe: String) -> [String: Any] {
+          tolerate404: Bool = false, tolerateFailure: Bool = false,
+          describe: String) -> [String: Any] {
     announce("\(describe)\n         \(method) \(path)"
         + (body.map { "\n         body: \(summarize($0))" } ?? ""))
     guard apply else { return [:] }
@@ -273,7 +274,9 @@ func call(_ method: String, _ path: String, body: [String: Any]? = nil,
     guard (200..<300).contains(status) else {
         let errors = (result["errors"] as? [[String: Any]]) ?? []
         let detail = errors.compactMap { $0["detail"] as? String }.joined(separator: "; ")
-        fail("\(method) \(path) -> HTTP \(status): \(detail.isEmpty ? "\(result)" : detail)")
+        let message = "\(method) \(path) -> HTTP \(status): \(detail.isEmpty ? "\(result)" : detail)"
+        if tolerateFailure { warn(message + " — continuing (tolerated)"); return [:] }
+        fail(message)
     }
     return result
 }
@@ -367,11 +370,20 @@ var versionLocAttributes: [String: Any] = [
     "marketingUrl": kit.marketingURL,
 ]
 if !kit.promotionalText.isEmpty { versionLocAttributes["promotionalText"] = kit.promotionalText }
-if !kit.whatsNew.isEmpty { versionLocAttributes["whatsNew"] = kit.whatsNew }
 call("PATCH", "/v1/appStoreVersionLocalizations/\(versionLocID)", body: [
     "data": ["type": "appStoreVersionLocalizations", "id": versionLocID,
              "attributes": versionLocAttributes],
-], describe: "Set \(locale) description/keywords/promotional/what's-new/support/marketing URLs from listing.md")
+], describe: "Set \(locale) description/keywords/promotional/support/marketing URLs from listing.md")
+if !kit.whatsNew.isEmpty {
+    // Separate PATCH: ASC rejects whatsNew on an app's first-ever version
+    // ("cannot be edited at this time"), so a combined PATCH would sink the
+    // whole localization update. Tolerated — a warning, not a failure.
+    call("PATCH", "/v1/appStoreVersionLocalizations/\(versionLocID)", body: [
+        "data": ["type": "appStoreVersionLocalizations", "id": versionLocID,
+                 "attributes": ["whatsNew": kit.whatsNew]],
+    ], tolerateFailure: true,
+       describe: "Set \(locale) what's-new from listing.md (tolerated: rejected on a first release)")
+}
 
 // 4. App-info localization (name, subtitle, privacy policy URL) + age rating.
 //    Apps can carry two appInfos (live + editable); PATCHing the live one
