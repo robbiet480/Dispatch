@@ -106,3 +106,66 @@
 - [ ] **Step 1: README** — extend the iCloud section: what the diagnostics screen shows, that the export is privacy-safe (enumerate what it never contains), and that "Last store change observed" ≠ "successfully synced" (with the probe finding determining which stronger signal exists).
 - [ ] **Step 2: Completion note in this doc** — probe outcome (observable or not, with evidence), suite counts, and the v2 candidates deliberately deferred: record-level conflict inspector, marketing-name table for model identifiers, stall push-diagnostics (CKContainer status history), surfacing `accountStatus` changes as events.
 - [ ] **Step 3: Verify** — full suites. Commit `docs: sync diagnostics` → push. Whole-branch review follows (controller-driven).
+
+---
+
+## Completion note
+
+Implemented on branch `plan-37-sync-diagnostics` (5 task commits), rebased onto
+origin/main.
+
+**Kit (Task 1–2):** `SyncEventLog` (bounded ring buffer, capacity 50, JSON
+persistence, corrupt/nil → empty, raw-lenient unknown kinds), `SyncEventRecord`
+(+`sanitize(error:)` — `domain(code): description` truncated to 200 chars, no
+userInfo), `SyncEventKind`, `DeviceProvenance.breakdown` (deterministic
+count-desc/label-asc bucketing), `DedupeTotals` (+`absorb`), and
+`SyncDiagnosticsReport.render` (no `Report` parameter by construction — the
+structural half of the privacy guarantee). `DedupeSummary` gained `Codable`.
+The privacy pin is executable: a fixture report carrying a sentinel answer +
+prompt is reduced to `(name, model)` pairs and the rendered dump is asserted to
+contain neither sentinel.
+
+**App (Task 3–4):** `SyncDiagnostics` (`@MainActor @Observable`) owns the
+persisted log + totals (appDefaults keys `syncEventLog`/`syncDedupeTotals`),
+fed by `RemoteChangeObserver`'s new `onDiagnosticsEvent`/`onDedupePass`
+callbacks (deviation from the plan's single `(SyncEventRecord) -> Void`: a
+second `(DedupeSummary, Date) -> Void` hook was needed because absorbing
+lifetime totals requires the structured summary, which a text `detail` can't
+carry — both default to no-ops). `SyncDiagnosticsView` renders STATUS / EVENTS
+/ DEDUPE / DEVICES / EXPORT, all read-only and honest (no fake progress; stall
+sentence is a fact-conjunction of sync-active + account-available +
+no-events-observed). `ICloudSettingsView` relabels "Last sync activity" →
+"Last store change observed" and adds the Diagnostics link.
+
+**PROBE FINDING (`--probe-cloudkit-events`):** the empirical question — does
+`NSPersistentCloudKitContainer.eventChangedNotification` fire through
+SwiftData's mirroring stack when subscribed with `object: nil`? — was NOT
+settled by a live run: the implementation environment has no signed-in iCloud
+account, and a simulator without one produces zero events (inconclusive, not
+negative). The `--probe-cloudkit-events` harness ships (beside
+`--probe-remote-change`) so it can be run on a signed-in device: file a report
+and grep console output for `CLOUDKIT-EVENT-PROBE:` lines. The SDK shape WAS
+verified against `NSPersistentCloudKitContainerEvent.h` (iPhoneOS 26.5):
+userInfo key `eventNotificationUserInfoKey`, `Event` with `type`
+(`.setup`/`.import`/`.export`), `startDate`, `endDate?`, `succeeded`, `error?`.
+`startCloudKitObservation()` ships ENABLED rather than as a no-op stub, because
+the subscription is provably side-effect-free (it records diagnostic rows only
+and never drives the dedupe pipeline, unlike `NSPersistentStoreRemoteChange`):
+if the notification never fires we simply record no `ck*` rows and the honest
+fallback UI copy ("no sync events observed") applies automatically; if it does
+fire, the timeline gains real import/export results at no cost. This collapses
+the plan's two shipped paths into one safe path plus honest labelling — Robbie
+can confirm observability on-device and, if it proves reliable, no code change
+is needed (it's already live). Comment at the subscription site cites this.
+
+**Test counts:** kit `swift test` 489 passing (10 suites; +13 new across the
+two new suites). App `xcodebuild build-for-testing` green. New UI test
+`DispatchUITests/SyncDiagnosticsUITests` passing (navigates Settings → iCloud →
+Diagnostics, asserts export control + empty-events state). Full UI suite
+reserved for the merge gate per house process.
+
+**Deferred to v2** (deliberately out of scope): record-level conflict inspector
+(needs manual CKRecord machinery plan 13 rejected); marketing-name table for
+model identifiers (shown raw, e.g. "iPhone17,1"); stall push-diagnostics via
+CKContainer status history; surfacing `accountStatus` changes as timeline
+events.

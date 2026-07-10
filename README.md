@@ -251,6 +251,29 @@ launch (no iCloud account, missing container), Dispatch logs the reason
 (OSLog category `sync`) and falls back to the local store — the app
 never fails to launch over sync.
 
+**Diagnostics:** Settings → iCloud → Diagnostics is a read-only evidence
+screen for troubleshooting sync (so TestFlight reports carry facts, not
+anecdotes). It shows the iCloud account status, a timeline of observed
+sync events (store-change bursts, dedupe passes, pipeline errors, and —
+where the platform surfaces them — CloudKit import/export results),
+lifetime dedupe merge counts (the duplicate rows cross-device sync can
+create are collapsed automatically), and a per-device breakdown of how
+many reports each device filed. It is deliberately honest: it reports
+only observed facts, with no spinner or fake "syncing" progress, and the
+STATUS caption is named **"Last store change observed"** — a store change
+being observed is NOT the same as a confirmed successful sync (a
+CloudKit export result, when the platform exposes one, is the stronger
+signal). When sync is on and iCloud is reachable but nothing has been
+observed since launch, it says exactly that rather than implying trouble.
+
+An **Export Diagnostics** button shares a plain-text dump for bug
+reports. It is privacy-safe by construction (pinned by a test): it
+contains the app/OS/device version, the sync toggle and account status,
+the event timeline, dedupe counts, and per-device report counts — and
+NEVER your reports, answers, question prompts, vocabulary, or health
+data. Nothing from inside a report beyond its existence count per device
+is included, and errors are sanitized (domain/code/description only).
+
 **Privacy:** the private CloudKit database only. Nothing is shared,
 public, or visible to anyone but the signed-in iCloud account. The full
 policy is in [docs/privacy-policy.md](docs/privacy-policy.md).
