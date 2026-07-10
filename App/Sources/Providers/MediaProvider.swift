@@ -19,9 +19,11 @@ struct NoSpotify: SpotifyNowPlayingReading {
 /// and we're not in a test environment; otherwise the always-nil stub.
 enum SpotifyReaderFactory {
     static func current() -> any SpotifyNowPlayingReading {
-        // Task 4 stub: Task 5 returns the real App Remote reader when the
-        // user has connected Spotify and we're not in a test environment.
-        NoSpotify()
+        let arguments = ProcessInfo.processInfo.arguments
+        guard !arguments.contains("--mock-sensors"), !arguments.contains("--ui-testing"),
+              SpotifyConfig.isConfigured, SpotifyTokenStore.load() != nil
+        else { return NoSpotify() }
+        return SpotifyNowPlayingReader()
     }
 }
 
