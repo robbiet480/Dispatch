@@ -93,8 +93,10 @@ public enum DeleteAllData {
         // schedule; the post-delete replan republishes a fresh one.
         "widget.nextPromptDate",
         // WebhookQueue (plan 24) — queued delivery IDs reference reports
-        // that no longer exist. The webhook CONFIG (enabled/URL/secret,
-        // device-local) survives: it is a user setting, not user data.
+        // that no longer exist. The webhook URL/enabled config (device-
+        // local) survives as a user setting; the SECRET is a credential in
+        // the Keychain and is wiped by the app-side delete-all flow
+        // (WebhookManager.clearSecretForDataWipe).
         WebhookQueue.queueKey,
     ]
 

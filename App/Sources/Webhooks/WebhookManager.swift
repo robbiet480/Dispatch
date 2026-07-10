@@ -48,6 +48,11 @@ struct StubWebhookTransport: WebhookTransport {
 final class WebhookManager {
     private enum Keys {
         static let url = "webhook.url"
+        /// Legacy defaults key — the secret now lives in the Keychain
+        /// (WebhookSecretStore, PR #12 review must-fix); this key exists
+        /// only for the one-time migration and for the isolated per-launch
+        /// test-suite storage (deterministic tests, wiped every launch;
+        /// the simulator keychain would leak state between UI-test runs).
         static let secret = "webhook.secret"
         static let encrypt = "webhook.encrypt"
         static let lastStatus = "webhook.lastDeliveryStatus"
@@ -70,7 +75,15 @@ final class WebhookManager {
         lastDeliveryStatus = defaults.string(forKey: Keys.lastStatus)
         isEnabled = WebhookQueue.isEnabled(in: defaults)
         urlString = defaults.string(forKey: Keys.url) ?? ""
-        secret = defaults.string(forKey: Keys.secret) ?? ""
+        if isTestEnvironment {
+            secret = defaults.string(forKey: Keys.secret) ?? ""
+        } else {
+            // Silent one-time migration of any plaintext secret a
+            // TestFlight build left in the group defaults, then read the
+            // Keychain copy.
+            WebhookSecretStore.migrateFromDefaultsIfNeeded(defaults, key: Keys.secret)
+            secret = WebhookSecretStore.read() ?? ""
+        }
         encryptPayload = defaults.bool(forKey: Keys.encrypt)
     }
 
@@ -86,7 +99,15 @@ final class WebhookManager {
 
     var secret: String {
         didSet {
-            defaults.set(secret, forKey: Keys.secret)
+            // Keychain (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly),
+            // never UserDefaults, in production — the secret is a credential
+            // and the AES key source (PR #12 review must-fix). Tests use the
+            // per-launch isolated suite instead (wiped every launch).
+            if isTestEnvironment {
+                defaults.set(secret, forKey: Keys.secret)
+            } else {
+                WebhookSecretStore.write(secret)
+            }
             // Encryption requires a secret (the key derives from it).
             if secret.isEmpty { encryptPayload = false }
         }
@@ -100,6 +121,14 @@ final class WebhookManager {
     /// so it survives relaunches.
     private(set) var lastDeliveryStatus: String? {
         didSet { defaults.set(lastDeliveryStatus, forKey: Keys.lastStatus) }
+    }
+
+    /// Delete All Data hook: the secret is a credential tied to this
+    /// install's data flow — wipe its Keychain item (the didSet clears the
+    /// test-suite copy and flips encryptPayload off too). URL/enabled stay:
+    /// they are user settings, matching the DeleteAllData retention doc.
+    func clearSecretForDataWipe() {
+        secret = ""
     }
 
     var urlValidation: WebhookQueuePolicy.URLRule.ValidationResult {
@@ -155,16 +184,16 @@ final class WebhookManager {
             }
             if await post(body: body, to: url, timeout: WebhookQueuePolicy.attemptTimeout) {
                 WebhookQueue.remove(reportID: entry.reportID, in: defaults)
-                recordStatus("Delivered", detail: nil)
+                recordStatus("Delivered")
             } else if let attempts = WebhookQueue.recordFailure(reportID: entry.reportID, in: defaults) {
                 webhookLog.warning("delivery failed for \(entry.reportID, privacy: .public) (attempt \(attempts)/\(WebhookQueuePolicy.maxAttempts)) — will retry at the next drain")
-                recordStatus("Failed (attempt \(attempts) of \(WebhookQueuePolicy.maxAttempts)) — will retry", detail: nil)
+                recordStatus("Failed (attempt \(attempts) of \(WebhookQueuePolicy.maxAttempts)) — will retry")
                 // Attempts are per-drain-opportunity; don't burn the
                 // remaining attempts inside this same drain.
                 break
             } else {
                 webhookLog.error("delivery failed permanently for \(entry.reportID, privacy: .public) after \(WebhookQueuePolicy.maxAttempts) attempts")
-                recordStatus("Failed after \(WebhookQueuePolicy.maxAttempts) attempts", detail: nil)
+                recordStatus("Failed after \(WebhookQueuePolicy.maxAttempts) attempts")
                 postFailureNotification(for: report)
                 break
             }
@@ -224,7 +253,7 @@ final class WebhookManager {
         }
         let delivered = await post(body: body, to: url, timeout: WebhookQueuePolicy.bulkTimeout)
         recordStatus(delivered ? "Delivered (bulk, \(reports.count) reports)"
-                               : "Bulk send failed", detail: nil)
+                               : "Bulk send failed")
         return delivered
     }
 
@@ -239,6 +268,12 @@ final class WebhookManager {
 
     /// POSTs `body`; true on any HTTP 2xx (the whole family counts — see
     /// docs/webhooks.md).
+    ///
+    /// ACCEPTED (PR #12 review nit 3): `timeoutInterval` is URLSession's
+    /// IDLE timeout (resets on any traffic), not a total-request deadline —
+    /// a trickling server can hold an attempt open longer than 15s/60s.
+    /// Acceptable for v1: payloads are small, drains are foreground-only,
+    /// and the drain loop is re-entrancy guarded.
     private func post(body: Data, to url: URL, timeout: TimeInterval) async -> Bool {
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "POST"
@@ -258,7 +293,7 @@ final class WebhookManager {
         }
     }
 
-    private func recordStatus(_ status: String, detail: String?) {
+    private func recordStatus(_ status: String) {
         let stamp = Date().formatted(date: .abbreviated, time: .shortened)
         lastDeliveryStatus = "\(status) — \(stamp)"
     }
@@ -267,6 +302,11 @@ final class WebhookManager {
     /// `webhook-failed-<reportID>` joins the standard removal-batch prefix
     /// discipline (see NotificationIdentifiers.webhookFailedPrefix).
     /// Test-gated like every other center access.
+    ///
+    /// Foreground presentation (PR #12 review nit 7, verified): drains run
+    /// in-app, and NotificationScheduler's willPresent delegate already
+    /// answers `[.banner, .sound]` unconditionally for every identifier,
+    /// so this banner IS shown while the app is frontmost.
     private func postFailureNotification(for report: Report) {
         guard !isTestEnvironment else { return }
         let content = UNMutableNotificationContent()
