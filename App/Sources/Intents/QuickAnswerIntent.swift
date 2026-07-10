@@ -3,6 +3,7 @@ import DispatchKit
 import Foundation
 import os
 import SwiftData
+import UIKit
 import WidgetKit
 
 private let quickAnswerLog = Logger(subsystem: "io.robbie.Dispatch", category: "quick-answer-intent")
@@ -61,6 +62,14 @@ struct QuickAnswerIntent: AppIntent {
         // log — kept permanently; it's one line per tap and it documents
         // the process contract this file's behavior depends on.
         quickAnswerLog.info("perform() in process \(ProcessInfo.processInfo.processName, privacy: .public) pid \(ProcessInfo.processInfo.processIdentifier)")
+
+        // Device provenance (plan 19): this perform() runs in the WIDGET
+        // EXTENSION process (probe above), where the app's launch-time
+        // injection never ran — inject before filing so widget-filed reports
+        // carry the same provenance as in-app ones. Unconditional read; the
+        // generic name is expected until the entitlement grant (see
+        // DeviceIdentity).
+        DeviceIdentity.deviceName = await UIDevice.current.name
 
         // Double-fire guard (build-14 review): two rapid taps on a widget
         // button each invoke perform() before the first filing's reload

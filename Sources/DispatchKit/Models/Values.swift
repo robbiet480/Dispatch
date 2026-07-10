@@ -7,6 +7,9 @@ public enum ReportKind: String, Codable, Sendable, CaseIterable {
 public enum ReportTrigger: String, Codable, Sendable, CaseIterable {
     case manual, notification, visitArrival, visitDeparture
     case wake, workoutEnd, widget, control, intent
+    /// Filed from the Apple Watch app (plan 19) — additive raw value; older
+    /// builds decode it via the `.manual` raw-value fallback.
+    case watch
 }
 
 /// Raw values match the original Reporter export (gist.github.com/dbreunig/9315705).

@@ -28,6 +28,16 @@ public final class Report {
     /// The PromptGroup this report was filed against (group-scoped survey);
     /// nil for ordinary global reports. Additive, plan 12.
     public var promptGroupID: String?
+    /// Device provenance (plan 19, additive): raw hardware identifier of the
+    /// filing device via `utsname.machine` (e.g. "iPhone17,1", "Watch7,4").
+    /// Stamped at creation by the shared filing path; nil on pre-existing and
+    /// imported reports (never restamped).
+    public var sourceDeviceModel: String?
+    /// Device provenance (plan 19, additive): the filing device's name via
+    /// UIDevice/WKInterfaceDevice — the GENERIC name ("iPhone",
+    /// "Apple Watch") until the user-assigned-device-name entitlement is
+    /// granted (see DeviceIdentity). Nil on pre-existing/imported reports.
+    public var sourceDeviceName: String?
 
     /// Optional because CloudKit mirroring requires every relationship to be
     /// optional; relaxing optionality (same name/config) is lightweight-migration-safe.

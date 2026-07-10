@@ -77,6 +77,8 @@ public enum V2Exporter {
         dto.focus = r.focus
         dto.stateOfMindSampleIDs = r.stateOfMindSampleIDs.isEmpty ? nil : r.stateOfMindSampleIDs
         dto.promptGroupID = r.promptGroupID
+        dto.sourceDeviceModel = r.sourceDeviceModel
+        dto.sourceDeviceName = r.sourceDeviceName
         let responses = (r.responses ?? [])
             .sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
             .map { resp in

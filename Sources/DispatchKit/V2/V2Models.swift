@@ -131,6 +131,10 @@ public struct V2Report: Codable {
     /// The PromptGroup this report was filed against (plan 12). Omitted when
     /// nil; import tolerates absence.
     public var promptGroupID: String?
+    /// Device provenance (plan 19, additive-optional): encoded when present,
+    /// decoded leniently — pre-provenance v2 files import with nil.
+    public var sourceDeviceModel: String?
+    public var sourceDeviceName: String?
 
     public init(uniqueIdentifier: String, date: Date, timeZone: String,
                 kind: ReportKind, trigger: ReportTrigger) {

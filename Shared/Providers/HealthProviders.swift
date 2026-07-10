@@ -353,10 +353,16 @@ struct HealthMetricProvider: SensorProvider {
             // Descended comes from CMPedometer (HealthKit has no descended
             // metric) over the SAME window; nil (no hardware, Motion denied,
             // query error) degrades to climbed-only with unchanged display.
+            // Phone-only (plan 19 design §v1-scope-3): the flights-down
+            // pairing is deferred on watch and PedometerReader stays
+            // app-side — watch reports carry climbed-only, rendered as
+            // "not captured on Apple Watch" via provenance, not a failure.
+            #if !os(watchOS)
             if let descended = await PedometerReader.floorsDescended(from: window, to: now) {
                 readings.append(HealthReading(type: "flightsDescended", value: descended,
                                               unit: "count", startDate: window, endDate: now))
             }
+            #endif
             return .health(readings)
         case .healthHeart:
             var readings: [HealthReading] = []
