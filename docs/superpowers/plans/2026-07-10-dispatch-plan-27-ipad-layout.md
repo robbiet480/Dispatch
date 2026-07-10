@@ -28,7 +28,7 @@
 
 ### Task 1: project.yml — iPad device family + orientations
 
-- [ ] **Files:** `project.yml` (DispatchApp, DispatchWidgets, DispatchUITests: `TARGETED_DEVICE_FAMILY: "1,2"`; replace the bare `INFOPLIST_KEY_UISupportedInterfaceOrientations` with `_iPhone` (portrait) and `_iPad` (all four) variants on the app target).
+- [x] **Files:** `project.yml` (DispatchApp, DispatchWidgets, DispatchUITests: `TARGETED_DEVICE_FAMILY: "1,2"`; replace the bare `INFOPLIST_KEY_UISupportedInterfaceOrientations` with `_iPhone` (portrait) and `_iPad` (all four) variants on the app target).
 
 **Contract:** `xcodegen generate` succeeds; `xcodebuild build-for-testing` succeeds for both an iPhone and an iPad simulator destination; the built app's Info.plist carries `UIDeviceFamily [1,2]`, portrait-only `UISupportedInterfaceOrientations~iphone`, all-four `~ipad` (verify in the built product, plan-16 style — INFOPLIST_KEY variants have burned us before). App launches on an iPad simulator (stretched iPhone layout is expected at this point).
 

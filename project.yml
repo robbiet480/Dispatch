@@ -68,7 +68,12 @@ targets:
         # ATS key in App/Info.plist.
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Dispatch delivers report webhooks to servers on your network when you configure one."
         INFOPLIST_KEY_NSMotionUsageDescription: "Dispatch counts flights of stairs you walked down (via the motion coprocessor) to pair with the flights climbed from Health."
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        # Plan 27 (iPad): per-idiom orientation keys. iPhone stays
+        # portrait-only (unchanged); iPad supports all four — required for
+        # App Store submission without UIRequiresFullScreen, and it keeps
+        # Split View/Slide Over multitasking available.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         # Plan 16 backups: expose Documents (→ Backups/) in the Files app
         # ("On My iPhone → Dispatch") and Finder. Plain Info.plist key, NOT
         # an entitlement — no provisioning-profile impact. Its companion
@@ -79,7 +84,8 @@ targets:
         # UIBackgroundModes (remote-notification for CloudKit silent pushes),
         # which has no INFOPLIST_KEY_* build-setting equivalent.
         INFOPLIST_FILE: App/Info.plist
-        TARGETED_DEVICE_FAMILY: "1"
+        # Plan 27: iPhone + iPad.
+        TARGETED_DEVICE_FAMILY: "1,2"
   DispatchWidgets:
     type: app-extension
     platform: iOS
@@ -117,7 +123,9 @@ targets:
         # Partial plist merge (same pattern as the app target's
         # UIBackgroundModes): NSExtension has no INFOPLIST_KEY_* equivalent.
         INFOPLIST_FILE: Widgets/Info.plist
-        TARGETED_DEVICE_FAMILY: "1"
+        # Plan 27: widgets must match the host app's device families so
+        # they're installable on iPad.
+        TARGETED_DEVICE_FAMILY: "1,2"
   DispatchWatch:
     type: application
     platform: watchOS
@@ -199,6 +207,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.uitests
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: 6.0
+        # Plan 27: the UI-test bundle must run on iPad simulators too.
+        TARGETED_DEVICE_FAMILY: "1,2"
 schemes:
   DispatchApp:
     build:
