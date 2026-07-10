@@ -76,4 +76,27 @@ final class HomeParityUITests: XCTestCase {
         XCTAssertGreaterThan(second.minY, first.maxY - 1.0,
                              "blocks must stack vertically, not sit side by side")
     }
+
+    /// PR #41 review: 15 pages of dots (tiered shrink) must fit inside the
+    /// bottom strip without colliding with the REPORT/AWAKE neighbors.
+    @MainActor
+    func testFifteenPageDotsFitBetweenStripNeighbors() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding",
+                               "--demo-data", "--demo-many-questions"]
+        app.launch()
+
+        let dots = app.otherElements["page-dots"]
+        XCTAssertTrue(dots.waitForExistence(timeout: 15))
+        XCTAssertEqual(dots.label, "Page 1 of 15", "fixture should yield 15 pages")
+
+        let report = app.buttons["report-button"]
+        let awake = app.buttons["awake-toggle"]
+        XCTAssertTrue(report.waitForExistence(timeout: 10))
+        XCTAssertTrue(awake.waitForExistence(timeout: 10))
+        XCTAssertGreaterThanOrEqual(dots.frame.minX, report.frame.maxX,
+                                    "dots must not collide with REPORT")
+        XCTAssertLessThanOrEqual(dots.frame.maxX, awake.frame.minX,
+                                 "dots must not collide with the AWAKE pill")
+    }
 }

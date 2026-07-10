@@ -226,6 +226,27 @@ enum DemoData {
         try VocabularyBuilder.rebuild(in: context)
     }
 
+    /// `--demo-many-questions` (PR #41 review): pads the enabled-question
+    /// list to 15 so the home pager renders 15 page dots — the tiered
+    /// PlainPageDots shrink and its collision-free layout are verified
+    /// against this fixture. Test-environment-gated exactly like `seed`.
+    static func seedExtraQuestions(into context: ModelContext, totalQuestions: Int = 15) throws {
+        let existing = try context.fetch(FetchDescriptor<Question>())
+        let existingCount = existing.filter(\.isEnabled).count
+        let maxSortOrder = existing.map(\.sortOrder).max() ?? 0
+        guard existingCount < totalQuestions else { return }
+        for index in 0..<(totalQuestions - existingCount) {
+            let question = Question()
+            question.uniqueIdentifier = "demo-extra-question-\(index)"
+            question.prompt = "Extra demo question \(index + 1)?"
+            question.type = .tokens
+            question.sortOrder = maxSortOrder + 1 + index
+            question.isEnabled = true
+            context.insert(question)
+        }
+        try context.save()
+    }
+
     private static func answer(_ question: Question?,
                                options: [String]? = nil,
                                tokens: [TokenValue]? = nil,
