@@ -164,6 +164,10 @@ targets:
         # authorization form directly on Apple Watch"
         # (https://developer.apple.com/documentation/watchos-apps/creating-independent-watchos-apps).
         INFOPLIST_KEY_NSHealthShareUsageDescription: "Dispatch reads steps, flights, heart rate, HRV, sleep, workouts, and caffeine to add context to your reports."
+        # Required even though the watch only reads: the HealthKit binary
+        # linkage makes ASC's upload analyzer demand both strings (rejected
+        # build 20 upload, code 90683).
+        INFOPLIST_KEY_NSHealthUpdateUsageDescription: "Dispatch logs State of Mind entries to Apple Health when you answer questions you've marked to track your mood."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Dispatch records where you are when you file a report."
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
         # Partial plist merge (same pattern as the iOS targets): the WK*
