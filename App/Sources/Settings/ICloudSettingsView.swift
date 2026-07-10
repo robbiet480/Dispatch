@@ -62,7 +62,10 @@ struct ICloudSettingsView: View {
                     .listRowBackground(Color.white.opacity(0.12))
 
                     HStack {
-                        settingsLabel("Last sync activity")
+                        // Plan 37 honesty relabel: this timestamp is when a
+                        // store-change was OBSERVED, not proof of a successful
+                        // CloudKit sync — name it what it is.
+                        settingsLabel("Last store change observed")
                         Spacer()
                         Text(lastActivityText)
                             .font(.caption)
@@ -71,6 +74,20 @@ struct ICloudSettingsView: View {
                     .listRowBackground(Color.white.opacity(0.12))
                 } header: {
                     sectionHeader("STATUS")
+                }
+
+                // Plan 37: sync diagnostics screen (account status, event
+                // timeline, dedupe stats, per-device provenance, export).
+                Section {
+                    NavigationLink {
+                        SyncDiagnosticsView()
+                    } label: {
+                        settingsLabel("Diagnostics")
+                    }
+                    .accessibilityIdentifier("sync-diagnostics-link")
+                    .listRowBackground(Color.white.opacity(0.12))
+                } header: {
+                    sectionHeader("DIAGNOSTICS")
                 }
 
                 // Manual backup (same shared BackupManager action as

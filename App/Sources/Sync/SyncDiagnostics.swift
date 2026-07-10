@@ -32,15 +32,21 @@ final class SyncDiagnostics {
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let isTestEnvironment: Bool
+    /// Whether the launched container is actually CloudKit-backed (mirrors
+    /// `RemoteChangeObserver.isSyncActive` — the container construction result,
+    /// not merely the toggle). The diagnostics screen reports this truthfully
+    /// and the stall sentence keys off it.
+    let isSyncActive: Bool
 
     private var log: SyncEventLog
     private(set) var dedupeTotals: DedupeTotals
 
     @ObservationIgnored private var cloudKitObserver: (any NSObjectProtocol)?
 
-    init(defaults: UserDefaults, isTestEnvironment: Bool) {
+    init(defaults: UserDefaults, isTestEnvironment: Bool, isSyncActive: Bool) {
         self.defaults = defaults
         self.isTestEnvironment = isTestEnvironment
+        self.isSyncActive = isSyncActive
         self.log = SyncEventLog(decodingFrom: defaults.data(forKey: Self.eventLogKey))
         if let data = defaults.data(forKey: Self.dedupeTotalsKey),
            let decoded = try? JSONDecoder().decode(DedupeTotals.self, from: data) {

@@ -193,7 +193,9 @@ struct DispatchApp: App {
         // when sync is active and never under test (see the .task wiring in
         // the scene). Under test it rides the isolated per-launch appDefaults
         // suite selected above.
-        let diagnostics = SyncDiagnostics(defaults: appDefaults, isTestEnvironment: isTestEnvironment)
+        let diagnostics = SyncDiagnostics(
+            defaults: appDefaults, isTestEnvironment: isTestEnvironment, isSyncActive: cloudKitActive
+        )
         syncDiagnostics = diagnostics
         remoteChangeObserver = RemoteChangeObserver(
             container: container,
