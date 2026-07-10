@@ -92,6 +92,10 @@ public enum DeleteAllData {
         // WidgetRefresher.nextPromptDateKey — next fire date of the deleted
         // schedule; the post-delete replan republishes a fresh one.
         "widget.nextPromptDate",
+        // WebhookQueue (plan 24) — queued delivery IDs reference reports
+        // that no longer exist. The webhook CONFIG (enabled/URL/secret,
+        // device-local) survives: it is a user setting, not user data.
+        WebhookQueue.queueKey,
     ]
 
     /// Documentation of the deliberate KEEPS (asserted by the kit test so
