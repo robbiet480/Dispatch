@@ -24,6 +24,13 @@ struct QuestionEditorView: View {
     /// doc comment in QuestionPageView for the keyboard-garbling lesson).
     @State private var defaultAnswer: String
     @State private var allowsMultipleSelection: Bool
+    /// Number input style (plan 21) + its contextual config fields. Config
+    /// text is validated like the default answer: finite Doubles, min < max,
+    /// step > 0 — invalid entries are simply not persisted.
+    @State private var inputStyle: NumberInputStyle
+    @State private var inputMin: String
+    @State private var inputMax: String
+    @State private var inputStep: String
 
     private var theme: Theme { themeStore.theme }
 
@@ -38,6 +45,20 @@ struct QuestionEditorView: View {
         _visualization = State(initialValue: question?.visualization)
         _defaultAnswer = State(initialValue: question?.defaultAnswerString ?? "")
         _allowsMultipleSelection = State(initialValue: question?.allowsMultipleSelection ?? true)
+        _inputStyle = State(initialValue: question?.inputStyle ?? .textField)
+        _inputMin = State(initialValue: Self.configText(question?.inputMin))
+        _inputMax = State(initialValue: Self.configText(question?.inputMax))
+        _inputStep = State(initialValue: Self.configText(question?.inputStep))
+    }
+
+    /// Seeds a config text field from a stored Double — integer-formatted
+    /// when whole so "10.0" never shows for a value the user typed as "10".
+    private static func configText(_ value: Double?) -> String {
+        guard let value else { return "" }
+        if value.truncatingRemainder(dividingBy: 1) == 0, value.magnitude < 1e15 {
+            return String(Int(value))
+        }
+        return String(value)
     }
 
     private var supportsStateOfMind: Bool {
@@ -80,6 +101,7 @@ struct QuestionEditorView: View {
                             Text(candidate.displayName).tag(candidate)
                         }
                     }
+                    .accessibilityIdentifier("question-type")
                     .disabled(isTypeLocked)
                 } header: {
                     sectionHeader("TYPE")
@@ -130,6 +152,38 @@ struct QuestionEditorView: View {
                 }
 
                 if type == .number {
+                    Section {
+                        Picker("Input style", selection: $inputStyle) {
+                            ForEach(NumberInputStyle.allCases, id: \.self) { style in
+                                Text(style.displayName).tag(style)
+                            }
+                        }
+                        .accessibilityIdentifier("input-style")
+                        if configFields.min {
+                            TextField("Minimum", text: $inputMin)
+                                .keyboardType(.decimalPad)
+                                .accessibilityIdentifier("input-min")
+                        }
+                        if configFields.max {
+                            TextField("Maximum", text: $inputMax)
+                                .keyboardType(.decimalPad)
+                                .accessibilityIdentifier("input-max")
+                        }
+                        if configFields.step {
+                            TextField("Step", text: $inputStep)
+                                .keyboardType(.decimalPad)
+                                .accessibilityIdentifier("input-step")
+                        }
+                    } header: {
+                        sectionHeader("INPUT STYLE")
+                    } footer: {
+                        if inputStyle != .textField {
+                            Text("Blank fields use the style's defaults. Invalid values (minimum not below maximum, step of zero) are ignored.")
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+
                     Section {
                         TextField("Value for empty responses", text: $defaultAnswer)
                             .keyboardType(.decimalPad)
@@ -189,6 +243,18 @@ struct QuestionEditorView: View {
                 Button("Save") { save() }
                     .disabled(!canSave)
             }
+        }
+    }
+
+    /// Which config fields the chosen input style exposes (spec §Styles):
+    /// slider/dial/stepper take min/max/step, tapCounter an optional max,
+    /// scale its min/max point range, textField nothing.
+    private var configFields: (min: Bool, max: Bool, step: Bool) {
+        switch inputStyle {
+        case .textField: (min: false, max: false, step: false)
+        case .slider, .stepper, .dial: (min: true, max: true, step: true)
+        case .tapCounter: (min: false, max: true, step: false)
+        case .scale: (min: true, max: true, step: false)
         }
     }
 
@@ -308,6 +374,43 @@ struct QuestionEditorView: View {
         } else {
             target.allowsMultipleSelectionRaw = nil
         }
+        applyInputStyleFields(to: target, savedType: savedType)
+    }
+
+    /// Writes the plan-21 input-style fields. Only number questions carry a
+    /// style (`.textField` writes raw nil via the computed setter); config
+    /// values follow the default-answer validation pattern — finite Doubles
+    /// only, step > 0, min < max, fields the style doesn't expose are
+    /// cleared, and anything invalid is simply not persisted (nil = the
+    /// style's defaults).
+    private func applyInputStyleFields(to target: Question, savedType: QuestionType) {
+        guard savedType == .number else {
+            target.inputStyle = .textField
+            target.inputMin = nil
+            target.inputMax = nil
+            target.inputStep = nil
+            return
+        }
+        target.inputStyle = inputStyle
+        var minValue = configFields.min ? parseConfig(inputMin) : nil
+        var maxValue = configFields.max ? parseConfig(inputMax) : nil
+        let stepValue = configFields.step ? parseConfig(inputStep).flatMap { $0 > 0 ? $0 : nil } : nil
+        if let low = minValue, let high = maxValue, low >= high {
+            // An inverted/empty range is invalid as a pair — persist neither.
+            minValue = nil
+            maxValue = nil
+        }
+        target.inputMin = minValue
+        target.inputMax = maxValue
+        target.inputStep = stepValue
+    }
+
+    /// Parses a config text field to a FINITE Double, or nil (same rule as
+    /// the default answer — junk text or "inf"/"nan" must not persist).
+    private func parseConfig(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let value = Double(trimmed), value.isFinite else { return nil }
+        return value
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -315,6 +418,19 @@ struct QuestionEditorView: View {
             .font(.caption)
             .fontWeight(.semibold)
             .foregroundStyle(.white.opacity(0.8))
+    }
+}
+
+extension NumberInputStyle {
+    var displayName: String {
+        switch self {
+        case .textField: "Text Field"
+        case .slider: "Slider"
+        case .stepper: "Stepper"
+        case .dial: "Dial"
+        case .tapCounter: "Tap Counter"
+        case .scale: "Rating Scale"
+        }
     }
 }
 

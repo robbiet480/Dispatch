@@ -63,14 +63,31 @@ struct QuestionPageView: View {
                            onChange: { onAnswer(.tokens($0)) },
                            flushRegistry: flushRegistry)
         case .number:
-            LocalTextEditorField(
-                initialText: { if case .number(let number) = value { number } else { "" } }(),
-                onChange: { onAnswer($0.isEmpty ? .skipped : .number($0)) },
-                placeholder: page.placeholder ?? "0",
-                identifier: "\(page.id)-number-field",
-                accessibilityIdentifier: "number-field",
-                style: .field(keyboard: .decimalPad),
-                flushRegistry: flushRegistry)
+            // Input styles (plan 21): every control writes the same
+            // numericResponse string through `onAnswer` that the text field
+            // produces. Non-text styles have no keyboard, so they register
+            // nothing with the flush registry — values commit on interaction.
+            switch page.inputStyle {
+            case .textField:
+                LocalTextEditorField(
+                    initialText: { if case .number(let number) = value { number } else { "" } }(),
+                    onChange: { onAnswer($0.isEmpty ? .skipped : .number($0)) },
+                    placeholder: page.placeholder ?? "0",
+                    identifier: "\(page.id)-number-field",
+                    accessibilityIdentifier: "number-field",
+                    style: .field(keyboard: .decimalPad),
+                    flushRegistry: flushRegistry)
+            case .slider:
+                SliderInput(value: numberBinding, config: page.inputConfig)
+            case .stepper:
+                StepperInput(value: numberBinding, config: page.inputConfig)
+            case .dial:
+                DialInput(value: numberBinding, config: page.inputConfig)
+            case .tapCounter:
+                TapCounterInput(value: numberBinding, config: page.inputConfig)
+            case .scale:
+                ScaleInput(value: numberBinding, config: page.inputConfig)
+            }
         case .note:
             LocalTextEditorField(
                 initialText: { if case .note(let note) = value { note } else { "" } }(),
@@ -90,6 +107,15 @@ struct QuestionPageView: View {
                 style: .field(keyboard: .default),
                 flushRegistry: flushRegistry)
         }
+    }
+
+    /// The numericResponse string binding the number input controls share
+    /// with the text field: empty = untouched/skipped, anything else is the
+    /// formatted number the control wrote on interaction.
+    private var numberBinding: Binding<String> {
+        Binding(
+            get: { if case .number(let number) = value { number } else { "" } },
+            set: { onAnswer($0.isEmpty ? .skipped : .number($0)) })
     }
 
     private var selectedOptions: [String] {

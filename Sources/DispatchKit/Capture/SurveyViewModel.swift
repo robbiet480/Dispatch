@@ -10,6 +10,12 @@ public struct SurveyPage: Identifiable, Sendable {
     public let allowsMultipleSelection: Bool
     /// Number questions: value filed when the answer is left empty (nil = skip).
     public let defaultAnswer: String?
+    /// Number questions: input control style (plan 21). Always `.textField`
+    /// for non-number types, even if a stray raw value is stored.
+    public let inputStyle: NumberInputStyle
+    /// Resolved per-style (min, max, step) — invalid stored combos are
+    /// already clamped to the style defaults, so controls can render as-is.
+    public let inputConfig: (min: Double, max: Double, step: Double)
 }
 
 /// Drives the paged survey: question filtering/ordering, current page,
@@ -43,6 +49,7 @@ public final class SurveyViewModel {
                 if question.type == .yesNo && choices.isEmpty {
                     choices = ["Yes", "No"]
                 }
+                let inputStyle = question.type == .number ? question.inputStyle : .textField
                 return SurveyPage(
                     id: question.uniqueIdentifier,
                     question: QuestionRef(uniqueIdentifier: question.uniqueIdentifier,
@@ -51,7 +58,11 @@ public final class SurveyViewModel {
                     choices: choices,
                     placeholder: question.placeholderString,
                     allowsMultipleSelection: question.allowsMultipleSelection,
-                    defaultAnswer: question.type == .number ? question.defaultAnswerString : nil)
+                    defaultAnswer: question.type == .number ? question.defaultAnswerString : nil,
+                    inputStyle: inputStyle,
+                    inputConfig: NumberInputStyle.resolvedConfig(
+                        for: inputStyle, min: question.inputMin,
+                        max: question.inputMax, step: question.inputStep))
             }
     }
 

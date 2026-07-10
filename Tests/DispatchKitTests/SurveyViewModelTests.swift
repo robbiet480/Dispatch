@@ -116,6 +116,42 @@ private func makeQuestion(_ id: String, _ prompt: String, _ type: QuestionType,
     #expect(viewModel.pages[2].allowsMultipleSelection == false)
 }
 
+// MARK: - Number input styles (plan 21)
+
+@Test func pagesCarryResolvedInputStyleAndConfig() {
+    let slider = makeQuestion("q-slider", "How loud?", .number, sort: 0)
+    slider.inputStyle = .slider
+    slider.inputMin = 0
+    slider.inputMax = 100
+    slider.inputStep = 10
+
+    let unknown = makeQuestion("q-future", "Future?", .number, sort: 1)
+    unknown.inputStyleRaw = "holographicKnob" // unknown raw → textField
+
+    let plain = makeQuestion("q-plain", "Meetings?", .number, sort: 2)
+
+    // A stray style on a non-number question must not leak into its page.
+    let note = makeQuestion("q-note", "Learn?", .note, sort: 3)
+    note.inputStyleRaw = "slider"
+
+    let viewModel = SurveyViewModel(questions: [slider, unknown, plain, note], kind: .regular)
+    #expect(viewModel.pages[0].inputStyle == .slider)
+    #expect(viewModel.pages[0].inputConfig == (0, 100, 10))
+    #expect(viewModel.pages[1].inputStyle == .textField)
+    #expect(viewModel.pages[2].inputStyle == .textField)
+    #expect(viewModel.pages[3].inputStyle == .textField)
+}
+
+@Test func pagesClampInvalidInputConfigToStyleDefaults() {
+    let dial = makeQuestion("q-dial", "Dial?", .number, sort: 0)
+    dial.inputStyle = .dial
+    dial.inputMin = 50
+    dial.inputMax = 5 // inverted → style defaults
+    dial.inputStep = 1
+    let viewModel = SurveyViewModel(questions: [dial], kind: .regular)
+    #expect(viewModel.pages[0].inputConfig == (0, 10, 1))
+}
+
 // MARK: - Group scoping (plan 12)
 
 @Test func groupScopingOrdersByGroupAndSkipsDanglingAndDisabled() {
