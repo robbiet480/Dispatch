@@ -1,5 +1,6 @@
 import DispatchKit
 import SwiftUI
+import UIKit
 
 struct SensorSettingsView: View {
     @State private var settings: SensorSettings
@@ -8,9 +9,15 @@ struct SensorSettingsView: View {
     @State private var enabledByKind: [SensorKind: Bool]
     @State private var isRequestingPermissions = false
     @State private var contactSuggestionsEnabled: Bool
+    /// Real framework authorization states, refreshed onAppear and whenever
+    /// the scene reactivates (returning from the Settings app after fixing a
+    /// denial must update the affordances without leaving the screen).
+    @State private var permissionStates: [SensorPermission: SensorPermissionState] = [:]
     @Environment(ThemeStore.self) private var themeStore
     @Environment(PermissionCascade.self) private var permissionCascade
     @Environment(SpotifyController.self) private var spotifyController
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     private var theme: Theme { themeStore.theme }
     private let defaults: UserDefaults
@@ -38,25 +45,39 @@ struct SensorSettingsView: View {
             List {
                 Section {
                     ForEach(SensorKind.allCases, id: \.self) { kind in
-                        Toggle(kind.displayName, isOn: enabledBinding(kind))
-                            .tint(.white.opacity(0.4))
-                            .foregroundStyle(.white)
-                    }
-
-                    Button {
-                        Task { await requestSensorAccess() }
-                    } label: {
-                        HStack {
-                            Text("Request Sensor Access…")
+                        HStack(spacing: 12) {
+                            Text(kind.displayName)
+                                .foregroundStyle(.white)
                             Spacer()
-                            if isRequestingPermissions {
-                                ProgressView()
-                            }
+                            permissionAffordance(for: kind)
+                            Toggle(kind.displayName, isOn: enabledBinding(kind))
+                                .labelsHidden()
+                                .fixedSize()
+                                .tint(.white.opacity(0.4))
                         }
                     }
-                    .foregroundStyle(.white)
-                    .disabled(isRequestingPermissions)
-                    .accessibilityIdentifier("request-sensor-access")
+
+                    // Bulk request lives at the BOTTOM of the section and
+                    // only while something is actually requestable — when
+                    // every permission is granted or denied there is no
+                    // dialog left for the cascade to show (denied can only
+                    // be fixed in the Settings app, via the row affordance).
+                    if hasRequestablePermissions {
+                        Button {
+                            Task { await requestSensorAccess() }
+                        } label: {
+                            HStack {
+                                Text("Request All Sensors…")
+                                Spacer()
+                                if isRequestingPermissions {
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .foregroundStyle(.white)
+                        .disabled(isRequestingPermissions)
+                        .accessibilityIdentifier("request-all-sensors")
+                    }
                 } header: {
                     sectionHeader("SENSORS")
                 }
@@ -173,6 +194,93 @@ struct SensorSettingsView: View {
         .navigationTitle("Sensors")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .task {
+            await refreshPermissionStates()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Returning from the Settings app (after flipping a denied
+            // permission) must refresh the affordances in place.
+            guard newPhase == .active else { return }
+            Task { await refreshPermissionStates() }
+        }
+    }
+
+    // MARK: - Permission affordances
+
+    private var statusProvider: SensorPermissionStatusProvider {
+        SensorPermissionStatusProvider(isTestEnvironment: permissionCascade.isTestEnvironment)
+    }
+
+    private var hasRequestablePermissions: Bool {
+        SensorPermission.allCases.contains { permissionStates[$0] == .notDetermined }
+    }
+
+    private func refreshPermissionStates() async {
+        var states: [SensorPermission: SensorPermissionState] = [:]
+        for permission in SensorPermission.allCases {
+            states[permission] = await statusProvider.status(for: permission)
+        }
+        permissionStates = states
+    }
+
+    /// Inline trailing affordance reflecting the row's REAL authorization
+    /// state: subdued "Granted"/"Requested" text when nothing is actionable,
+    /// a "Request" button when the dialog hasn't been shown yet, and a
+    /// "Denied" button deep-linking to the Settings app (the only place a
+    /// denial can be fixed). Rows without a gating permission — and unknown
+    /// states — render nothing.
+    @ViewBuilder
+    private func permissionAffordance(for kind: SensorKind) -> some View {
+        if let permission = kind.permission {
+            switch permissionStates[permission] ?? .unknown {
+            case .granted:
+                statusCaption("Granted", permission: permission)
+            case .requested:
+                // HealthKit hides read-grant status by design — "Requested"
+                // (dialog already shown) is the strongest truthful claim.
+                statusCaption("Requested", permission: permission)
+            case .notDetermined:
+                statusButton("Request", permission: permission) {
+                    Task {
+                        await permissionCascade.request(permission)
+                        await refreshPermissionStates()
+                    }
+                }
+            case .denied:
+                statusButton("Denied", permission: permission) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                }
+            case .unknown:
+                EmptyView()
+            }
+        }
+    }
+
+    private func statusCaption(_ title: String, permission: SensorPermission) -> some View {
+        Text(title)
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.6))
+            .accessibilityIdentifier("permission-status-\(permission.rawValue)")
+    }
+
+    private func statusButton(
+        _ title: String, permission: SensorPermission, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.2), in: Capsule())
+        }
+        // Borderless keeps the tap target scoped to the capsule — a plain
+        // row-embedded Button would otherwise swallow the whole row.
+        .buttonStyle(.borderless)
+        .disabled(permissionCascade.isRequesting)
+        .accessibilityIdentifier("permission-status-\(permission.rawValue)")
     }
 
     private func requestSensorAccess() async {
@@ -180,6 +288,7 @@ struct SensorSettingsView: View {
         isRequestingPermissions = true
         await permissionCascade.requestAll()
         isRequestingPermissions = false
+        await refreshPermissionStates()
     }
 
     private var contactsBinding: Binding<Bool> {

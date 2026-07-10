@@ -99,6 +99,27 @@ final class PermissionCascade {
         requestNotifications()
     }
 
+    /// Requests a SINGLE permission (the per-row "Request" affordance in
+    /// Sensor settings). Reuses the exact step implementations the cascade
+    /// sequences, under the same isRequesting serialization, so an individual
+    /// request can never stack a dialog over an in-flight cascade. No-op in
+    /// test mode, like everything else here.
+    func request(_ permission: SensorPermission) async {
+        guard !isTestEnvironment else { return }
+        guard !isRequesting else { return }
+        isRequesting = true
+        defer { isRequesting = false }
+        switch permission {
+        case .location: await requestLocation()
+        case .health: await requestHealth()
+        case .motion: await requestMotion()
+        case .microphone: await requestMicrophone()
+        case .photos: await requestPhotos()
+        case .mediaLibrary: await requestMediaLibrary()
+        case .focus: await requestFocus()
+        }
+    }
+
     /// One-time top-up for installs that completed onboarding BEFORE the
     /// Motion and medications cascade steps existed: their `requestAll()`
     /// already ran, so those two dialogs would otherwise ambush the next
