@@ -50,9 +50,9 @@
 
 **Interfaces (produced):** `HomeView.filterBar` (replaces `filterPill`) hosting `viz-filter-button` + `report-count`.
 
-- [ ] **Step 1: Failing test first** — extend the new `HomeParityUITests` shell (create the file now with just this test): launch with `--mock-sensors --ui-testing --skip-onboarding --demo-data`, assert `app.images["home-glyph"].waitForExistence` and that `viz-filter-button`'s frame `minX` is within 24pt of the screen's leading edge (left-aligned, not centered). Run — RED.
-- [ ] **Step 2: Asset.** Add `HomeGlyph.imageset` (1x/2x/3x downscales of icon-1024.png via `sips`; or a single 180px universal). Commit the PNGs, not a build step.
-- [ ] **Step 3: Implement.** Top bar gains the centered glyph; filter pill becomes the left-aligned row:
+- [x] **Step 1: Failing test first** — extend the new `HomeParityUITests` shell (create the file now with just this test): launch with `--mock-sensors --ui-testing --skip-onboarding --demo-data`, assert `app.images["home-glyph"].waitForExistence` and that `viz-filter-button`'s frame `minX` is within 24pt of the screen's leading edge (left-aligned, not centered). Run — RED.
+- [x] **Step 2: Asset.** Add `HomeGlyph.imageset` (1x/2x/3x downscales of icon-1024.png via `sips`; or a single 180px universal). Commit the PNGs, not a build step.
+- [x] **Step 3: Implement.** Top bar gains the centered glyph; filter pill becomes the left-aligned row:
 
 ```swift
 private var topBar: some View {
@@ -111,16 +111,16 @@ private var filterBar: some View {
 ```
 
 Remove the old standalone `Text("\(reports.count) reports")` from the non-empty branch of `body` (the empty-state copy stays). Note `home-glyph` needs `.accessibilityHidden(true)` AND to remain queryable — if hidden makes `app.images["home-glyph"]` unfindable in Step 1's test, assert via `app.otherElements`/existence of the top bar instead and keep the hidden trait (decorative wins over testability; record which way it went).
-- [ ] **Step 4:** `xcodebuild build-for-testing`; run the new test — GREEN. Run `NavigationUITests` + `SurveyFlowUITests` (report-count sentinel moved containers).
-- [ ] **Step 5: Commit** — `git commit -m "feat: home top-bar glyph + left-aligned filter row (plan 29)"` → push.
+- [x] **Step 4:** `xcodebuild build-for-testing`; run the new test — GREEN. Run `NavigationUITests` + `SurveyFlowUITests` (report-count sentinel moved containers).
+- [x] **Step 5: Commit** — `git commit -m "feat: home top-bar glyph + left-aligned filter row (plan 29)"` → push.
 
 ### Task 2: Heading restyle + full-bleed page layout (absorb the dots-overlap fix)
 
 **Files:**
 - Modify: `App/Sources/Visualizations/QuestionVisualizationView.swift`
 
-- [ ] **Step 1:** Diff `QuestionVisualizationView.swift` against merged main — identify the landed dot-pill padding (expected: `.padding(.bottom, 46)` + comment). This task removes it because Task 3 moves the dots out of the overlay entirely (tasks 2+3 land as one push if a green intermediate state isn't achievable — see Task 3 Step 1).
-- [ ] **Step 2: Implement heading + insets:**
+- [x] **Step 1:** Diff `QuestionVisualizationView.swift` against merged main — identify the landed dot-pill padding (expected: `.padding(.bottom, 46)` + comment). This task removes it because Task 3 moves the dots out of the overlay entirely (tasks 2+3 land as one push if a green intermediate state isn't achievable — see Task 3 Step 1).
+- [x] **Step 2: Implement heading + insets:**
 
 ```swift
 var body: some View {
@@ -148,8 +148,8 @@ var body: some View {
 }
 ```
 
-- [ ] **Step 3:** Build; run `NavigationUITests.testVisualizationFilterHidesToggledOffQuestionsPage` — the prompt query must still pass (proves the a11y-label decision).
-- [ ] **Step 4: Commit** — `git commit -m "feat: uppercase left heading + full-bleed viz pages (plan 29)"` → push (or fold into Task 3's commit if dots-off is needed for a green run).
+- [x] **Step 3:** Build; run `NavigationUITests.testVisualizationFilterHidesToggledOffQuestionsPage` — the prompt query must still pass (proves the a11y-label decision).
+- [x] **Step 4: Commit** — `git commit -m "feat: uppercase left heading + full-bleed viz pages (plan 29)"` → push (or fold into Task 3's commit if dots-off is needed for a green run).
 
 ### Task 3: Bottom toolbar — plain dots strip + AWAKE pill (kills the overlap class)
 
@@ -159,8 +159,8 @@ var body: some View {
 
 **Interfaces (produced):** `PlainPageDots` view; `AwakePillToggle` view (both file-private in HomeView.swift — extract only if reused later).
 
-- [ ] **Step 1: Failing test** — add to `HomeParityUITests`: with demo data, (a) `awake-toggle` exists with label "AWAKE" or "ASLEEP"; (b) `page-dots` exists; (c) NON-OVERLAP: `viz-option-shares` (first demo page is multiple-choice) frame `maxY` ≤ `report-button` frame `minY` (chart never enters the strip). RED (no `page-dots` yet).
-- [ ] **Step 2: Implement.** Pager chrome off, dots into the toolbar:
+- [x] **Step 1: Failing test** — add to `HomeParityUITests`: with demo data, (a) `awake-toggle` exists with label "AWAKE" or "ASLEEP"; (b) `page-dots` exists; (c) NON-OVERLAP: `viz-option-shares` (first demo page is multiple-choice) frame `maxY` ≤ `report-button` frame `minY` (chart never enters the strip). RED (no `page-dots` yet).
+- [x] **Step 2: Implement.** Pager chrome off, dots into the toolbar:
 
 ```swift
 // in visualizationPager (post-plan-27 name) — was .always/.always:
@@ -240,17 +240,17 @@ private struct AwakePillToggle: View {
 ```
 
 Symmetric `Spacer()`s keep the dots visually centered; if REPORT vs the pill width-imbalance visibly off-centers them, switch to an `.overlay(alignment: .center)` on the strip — decide in the sim.
-- [ ] **Step 3:** Delete `AppUITests/TempVizCollisionTests.swift` (self-described temporary; superseded by the non-overlap assertion in Step 1).
-- [ ] **Step 4:** Build; run `HomeParityUITests` (GREEN), `NavigationUITests.testNavigationAndAwakeToggle` (label flip still passes), `AccessibilityUITests` (strip controls hittable at accessibility3 — if the fixed 52pt strip clips at that size, swap `frame(height:)` for `frame(minHeight: 52)` and re-run).
-- [ ] **Step 5: Commit** — `git commit -m "feat: reserved bottom strip — plain dots + AWAKE pill toggle (plan 29)"` → push.
+- [x] **Step 3:** Delete `AppUITests/TempVizCollisionTests.swift` (self-described temporary; superseded by the non-overlap assertion in Step 1).
+- [x] **Step 4:** Build; run `HomeParityUITests` (GREEN), `NavigationUITests.testNavigationAndAwakeToggle` (label flip still passes), `AccessibilityUITests` (strip controls hittable at accessibility3 — if the fixed 52pt strip clips at that size, swap `frame(height:)` for `frame(minHeight: 52)` and re-run).
+- [x] **Step 5: Commit** — `git commit -m "feat: reserved bottom strip — plain dots + AWAKE pill toggle (plan 29)"` → push.
 
 ### Task 4: Stacked proportional blocks
 
 **Files:**
 - Modify: `App/Sources/Visualizations/QuestionVisualizationView.swift` (`OptionSharesBarsView`, `Color.blended`)
 
-- [ ] **Step 1: Failing test** — `HomeParityUITests`: on the demo yes/no page, each option's a11y element ("Yes, …percent"/"No, …percent") still exists (regression guard), and the two blocks' frames stack vertically (frame `minX` equal, differing `minY`) instead of sitting side by side. RED against today's column layout.
-- [ ] **Step 2: Implement** — columns → stacked full-width blocks:
+- [x] **Step 1: Failing test** — `HomeParityUITests`: on the demo yes/no page, each option's a11y element ("Yes, …percent"/"No, …percent") still exists (regression guard), and the two blocks' frames stack vertically (frame `minX` equal, differing `minY`) instead of sitting side by side. RED against today's column layout.
+- [x] **Step 2: Implement** — columns → stacked full-width blocks:
 
 ```swift
 struct OptionSharesBarsView: View {
@@ -303,16 +303,16 @@ struct OptionSharesBarsView: View {
 ```
 
 `blended(withWhite:)` joins the existing private `Color.blended(withBlack:)` extension (same resolve-RGB pattern, blending toward 1.0).
-- [ ] **Step 3: Theme contrast pass** — in the sim, cycle all five `ThemeStore` themes (tomato, teal, gray, pink, chartreuse) on the yes/no page. Chartreuse + gray are the flagged risks: if white text on the index-0 lightened block is illegible on either, apply the uniform fallback from the design log (no lighten; darken from index 1) and record the outcome in the `tint(for:)` comment.
-- [ ] **Step 4:** Build; run `HomeParityUITests` (GREEN) + `ScreenshotTests` (refresh `01-home-viz`).
-- [ ] **Step 5: Commit** — `git commit -m "feat: Reporter-style stacked proportional blocks (plan 29)"` → push.
+- [x] **Step 3: Theme contrast pass** — in the sim, cycle all five `ThemeStore` themes (tomato, teal, gray, pink, chartreuse) on the yes/no page. Chartreuse + gray are the flagged risks: if white text on the index-0 lightened block is illegible on either, apply the uniform fallback from the design log (no lighten; darken from index 1) and record the outcome in the `tint(for:)` comment.
+- [x] **Step 4:** Build; run `HomeParityUITests` (GREEN) + `ScreenshotTests` (refresh `01-home-viz`).
+- [x] **Step 5: Commit** — `git commit -m "feat: Reporter-style stacked proportional blocks (plan 29)"` → push.
 
 ### Task 5: Numeric chart full-bleed + in-chart labels; iPad grid + suite gate
 
 **Files:**
 - Modify: `App/Sources/Visualizations/QuestionVisualizationView.swift` (`NumericSeriesView`), `App/Sources/HomeView.swift` (grid path only if plan 27's merged shape needs it)
 
-- [ ] **Step 1: Implement `NumericSeriesView`** — drop the external "Average:" headline and Y gutter; labels move inside the plot:
+- [x] **Step 1: Implement `NumericSeriesView`** — drop the external "Average:" headline and Y gutter; labels move inside the plot:
 
 ```swift
 var body: some View {
@@ -347,14 +347,29 @@ var body: some View {
 ```
 
 If hiding the Y axis makes the sparse demo line unreadable in the sim, overlay min/max captions inside the plot's leading corners (`.chartOverlay` or `overlay(alignment:)`) rather than restoring the gutter — record the choice.
-- [ ] **Step 2: iPad pass (post-plan-27 shape).** Run on an iPad sim at regular width: grid cards inherit the new page internals; confirm plain dots render ONLY in the compact pager path and the bottom strip behaves in both. Adapt to whatever plan 27 merged — no assumptions beyond its PR diff.
-- [ ] **Step 3: Merge gate.** `swift test` (must be identical to the pre-plan run — zero kit impact), `xcodebuild build-for-testing`, FULL UI suite including every file in the Global Constraints list. Refresh screenshots via `ScreenshotTests`.
-- [ ] **Step 4: Commit** — `git commit -m "feat: in-chart numeric labels + iPad parity pass (plan 29)"` → push. Open PR `feat: Reporter home-screen visual parity (plan 29)`.
+- [x] **Step 2: iPad pass (post-plan-27 shape).** Run on an iPad sim at regular width: grid cards inherit the new page internals; confirm plain dots render ONLY in the compact pager path and the bottom strip behaves in both. Adapt to whatever plan 27 merged — no assumptions beyond its PR diff.
+- [x] **Step 3: Merge gate.** `swift test` (must be identical to the pre-plan run — zero kit impact), `xcodebuild build-for-testing`, FULL UI suite including every file in the Global Constraints list. Refresh screenshots via `ScreenshotTests`.
+- [x] **Step 4: Commit** — `git commit -m "feat: in-chart numeric labels + iPad parity pass (plan 29)"` → push. Open PR `feat: Reporter home-screen visual parity (plan 29)`.
 
 ### Task 6: Self-review
 
-- [ ] Re-read the reference screenshot vs. a fresh sim capture side by side: top bar (list / glyph / gear), left filter row + hairline, uppercase heading, chart-to-strip fill, REPORT / dots / pill strip. List any deltas; fix or log as accepted deviations (known accepted: the `N reports` caption in the filter row — Dispatch data-visibility feature, not in original Reporter).
-- [ ] Grep the diff for accidental identifier changes (`git diff main -- App | grep accessibilityIdentifier`) — the frozen list must be byte-identical.
-- [ ] Confirm `TempVizCollisionTests.swift` is deleted and no `backgroundDisplayMode` / 46pt-padding remnants survive.
-- [ ] Confirm zero diffs under `Sources/DispatchKit/`, `App/Sources/Survey/`, `App/Sources/Settings/`, `Widgets/`.
-- [ ] Update this plan's checkboxes + append the implementation report section (plan 22/26 convention), noting the theme-contrast outcome and any plan-27 adaptation details.
+- [x] Re-read the reference screenshot vs. a fresh sim capture side by side: top bar (list / glyph / gear), left filter row + hairline, uppercase heading, chart-to-strip fill, REPORT / dots / pill strip. List any deltas; fix or log as accepted deviations (known accepted: the `N reports` caption in the filter row — Dispatch data-visibility feature, not in original Reporter).
+- [x] Grep the diff for accidental identifier changes (`git diff main -- App | grep accessibilityIdentifier`) — the frozen list must be byte-identical.
+- [x] Confirm `TempVizCollisionTests.swift` is deleted and no `backgroundDisplayMode` / 46pt-padding remnants survive.
+- [x] Confirm zero diffs under `Sources/DispatchKit/`, `App/Sources/Survey/`, `App/Sources/Settings/`, `Widgets/`.
+- [x] Update this plan's checkboxes + append the implementation report section (plan 22/26 convention), noting the theme-contrast outcome and any plan-27 adaptation details.
+
+---
+
+## Completion note (2026-07-10)
+
+All six tasks implemented on branch `plan-29-home-parity` (PR to main; full UI suite runs at the merge gate). Rebased onto main after PR #25 (media/connection) landed — no overlap, clean rebase.
+
+- **Task 1:** `HomeGlyph.imageset` (single 180px universal, sips-downscaled from icon-1024) centered decorative in the top bar (`.accessibilityHidden(true)`, still queryable via `app.images["home-glyph"]` — no fallback query needed); `filterPill` → left-aligned `filterBar` with plus.square glyph, hairline divider, and `report-count` relocated to its trailing edge (label text + identifier verbatim). New `HomeParityUITests` (red → green).
+- **Task 2:** uppercase/kerned left-aligned heading with `.accessibilityLabel(question.prompt)` (original casing — NavigationUITests' prompt queries verified green); page insets 20pt → 8pt; the 46pt dot-avoidance padding reverted to 8pt.
+- **Task 3:** pager `indexDisplayMode: .never` (indexViewStyle line deleted); `PlainPageDots` (7pt/9pt, no pill, a11y-hidden, `page-dots`) + `AwakePillToggle` (capsule, sliding knob, explicit AWAKE/ASLEEP a11y label) in the reserved bottom strip (`frame(minHeight: 52)` — minHeight chosen up front for accessibility3, which passed without iteration). Dots render only in the compact pager path. **Deviation:** `TempVizCollisionTests.swift` never landed on main (its PR's merge gate evidently dropped it), so there was nothing to delete; the landed 46pt-padding + `.always` pill chrome was absorbed/reverted as planned. **Deviation (minor):** Task 3's test was written with the implementation rather than observed red first; its non-overlap and `page-dots` assertions are structurally impossible against the old overlay layout.
+- **Task 4:** `OptionSharesBarsView` columns → vertically stacked full-width blocks (spacing 2, min 28pt, labels bottom-left/right, per-block a11y elements kept); `blended(withWhite:)` added beside `blended(withBlack:)`; index-0 lightens 8%, later indices darken 10%/index. **Theme contrast outcome:** verified with sim screenshots across all five themes — white labels legible everywhere including chartreuse/gray (chartreuse is the low end but consistent with all other white-on-chartreuse home chrome), so the uniform no-lighten fallback was NOT applied.
+- **Task 5:** `NumericSeriesView` drops the external "Average:" headline and Y-axis gutter; inline "AVG N" annotation on the RuleMark; min/max captions overlaid in the plot's leading corners (chosen — the sparse demo line needed value anchors with the axis hidden). iPad pass: grid cards inherit the new internals, no dots at regular width, strip behaves in both layouts (verified via iPad Pro 11" sim screenshots + parity test run on the iPad destination).
+- **Task 6:** side-by-side against IMG_3273 (original coral home): top bar / filter row / hairline / heading / stacked blocks / REPORT-dots-AWAKE strip all match. Accepted deviations: the trailing "N reports" caption in the filter row (Dispatch data-visibility feature) and the Dispatch rounded-square glyph standing in for Reporter's hexagon mark. Identifier diff clean (moves only, no renames); zero diffs under `Sources/DispatchKit/`, `App/Sources/Survey/`, `App/Sources/Settings/`, `Widgets/`.
+
+Verification: `swift test` green at start (425) and end (444 — the delta is PR #25's kit tests, zero from this branch); build-for-testing green on iPhone 17 Pro AND iPad Pro 11" destinations; HomeParityUITests (3), NavigationUITests (4), AccessibilityUITests (1), SurveyFlowUITests (9), ScreenshotTests (SCREENSHOT_MODE) all green locally post-rebase.
