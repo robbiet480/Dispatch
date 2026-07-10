@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: io.robbie
   deploymentTarget:
     iOS: "26.0"
+    watchOS: "26.0"
 packages:
   DispatchKit:
     path: .
@@ -17,6 +18,10 @@ targets:
     dependencies:
       - package: DispatchKit
       - target: DispatchWidgets
+      # Companion watch app (plan 19): embedded in the iOS bundle's Watch/
+      # directory. Independent (WKRunsIndependentlyOfCompanionApp) — it syncs
+      # through CloudKit, never WatchConnectivity or the phone's App Group.
+      - target: DispatchWatch
     settings:
       base:
         PRODUCT_NAME: Dispatch
@@ -107,6 +112,75 @@ targets:
         # UIBackgroundModes): NSExtension has no INFOPLIST_KEY_* equivalent.
         INFOPLIST_FILE: Widgets/Info.plist
         TARGETED_DEVICE_FAMILY: "1"
+  DispatchWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - Watch/Sources
+      # Shared sensor providers (plan 19): dual target membership with
+      # DispatchApp — same pattern as the QuickAnswerIntent/control-intent
+      # sharing into DispatchWidgets. DispatchKit stays Foundation/SwiftData-
+      # only; the system-framework providers compile into both app targets.
+      # (Added in Task 3; the group starts empty in Task 1.)
+      - path: Shared/Providers
+        optional: true
+      - path: Watch/Assets.xcassets
+      - path: Watch/PrivacyInfo.xcprivacy
+    dependencies:
+      - package: DispatchKit
+      - target: DispatchWatchWidgets
+    settings:
+      base:
+        PRODUCT_NAME: Dispatch
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.watchkitapp
+        PRODUCT_MODULE_NAME: DispatchWatch
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Dispatch
+        # Versions mirror the iOS targets (archive-validation constraint —
+        # the controller bumps all four targets together at ship time).
+        CURRENT_PROJECT_VERSION: 17
+        MARKETING_VERSION: 0.1.0
+        DEVELOPMENT_TEAM: UTQFCBPQRF
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: 6.0
+        CODE_SIGN_ENTITLEMENTS: Watch/DispatchWatch.entitlements
+        # Watch-side permission purpose strings (design §v1-scope-3): the
+        # watch requests HealthKit + when-in-use location itself — Apple:
+        # frameworks supporting independent watch apps "display their
+        # authorization form directly on Apple Watch"
+        # (https://developer.apple.com/documentation/watchos-apps/creating-independent-watchos-apps).
+        INFOPLIST_KEY_NSHealthShareUsageDescription: "Dispatch reads steps, flights, heart rate, HRV, sleep, workouts, and caffeine to add context to your reports."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Dispatch records where you are when you file a report."
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
+        # Partial plist merge (same pattern as the iOS targets): the WK*
+        # keys (WKApplication, WKCompanionAppBundleIdentifier,
+        # WKRunsIndependentlyOfCompanionApp) live in Watch/Info.plist.
+        INFOPLIST_FILE: Watch/Info.plist
+        TARGETED_DEVICE_FAMILY: "4"
+  DispatchWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - WatchWidgets/Sources
+      - path: WatchWidgets/PrivacyInfo.xcprivacy
+    dependencies:
+      - package: DispatchKit
+    settings:
+      base:
+        PRODUCT_NAME: DispatchWatchWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.watchkitapp.widgets
+        GENERATE_INFOPLIST_FILE: YES
+        # Extension versions must match the host app's (ASC validation).
+        CURRENT_PROJECT_VERSION: 17
+        MARKETING_VERSION: 0.1.0
+        DEVELOPMENT_TEAM: UTQFCBPQRF
+        SWIFT_VERSION: 6.0
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: WatchWidgets/DispatchWatchWidgets.entitlements
+        INFOPLIST_KEY_CFBundleDisplayName: Dispatch
+        # Partial plist merge: NSExtension has no INFOPLIST_KEY_* equivalent.
+        INFOPLIST_FILE: WatchWidgets/Info.plist
+        TARGETED_DEVICE_FAMILY: "4"
   DispatchUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -127,3 +201,7 @@ schemes:
         DispatchUITests: [test]
     test:
       targets: [DispatchUITests]
+  DispatchWatch:
+    build:
+      targets:
+        DispatchWatch: all

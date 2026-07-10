@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Watch app entitlements (plan 19, design §entitlements).
+
+         App Group: shares the WATCH'S OWN container with the embedded watch
+         widget extension (complications) — App Group containers are
+         per-device; nothing here is shared with the phone
+         (https://developer.apple.com/forums/thread/3927).
+
+         iCloud/CloudKit: the private database is the sync fabric — the same
+         container the phone mirrors (CloudKit only; no CloudDocuments — the
+         iCloud Drive backup surface is phone-only).
+
+         HealthKit + WeatherKit: watch-side sensor capture (2026-07-10
+         amendment). healthkit.access mirrors the phone's empty array.
+
+         Deliberately ABSENT in v1: aps-environment (no push path — background
+         pushes to iPhone are never forwarded to the watch and direct-to-watch
+         pushes are deferred scope), time-sensitive, communication,
+         healthkit.background-delivery (no watch-side observers). -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.io.robbie.Dispatch</string>
+    </array>
+    <key>com.apple.developer.icloud-services</key>
+    <array>
+        <string>CloudKit</string>
+    </array>
+    <key>com.apple.developer.icloud-container-identifiers</key>
+    <array>
+        <string>iCloud.io.robbie.Dispatch</string>
+    </array>
+    <key>com.apple.developer.healthkit</key>
+    <true/>
+    <key>com.apple.developer.healthkit.access</key>
+    <array/>
+    <key>com.apple.developer.weatherkit</key>
+    <true/>
+</dict>
+</plist>

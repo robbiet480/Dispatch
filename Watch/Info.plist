@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Merged with the generated Info.plist (GENERATE_INFOPLIST_FILE=YES +
+         INFOPLIST_FILE set → Xcode merges; explicit keys here win). Only keys
+         that have no INFOPLIST_KEY_* build-setting equivalent belong here.
+
+         WKApplication: marks this a single-target watchOS app.
+         WKCompanionAppBundleIdentifier: "The value should be the same as the
+         iOS app's CFBundleIdentifier"
+         (https://developer.apple.com/documentation/BundleResources/Information-Property-List/WKCompanionAppBundleIdentifier).
+         WKRunsIndependentlyOfCompanionApp: "the app doesn't need its iOS
+         companion app to operate properly"
+         (https://developer.apple.com/documentation/BundleResources/Information-Property-List/WKRunsIndependentlyOfCompanionApp)
+         — filing works with the phone at home; CloudKit is the sync path. -->
+    <key>WKApplication</key>
+    <true/>
+    <key>WKCompanionAppBundleIdentifier</key>
+    <string>io.robbie.Dispatch</string>
+    <key>WKRunsIndependentlyOfCompanionApp</key>
+    <true/>
+</dict>
+</plist>
