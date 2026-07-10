@@ -22,7 +22,13 @@ struct QuestionVisualizationView: View {
 
             content
                 .padding(.horizontal, 20)
-                .padding(.bottom, 12)
+                // The paged TabView OVERLAYS its index dots inside the page's own
+                // bounds rather than reserving space for them, so every page must
+                // keep its bottom clear: 34pt covers the UIPageControl strip
+                // (~26pt pill + inset), plus the original 12pt breathing room.
+                // Without this, bottom-anchored content (option-share bar labels,
+                // a line chart's 0-gridline) renders behind the dots.
+                .padding(.bottom, 46)
         }
     }
 
