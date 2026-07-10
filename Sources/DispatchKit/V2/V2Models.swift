@@ -126,6 +126,9 @@ public struct V2Report: Codable {
     public var photos: [PhotoRecord]?
     public var health: [HealthReading]?
     public var focus: FocusState?
+    /// What was audibly playing at report time (plan 26). Omitted when nil;
+    /// import tolerates absence.
+    public var media: MediaSample?
     public var stateOfMindSampleIDs: [String]?
     public var responses: [V2Response]?
     /// The PromptGroup this report was filed against (plan 12). Omitted when

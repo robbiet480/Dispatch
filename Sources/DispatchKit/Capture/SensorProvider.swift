@@ -10,6 +10,7 @@ public enum SensorPayload: Sendable {
     case connection(Int)
     case focus(FocusState)
     case health([HealthReading])
+    case media(MediaSample)
 }
 
 public enum SensorOutcome: Sendable {
