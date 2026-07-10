@@ -54,6 +54,8 @@ struct ChoiceOptionsEditorView: View {
                     }
 
                     TextField("Add an option…", text: $newOption)
+                        .foregroundStyle(.white)
+                        .tint(.white)
                         .focused($addFieldFocused)
                         .onSubmit(commitNewOption)
                         .submitLabel(.done)
@@ -72,6 +74,8 @@ struct ChoiceOptionsEditorView: View {
                         Text("Allowed").tag(true)
                         Text("Not Allowed").tag(false)
                     }
+                    .foregroundStyle(.white)
+                    .tint(.white.opacity(0.7))
                     .accessibilityIdentifier("multiple-selections")
                 } header: {
                     header("MULTIPLE SELECTIONS")

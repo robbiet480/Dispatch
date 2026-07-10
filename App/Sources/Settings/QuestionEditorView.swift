@@ -90,6 +90,8 @@ struct QuestionEditorView: View {
             Form {
                 Section {
                     TextField("Prompt", text: $prompt)
+                        .foregroundStyle(.white)
+                        .tint(.white)
                 } header: {
                     sectionHeader("PROMPT")
                 }
@@ -101,6 +103,8 @@ struct QuestionEditorView: View {
                             Text(candidate.displayName).tag(candidate)
                         }
                     }
+                    .foregroundStyle(.white)
+                    .tint(.white.opacity(0.7))
                     .accessibilityIdentifier("question-type")
                     .disabled(isTypeLocked)
                 } header: {
@@ -123,6 +127,7 @@ struct QuestionEditorView: View {
                         } label: {
                             HStack {
                                 Text(choicesSummary)
+                                    .foregroundStyle(.white)
                                     .lineLimit(1)
                                 Spacer()
                                 Text("EDIT")
@@ -145,6 +150,8 @@ struct QuestionEditorView: View {
                                 Text(style.displayName).tag(VisualizationStyle?.some(style))
                             }
                         }
+                        .foregroundStyle(.white)
+                        .tint(.white.opacity(0.7))
                         .accessibilityIdentifier("visualization-picker")
                     } header: {
                         sectionHeader("VISUALIZATION")
@@ -159,20 +166,28 @@ struct QuestionEditorView: View {
                                 Text(style.displayName).tag(style)
                             }
                         }
+                        .foregroundStyle(.white)
+                        .tint(.white.opacity(0.7))
                         .accessibilityIdentifier("input-style")
                         if configFields.min {
                             TextField("Minimum", text: $inputMin)
                                 .keyboardType(.decimalPad)
+                                .foregroundStyle(.white)
+                                .tint(.white)
                                 .accessibilityIdentifier("input-min")
                         }
                         if configFields.max {
                             TextField("Maximum", text: $inputMax)
                                 .keyboardType(.decimalPad)
+                                .foregroundStyle(.white)
+                                .tint(.white)
                                 .accessibilityIdentifier("input-max")
                         }
                         if configFields.step {
                             TextField("Step", text: $inputStep)
                                 .keyboardType(.decimalPad)
+                                .foregroundStyle(.white)
+                                .tint(.white)
                                 .accessibilityIdentifier("input-step")
                         }
                     } header: {
@@ -189,6 +204,8 @@ struct QuestionEditorView: View {
                     Section {
                         TextField("Value for empty responses", text: $defaultAnswer)
                             .keyboardType(.decimalPad)
+                            .foregroundStyle(.white)
+                            .tint(.white)
                             .accessibilityIdentifier("default-answer-field")
                     } header: {
                         sectionHeader("DEFAULT ANSWER")
@@ -202,6 +219,8 @@ struct QuestionEditorView: View {
 
                 Section {
                     TextField("Placeholder", text: $placeholder)
+                        .foregroundStyle(.white)
+                        .tint(.white)
                 } header: {
                     sectionHeader("PLACEHOLDER")
                 }
@@ -210,6 +229,7 @@ struct QuestionEditorView: View {
                 if supportsStateOfMind {
                     Section {
                         Toggle("Log as State of Mind", isOn: $logAsStateOfMind)
+                            .foregroundStyle(.white)
                             .tint(.white)
                     } header: {
                         sectionHeader("APPLE HEALTH")

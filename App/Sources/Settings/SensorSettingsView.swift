@@ -145,6 +145,8 @@ struct SensorSettingsView: View {
                         Text("Fahrenheit").tag(TemperatureUnit.fahrenheit)
                         Text("Celsius").tag(TemperatureUnit.celsius)
                     }
+                    .foregroundStyle(.white)
+                    .tint(.white.opacity(0.7))
                     .onChange(of: temperatureUnit) { _, newValue in
                         settings.temperatureUnit = newValue
                     }
@@ -153,6 +155,8 @@ struct SensorSettingsView: View {
                         Text("Feet").tag(LengthUnit.feet)
                         Text("Meters").tag(LengthUnit.meters)
                     }
+                    .foregroundStyle(.white)
+                    .tint(.white.opacity(0.7))
                     .onChange(of: lengthUnit) { _, newValue in
                         settings.lengthUnit = newValue
                     }

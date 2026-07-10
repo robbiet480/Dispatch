@@ -262,6 +262,8 @@ struct PromptGroupEditorView: View {
             Form {
                 Section {
                     TextField("Name", text: $name)
+                        .foregroundStyle(.white)
+                        .tint(.white)
                         .accessibilityIdentifier("group-name")
                 } header: {
                     sectionHeader("NAME")
@@ -273,6 +275,7 @@ struct PromptGroupEditorView: View {
 
                 Section {
                     Toggle("Enabled", isOn: $isEnabled)
+                        .foregroundStyle(.white)
                         .tint(.white)
                         .accessibilityIdentifier("group-enabled")
                 } footer: {
@@ -343,24 +346,31 @@ struct PromptGroupEditorView: View {
                     Text(kind.displayName).tag(kind)
                 }
             }
+            .foregroundStyle(.white)
+            .tint(.white.opacity(0.7))
             .accessibilityIdentifier("group-schedule-kind")
 
             switch scheduleKind {
             case .everyNHours:
                 Stepper("Every \(everyHours)h", value: $everyHours, in: 1...12)
+                    .foregroundStyle(.white)
                     .accessibilityIdentifier("group-every-hours")
             case .timesPerDay:
                 Stepper("\(timesPerDay)× per day", value: $timesPerDay, in: 1...12)
+                    .foregroundStyle(.white)
                     .accessibilityIdentifier("group-times-per-day")
                 Picker("Distribution", selection: $distribution) {
                     Text("Random").tag(PromptDistribution.random)
                     Text("Semi-random").tag(PromptDistribution.semiRandom)
                     Text("Regular").tag(PromptDistribution.regular)
                 }
+                .foregroundStyle(.white)
+                .tint(.white.opacity(0.7))
             case .dailyAt:
                 ForEach(dailyTimes, id: \.self) { time in
                     HStack {
                         Text(time)
+                            .foregroundStyle(.white)
                         Spacer()
                         Button {
                             dailyTimes.removeAll { $0 == time }
@@ -373,8 +383,16 @@ struct PromptGroupEditorView: View {
                 }
                 HStack {
                     DatePicker("Add a time", selection: $newTime, displayedComponents: .hourAndMinute)
+                        .foregroundStyle(.white)
+                        .tint(.white)
+                        // The compact picker's value capsule ignores
+                        // foregroundStyle — dark scheme keeps it legible
+                        // over the themed background (house pattern, see
+                        // NotificationSettingsView's wheel picker).
+                        .colorScheme(.dark)
                     Button("ADD") { addDailyTime() }
                         .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("group-add-time")
                 }

@@ -62,6 +62,7 @@ struct VisualizationFilterView: View {
                         ForEach(questions, id: \.uniqueIdentifier) { question in
                             Toggle(question.prompt, isOn: binding(for: question))
                                 .foregroundStyle(.white)
+                                .tint(.white.opacity(0.4))
                         }
                     } header: {
                         header("QUESTIONS")
