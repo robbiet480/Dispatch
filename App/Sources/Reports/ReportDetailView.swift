@@ -106,6 +106,9 @@ struct ReportDetailView: View {
         if let connection = report.connectionType {
             append("antenna.radiowaves.left.and.right", "Connection", connection.displayName)
         }
+        if let media = report.media {
+            append("music.note", "Media", media.detailLine)
+        }
         return rows
     }
 
