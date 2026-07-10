@@ -19,11 +19,14 @@ private let backupLog = Logger(subsystem: "io.robbie.Dispatch", category: "backu
 /// while the space-free local Documents path masked the bug locally.
 public enum BackupWriter {
     /// Writes `data` as `filename` in `directory` (creating the directory
-    /// and intermediates first), deletes rotation-expired backups, and
-    /// returns the number of backup files remaining. Prune failures are
-    /// logged and skipped — an undeletable old backup must not fail the
-    /// fresh write that already succeeded.
+    /// and intermediates first), deletes rotation-expired backups written by
+    /// THIS device (`slug` — the shared iCloud folder holds other devices'
+    /// backups too, which rotation must never touch), and returns the number
+    /// of this device's backup files remaining. Prune failures are logged
+    /// and skipped — an undeletable old backup must not fail the fresh
+    /// write that already succeeded.
     public static func writeAndRotate(data: Data, filename: String, in directory: URL,
+                                      slug: String,
                                       keep: Int = BackupRotation.defaultKeepCount) throws -> Int {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -35,7 +38,7 @@ public enum BackupWriter {
         var existing = try fileManager.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles
         ).map(\.lastPathComponent)
-        for doomed in BackupRotation.filesToDelete(existing: existing, keep: keep) {
+        for doomed in BackupRotation.filesToDelete(existing: existing, slug: slug, keep: keep) {
             do {
                 try fileManager.removeItem(at: directory.appendingPathComponent(doomed))
                 existing.removeAll { $0 == doomed }
@@ -43,7 +46,7 @@ public enum BackupWriter {
                 backupLog.error("failed to prune backup \(doomed, privacy: .public): \(error, privacy: .public)")
             }
         }
-        let count = existing.filter { BackupRotation.date(fromFilename: $0) != nil }.count
+        let count = existing.filter { BackupRotation.parse(filename: $0)?.slug == slug }.count
         backupLog.info("wrote backup \(filename, privacy: .public) to \(directory.path(percentEncoded: false), privacy: .public) (\(count, privacy: .public) kept)")
         return count
     }

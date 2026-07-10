@@ -39,6 +39,7 @@ private let backupLog = Logger(subsystem: "io.robbie.Dispatch", category: "backu
 final class BackupManager {
     static let enabledKey = "backup.enabled"
     static let lastBackupKey = "backup.lastBackupDate"
+    static let installIDKey = "backup.installID"
 
     @ObservationIgnored private let container: ModelContainer
     @ObservationIgnored private let defaults: UserDefaults
@@ -46,6 +47,13 @@ final class BackupManager {
     /// True when the test environment must skip all I/O; injecting a
     /// directory re-enables it (the unit-testable path).
     @ObservationIgnored private let isSkipped: Bool
+
+    /// This device's backup-filename slug (model + persisted per-install
+    /// short ID): multiple devices write into the SAME iCloud Drive folder,
+    /// so filenames must be per-device and rotation scoped to this slug —
+    /// otherwise two devices collide on a shared name and each device's
+    /// rotation deletes the other's files.
+    @ObservationIgnored private let deviceSlug: String
 
     /// iCloud Drive `Documents/Backups/` inside the ubiquity container —
     /// resolved once off-main at init and cached (plan 25); nil until
@@ -83,6 +91,16 @@ final class BackupManager {
         isSkipped = isTestEnvironment && directory == nil
         self.directory = directory
             ?? URL.documentsDirectory.appendingPathComponent("Backups", isDirectory: true)
+        // Per-install short ID (persisted): disambiguates two same-model
+        // devices sharing an iCloud folder. 8 hex chars of a UUID is plenty.
+        let installID: String
+        if let stored = defaults.string(forKey: Self.installIDKey), !stored.isEmpty {
+            installID = stored
+        } else {
+            installID = String(UUID().uuidString.prefix(8)).lowercased()
+            defaults.set(installID, forKey: Self.installIDKey)
+        }
+        deviceSlug = BackupRotation.deviceSlug(model: DeviceIdentity.model, installID: installID)
         isEnabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         destination = BackupDestination.stored(defaults.string(forKey: BackupDestination.defaultsKey))
         let stored = defaults.double(forKey: Self.lastBackupKey)
@@ -144,6 +162,7 @@ final class BackupManager {
         guard localTarget != nil || cloudTarget != nil else { return }
         isBackingUp = true
         let container = container
+        let slug = deviceSlug
         Task.detached(priority: .utility) {
             var result: (date: Date, count: Int)?
             var cloudFailed = false
@@ -152,14 +171,16 @@ final class BackupManager {
                 // import and the remote-change observer; the export never
                 // touches the main actor.
                 let data = try V2Exporter.exportData(from: ModelContext(container))
-                let filename = BackupRotation.backupFilename(for: now)
+                let filename = BackupRotation.backupFilename(for: now, slug: slug)
                 if let localTarget {
-                    let count = try BackupWriter.writeAndRotate(data: data, filename: filename, in: localTarget)
+                    let count = try BackupWriter.writeAndRotate(
+                        data: data, filename: filename, in: localTarget, slug: slug)
                     result = (now, count)
                 }
                 if let cloudTarget {
                     do {
-                        let count = try BackupWriter.writeAndRotate(data: data, filename: filename, in: cloudTarget)
+                        let count = try BackupWriter.writeAndRotate(
+                            data: data, filename: filename, in: cloudTarget, slug: slug)
                         // The caption's count comes from the local copy when
                         // both were written (they rotate identically).
                         if result == nil { result = (now, count) }
@@ -230,13 +251,16 @@ final class BackupManager {
     private func refreshCountAsync() {
         guard !isSkipped else { return }
         let directory = directory
+        let slug = deviceSlug
         Task.detached(priority: .utility) {
             // URL-based listing (review minor): skips hidden files and
             // avoids the path-string round trip of the atPath variant.
+            // Scoped to this device's slug — the caption counts OUR rotated
+            // backups, matching what writeAndRotate returns.
             let urls = (try? FileManager.default.contentsOfDirectory(
                 at: directory, includingPropertiesForKeys: nil,
                 options: .skipsHiddenFiles)) ?? []
-            let count = urls.count { BackupRotation.date(fromFilename: $0.lastPathComponent) != nil }
+            let count = urls.count { BackupRotation.parse(filename: $0.lastPathComponent)?.slug == slug }
             await MainActor.run {
                 self.backupCount = count
             }

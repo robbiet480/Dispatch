@@ -42,14 +42,38 @@ private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 0, _ minu
     #expect(!BackupRotation.isDue(lastBackupDate: now.addingTimeInterval(-30), now: now, threshold: 60))
 }
 
+// MARK: - device slug
+
+private let slug = "iPhone17-1-ab12cd34"
+
+@Test func deviceSlugIsFilesystemSafeAndStable() {
+    // The "," in hardware model identifiers must not reach a filename.
+    #expect(BackupRotation.deviceSlug(model: "iPhone17,1", installID: "ab12cd34") == "iPhone17-1-ab12cd34")
+    #expect(BackupRotation.deviceSlug(model: "Watch7,4", installID: "ff00aa11") == "Watch7-4-ff00aa11")
+    // Anything hostile collapses to dashes; nil/empty model falls back.
+    #expect(BackupRotation.deviceSlug(model: "a/b\\c:d e", installID: "x") == "a-b-c-d-e-x")
+    #expect(BackupRotation.deviceSlug(model: nil, installID: "ab12cd34") == "device-ab12cd34")
+    #expect(BackupRotation.deviceSlug(model: "", installID: "ab12cd34") == "device-ab12cd34")
+}
+
 // MARK: - filename codec
 
 @Test func backupFilenameIsDeterministicAndRoundTrips() throws {
     let stamp = date(2026, 7, 9, 14, 32)
-    let name = BackupRotation.backupFilename(for: stamp, timeZone: utc)
-    #expect(name == "dispatch-backup-2026-07-09-1432.json")
-    let parsed = try #require(BackupRotation.date(fromFilename: name, timeZone: utc))
-    #expect(parsed == stamp) // minute precision — exact round-trip
+    let name = BackupRotation.backupFilename(for: stamp, slug: slug, timeZone: utc)
+    #expect(name == "dispatch-backup-iPhone17-1-ab12cd34-2026-07-09-1432.json")
+    let parsed = try #require(BackupRotation.parse(filename: name, timeZone: utc))
+    #expect(parsed.date == stamp) // minute precision — exact round-trip
+    #expect(parsed.slug == slug)
+    #expect(BackupRotation.date(fromFilename: name, timeZone: utc) == stamp)
+}
+
+@Test func backupFilenameParserAcceptsLegacyUnsluggedFiles() throws {
+    // Pre-slug shape (already on users' disks/iCloud): parses with nil slug.
+    let parsed = try #require(BackupRotation.parse(
+        filename: "dispatch-backup-2026-07-09-1432.json", timeZone: utc))
+    #expect(parsed.slug == nil)
+    #expect(parsed.date == date(2026, 7, 9, 14, 32))
 }
 
 @Test func backupFilenameParserRejectsForeignFiles() {
@@ -57,44 +81,75 @@ private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 0, _ minu
     #expect(BackupRotation.date(fromFilename: "dispatch-backup-garbage.json", timeZone: utc) == nil)
     #expect(BackupRotation.date(fromFilename: "dispatch-backup-2026-07-09-1432.txt", timeZone: utc) == nil)
     #expect(BackupRotation.date(fromFilename: "dispatch-backup-2026-99-99-9999.json", timeZone: utc) == nil)
+    #expect(BackupRotation.date(fromFilename: "dispatch-backup-slug-2026-99-99-9999.json", timeZone: utc) == nil)
+    #expect(BackupRotation.date(fromFilename: "dispatch-backup--2026-07-09-1432.json", timeZone: utc) == nil)
 }
 
 // MARK: - rotation
 
 @Test func rotationDeletesOldestBeyondKeepCount() {
     let names = (1...20).map {
-        BackupRotation.backupFilename(for: date(2026, 6, $0, 9, 0), timeZone: utc)
+        BackupRotation.backupFilename(for: date(2026, 6, $0, 9, 0), slug: slug, timeZone: utc)
     }
-    let doomed = BackupRotation.filesToDelete(existing: names.shuffled(), keep: 14, timeZone: utc)
+    let doomed = BackupRotation.filesToDelete(existing: names.shuffled(), slug: slug, keep: 14, timeZone: utc)
     // The oldest 6 go, newest first among the survivors untouched.
     #expect(Set(doomed) == Set(names.prefix(6)))
 }
 
 @Test func rotationKeepsEverythingAtOrUnderKeepCount() {
     let names = (1...14).map {
-        BackupRotation.backupFilename(for: date(2026, 6, $0), timeZone: utc)
+        BackupRotation.backupFilename(for: date(2026, 6, $0), slug: slug, timeZone: utc)
     }
-    #expect(BackupRotation.filesToDelete(existing: names, keep: 14, timeZone: utc).isEmpty)
-    #expect(BackupRotation.filesToDelete(existing: [], keep: 14, timeZone: utc).isEmpty)
+    #expect(BackupRotation.filesToDelete(existing: names, slug: slug, keep: 14, timeZone: utc).isEmpty)
+    #expect(BackupRotation.filesToDelete(existing: [], slug: slug, keep: 14, timeZone: utc).isEmpty)
 }
 
 @Test func rotationNeverTouchesForeignFiles() {
     var names = (1...20).map {
-        BackupRotation.backupFilename(for: date(2026, 6, $0), timeZone: utc)
+        BackupRotation.backupFilename(for: date(2026, 6, $0), slug: slug, timeZone: utc)
     }
     names.append("my-important-export.json")
     names.append(".DS_Store")
-    let doomed = BackupRotation.filesToDelete(existing: names, keep: 14, timeZone: utc)
+    let doomed = BackupRotation.filesToDelete(existing: names, slug: slug, keep: 14, timeZone: utc)
     #expect(doomed.count == 6)
     #expect(!doomed.contains("my-important-export.json"))
     #expect(!doomed.contains(".DS_Store"))
 }
 
 @Test func rotationOrderComesFromEncodedTimestampNotListOrder() {
-    let old = BackupRotation.backupFilename(for: date(2026, 1, 1), timeZone: utc)
-    let mid = BackupRotation.backupFilename(for: date(2026, 3, 1), timeZone: utc)
-    let new = BackupRotation.backupFilename(for: date(2026, 7, 1), timeZone: utc)
+    let old = BackupRotation.backupFilename(for: date(2026, 1, 1), slug: slug, timeZone: utc)
+    let mid = BackupRotation.backupFilename(for: date(2026, 3, 1), slug: slug, timeZone: utc)
+    let new = BackupRotation.backupFilename(for: date(2026, 7, 1), slug: slug, timeZone: utc)
     // Listed newest-first; keep 2 must still delete the chronologically oldest.
-    #expect(BackupRotation.filesToDelete(existing: [new, mid, old], keep: 2, timeZone: utc) == [old])
-    #expect(BackupRotation.filesToDelete(existing: [old, new, mid], keep: 1, timeZone: utc) == [mid, old])
+    #expect(BackupRotation.filesToDelete(existing: [new, mid, old], slug: slug, keep: 2, timeZone: utc) == [old])
+    #expect(BackupRotation.filesToDelete(existing: [old, new, mid], slug: slug, keep: 1, timeZone: utc) == [mid, old])
+}
+
+/// The shared-iCloud-folder scenario: two devices' slugged backups plus a
+/// user's legacy un-slugged files in ONE directory. Rotation for one device
+/// must only ever delete that device's own files — the other device's
+/// backups and the grandfathered legacy files are untouchable, even when
+/// they are the chronologically oldest files present.
+@Test func rotationScopesToThisDeviceSlugOnly() {
+    let mine = "iPhone17-1-ab12cd34"
+    let theirs = "iPad16-3-99ee00ff"
+    // Their files and the legacy files are OLDER than all of mine.
+    let theirNames = (1...5).map {
+        BackupRotation.backupFilename(for: date(2025, 1, $0), slug: theirs, timeZone: utc)
+    }
+    let legacyNames = ["dispatch-backup-2024-12-01-0900.json",
+                       "dispatch-backup-2024-12-02-0900.json"]
+    let myNames = (1...5).map {
+        BackupRotation.backupFilename(for: date(2026, 6, $0), slug: mine, timeZone: utc)
+    }
+    let existing = (theirNames + legacyNames + myNames).shuffled()
+
+    // keep 3 of MINE: only my two oldest go.
+    let doomed = BackupRotation.filesToDelete(existing: existing, slug: mine, keep: 3, timeZone: utc)
+    #expect(Set(doomed) == Set(myNames.prefix(2)))
+
+    // Even keep 0 can only ever claim my own files.
+    let scorchedEarth = BackupRotation.filesToDelete(existing: existing, slug: mine, keep: 0, timeZone: utc)
+    #expect(Set(scorchedEarth) == Set(myNames))
+    #expect(scorchedEarth.allSatisfy { !theirNames.contains($0) && !legacyNames.contains($0) })
 }
