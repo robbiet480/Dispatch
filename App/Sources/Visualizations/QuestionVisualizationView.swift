@@ -164,45 +164,60 @@ struct NumericSeriesView: View {
     let theme: Theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Average: \(formattedAverage)")
-                .font(.headline)
+        Chart {
+            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                LineMark(
+                    x: .value("Date", point.date),
+                    y: .value("Value", point.value)
+                )
                 .foregroundStyle(.white)
-
-            Chart {
-                ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Value", point.value)
-                    )
-                    .foregroundStyle(.white)
-                    .symbol(.circle)
-                }
-                RuleMark(y: .value("Average", average))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .symbol(.circle)
             }
-            .chartXAxis {
-                AxisMarks(values: .automatic) {
-                    AxisValueLabel()
-                        .foregroundStyle(.white.opacity(0.7))
+            RuleMark(y: .value("Average", average))
+                .foregroundStyle(.white.opacity(0.4))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                // Plan 29: the average reads inline off the rule instead of
+                // an external headline — full-bleed principle.
+                .annotation(position: .top, alignment: .trailing) {
+                    Text("AVG \(formattedAverage)")
+                        .font(.caption2.weight(.semibold))
+                        .kerning(0.5)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(.trailing, 4)
                 }
-            }
-            .chartYAxis {
-                AxisMarks(values: .automatic) {
-                    AxisValueLabel()
-                        .foregroundStyle(.white.opacity(0.7))
-                    AxisGridLine()
-                        .foregroundStyle(.white.opacity(0.2))
-                }
-            }
-            // VoiceOver summary for the line chart (the marks themselves
-            // aren't individually meaningful): count, range, latest, average.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Values over time")
-            .accessibilityValue(accessibilitySummary)
         }
+        // Plan 29: no leading Y-axis gutter — the chart owns the full page
+        // width; the average rule + min/max are the value anchors.
+        .chartYAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .automatic) {
+                AxisValueLabel()
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
+        // Min/max captions live inside the plot's leading corners so the
+        // hidden Y axis doesn't leave the sparse demo line unanchored
+        // (decision recorded per plan 29 Task 5 Step 1).
+        .overlay(alignment: .topLeading) { cornerCaption(points.map(\.value).max()) }
+        .overlay(alignment: .bottomLeading) { cornerCaption(points.map(\.value).min()) }
+        // VoiceOver summary for the line chart (the marks themselves
+        // aren't individually meaningful): count, range, latest, average.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Values over time")
+        .accessibilityValue(accessibilitySummary)
         .accessibilityIdentifier("viz-numeric-series")
+    }
+
+    @ViewBuilder
+    private func cornerCaption(_ value: Double?) -> some View {
+        if let value {
+            Text(value.truncatingRemainder(dividingBy: 1) == 0
+                 ? String(format: "%.0f", value)
+                 : String(format: "%.1f", value))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(4)
+        }
     }
 
     private var formattedAverage: String {
