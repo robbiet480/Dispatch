@@ -12,6 +12,7 @@ struct NotificationSettingsView: View {
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(\.notificationPrefs) private var prefs
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var alertsPerDay: Int
     @State private var distribution: PromptDistribution
@@ -21,7 +22,18 @@ struct NotificationSettingsView: View {
     @State private var nagIntervalMinutes: Int
     @State private var nagMaxCount: Int
     @State private var digestEnabled: Bool
-    @State private var nextAlertText: String = "—"
+    /// What the "NEXT NOTIFICATION" hero shows. `.loading` renders the
+    /// same layout as `.empty` with blank strings so the slot doesn't jump
+    /// when the async pending-requests read lands.
+    private enum NextAlertState: Equatable {
+        case loading
+        /// A pending prompt exists: big time + source caption.
+        case scheduled(time: String, caption: String)
+        /// No pending prompt: honest explanation instead of a dash.
+        case empty(title: String, caption: String)
+    }
+
+    @State private var nextAlertState: NextAlertState = .loading
     @State private var isAddingTime = false
     @State private var newTimeSelection = Date()
 
@@ -59,6 +71,12 @@ struct NotificationSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear(perform: refreshNextAlert)
+        // Returning from background (e.g. after flipping notification
+        // permission in iOS Settings, or after the foreground replan ran)
+        // can change the pending schedule — re-read it.
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active { refreshNextAlert() }
+        }
         .sheet(isPresented: $isAddingTime) {
             addTimeSheet
         }
@@ -69,19 +87,42 @@ struct NotificationSettingsView: View {
     private var nextNotificationSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
-                Text(nextAlertText)
-                    .font(.system(size: 40, weight: .light, design: .rounded))
-                    .foregroundStyle(.white)
-                    .accessibilityIdentifier("next-notification-time")
-                Text("FROM DISTRIBUTION")
+                // The title keeps a 48pt slot (the 40pt time's line height)
+                // in every state so the layout doesn't jump between the big
+                // time and the smaller empty-state title.
+                Group {
+                    switch nextAlertState {
+                    case .loading:
+                        Text(verbatim: "")
+                    case .scheduled(let time, _):
+                        Text(time)
+                            .font(.system(size: 40, weight: .light, design: .rounded))
+                    case .empty(let title, _):
+                        Text(title)
+                            .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    }
+                }
+                .frame(minHeight: 48)
+                .foregroundStyle(.white)
+                .accessibilityIdentifier("next-notification-time")
+
+                Text(nextAlertCaption)
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.6))
+                    .accessibilityIdentifier("next-notification-source")
             }
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, 8)
             .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("NEXT NOTIFICATION")
+        }
+    }
+
+    private var nextAlertCaption: String {
+        switch nextAlertState {
+        case .loading: ""
+        case .scheduled(_, let caption), .empty(_, let caption): caption
         }
     }
 
@@ -418,14 +459,57 @@ struct NotificationSettingsView: View {
     }
 
     private func refreshNextAlert() {
-        scheduler.nextPromptDate { date in
+        scheduler.nextPrompt { next in
             Task { @MainActor in
-                guard let date else {
-                    nextAlertText = "—"
-                    return
+                if let next {
+                    nextAlertState = .scheduled(
+                        time: Self.timeFormatter.string(from: next.date),
+                        caption: caption(for: next.source))
+                } else {
+                    nextAlertState = await emptyNextAlertState()
                 }
-                nextAlertText = Self.timeFormatter.string(from: date)
             }
+        }
+    }
+
+    /// Caption under the hero time: the ACTUAL source of the next pending
+    /// prompt (the old UI hardcoded "FROM DISTRIBUTION" regardless).
+    @MainActor private func caption(for source: NextPromptSource) -> String {
+        switch source {
+        case .distribution:
+            "FROM DISTRIBUTION"
+        case .scheduledTime:
+            "SCHEDULED TIME"
+        case .promptGroup(let groupID):
+            if let name = scheduler.promptGroupName(forID: groupID) {
+                "FROM GROUP \(name.uppercased())"
+            } else {
+                "FROM PROMPT GROUP"
+            }
+        case .snooze:
+            "SNOOZED PROMPT"
+        }
+    }
+
+    /// Honest empty state when nothing is pending, in order of likelihood:
+    /// permission missing → point at iOS Settings; marked asleep → the
+    /// replan clears all prompts until wake; otherwise the schedule simply
+    /// hasn't been planned/added yet — a full replan runs on every app
+    /// foreground (DispatchApp's scenePhase .active handler), so that's the
+    /// truthful "when it fixes itself" line.
+    @MainActor private func emptyNextAlertState() async -> NextAlertState {
+        switch await scheduler.authorizationStatus() {
+        case .authorized, .provisional, .ephemeral:
+            if awakeStore.isAwake {
+                .empty(title: "No prompts scheduled",
+                       caption: "A NEW SCHEDULE IS PLANNED WHEN THE APP OPENS")
+            } else {
+                .empty(title: "No prompts scheduled",
+                       caption: "YOU'RE MARKED ASLEEP — PROMPTS RESUME AT WAKE")
+            }
+        default: // .denied, .notDetermined
+            .empty(title: "Notifications are off",
+                   caption: "ENABLE IN iOS SETTINGS TO GET PROMPTS")
         }
     }
 

@@ -8,39 +8,10 @@ import UserNotifications
 
 private let notificationLog = Logger(subsystem: "io.robbie.Dispatch", category: "notifications")
 
-/// Category + action identifiers for the interactive `DISPATCH_PROMPT`
-/// notification (quick Yes/No answer + snooze) and the pending-request
-/// identifier prefixes used to distinguish re-plannable prompts from
-/// one-off snoozes.
-enum NotificationIdentifiers {
-    static let category = "DISPATCH_PROMPT"
-    static let answerYesAction = "answer-yes"
-    static let answerNoAction = "answer-no"
-    static let snoozeAction = "snooze"
-    static let promptPrefix = "prompt-"
-    static let snoozePrefix = "snooze-"
-    static let nagPrefix = "nag-"
-    /// Group prompts: `gprompt-<groupID>-<yyyyMMdd-HHmm>` (plan 12). Their
-    /// nags reuse `nag-` with the `<groupID>-<stamp>` parent stamp embedded.
-    static let groupPromptPrefix = "gprompt-"
-    /// Weekly digest reminder (plan 14). One repeating request,
-    /// `digest-weekly`; removals join the prompt-/gprompt-/nag- batch.
-    static let digestPrefix = "digest-"
-    static let digestWeeklyIdentifier = "digest-weekly"
-    /// Webhook delivery-failure notice (plan 24): `webhook-failed-<reportID>`,
-    /// posted by WebhookManager on a report's 3rd failed attempt. Joins the
-    /// standard removal-batch prefix discipline (replan batch + the
-    /// delete-all removeAll).
-    static let webhookFailedPrefix = "webhook-failed-"
-    /// userInfo key carrying the PromptGroup uniqueIdentifier.
-    static let promptGroupIDKey = "promptGroupID"
-    /// userInfo key carrying the UUID of the HKWorkout that fired a
-    /// workout-end prompt (plan 12 amendment).
-    static let triggeringWorkoutIDKey = "triggeringWorkoutID"
-    /// userInfo marker ("1") on prompts fired by a visit arrival (plan 16) —
-    /// tap-through reports get the `.visitArrival` trigger.
-    static let visitArrivalKey = "triggeredByVisitArrival"
-}
+// NotificationIdentifiers (category/action identifiers and pending-request
+// prefixes) moved to DispatchKit — Sources/DispatchKit/Prompting/
+// NotificationIdentifiers.swift — alongside the kit-tested
+// `promptSource(forIdentifier:)` parser used by the settings hero.
 
 /// Owns UNUserNotificationCenter: permission, request building/re-planning,
 /// delegate routing for quick answers/snooze/tap-through, and the
@@ -726,10 +697,23 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Next alert readout
 
     /// Reads the soonest pending DISPATCH_PROMPT (or snooze) trigger date,
-    /// for the settings UI's "next alert" caption.
+    /// for the settings UI's "next alert" caption. Delegates to
+    /// `nextPrompt` so both readouts share the same "prompts only" filter
+    /// (nags, the weekly digest, and webhook-failure notices are excluded —
+    /// they are not upcoming prompts).
     func nextPromptDate(completion: @escaping @Sendable (Date?) -> Void) {
+        nextPrompt { next in completion(next?.date) }
+    }
+
+    /// The soonest pending PROMPT (global, group, or snooze) and where it
+    /// came from, for the settings "NEXT NOTIFICATION" hero. Nag reminders
+    /// are deliberately excluded: a nag is a follow-up about an
+    /// already-delivered prompt, not the next prompt.
+    func nextPrompt(completion: @escaping @Sendable ((date: Date, source: NextPromptSource)?) -> Void) {
+        // Snapshot prefs on the main actor; the center callback is nonisolated.
+        let scheduledTimes = prefs.scheduledTimes
         center.getPendingNotificationRequests { requests in
-            let dates = requests.compactMap { request -> Date? in
+            let candidates = requests.compactMap { request -> (date: Date, source: NextPromptSource)? in
                 let nextDate: Date? = switch request.trigger {
                 case let calendar as UNCalendarNotificationTrigger:
                     calendar.nextTriggerDate()
@@ -738,10 +722,34 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                 default:
                     nil
                 }
-                return nextDate
+                guard let nextDate,
+                      let source = NotificationIdentifiers.promptSource(
+                        forIdentifier: request.identifier,
+                        fireDate: nextDate,
+                        scheduledTimes: scheduledTimes)
+                else { return nil }
+                return (nextDate, source)
             }
-            completion(dates.min())
+            completion(candidates.min { $0.date < $1.date })
         }
+    }
+
+    /// Display name for a prompt group, for the hero caption's
+    /// "FROM GROUP <NAME>" line; nil when the group is unnamed or gone.
+    func promptGroupName(forID groupID: String) -> String? {
+        let context = ModelContext(container)
+        var descriptor = FetchDescriptor<PromptGroup>(
+            predicate: #Predicate { $0.uniqueIdentifier == groupID })
+        descriptor.fetchLimit = 1
+        let name = (try? context.fetch(descriptor))?.first?.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (name?.isEmpty ?? true) ? nil : name
+    }
+
+    /// Current notification authorization, for the hero's empty state
+    /// ("Notifications are off" vs "No prompts scheduled").
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        await center.notificationSettings().authorizationStatus
     }
 
     // MARK: - Delegate
