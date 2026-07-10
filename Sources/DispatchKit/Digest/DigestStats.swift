@@ -55,10 +55,18 @@ public struct DigestStats: Equatable, Sendable {
     public var workoutSeconds: Double
     /// Report streak as of `weekEnding` (see `ReportStreak`).
     public var streakDays: Int
+    /// The top 2 insights, computed over ALL filed reports (all-time, not the
+    /// week — long-run patterns need the full sample to be honest). Only
+    /// populated when the InsightsEngine's stability guards pass (sample
+    /// sizes, effect thresholds); usually empty for young datasets. These are
+    /// precomputed sentences: the LLM prompt may weave them in verbatim but
+    /// never derives its own, and the template appends them deterministically.
+    public var topInsights: [Insight]
 
     // MARK: - Compute
 
     private static let topLimit = 5
+    private static let insightLimit = 2
 
     /// `questions` supplies what responses alone can't: the tokens/people type
     /// split, choice order for valence mapping, and `stateOfMindKind` flags.
@@ -197,7 +205,9 @@ public struct DigestStats: Equatable, Sendable {
             stepsTotal: stepsTotal,
             workoutCount: workouts.count,
             workoutSeconds: workoutSeconds,
-            streakDays: ReportStreak.days(reports: filed, now: weekEnding, calendar: calendar)
+            streakDays: ReportStreak.days(reports: filed, now: weekEnding, calendar: calendar),
+            topInsights: Array(InsightsEngine.compute(reports: filed, questions: questions)
+                .prefix(insightLimit))
         )
     }
 
@@ -259,6 +269,11 @@ public struct DigestStats: Equatable, Sendable {
         }
         if streakDays > 1 {
             sentences.append("Your report streak stands at \(streakDays) days.")
+        }
+        // Insight sentences are already presentation-ready and honest
+        // ("tends to"/"average", sample-guarded) — append them verbatim.
+        for insight in topInsights {
+            sentences.append("Looking across all your reports: \(insight.title)")
         }
         return sentences.joined(separator: " ")
     }

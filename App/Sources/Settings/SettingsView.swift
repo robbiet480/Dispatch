@@ -80,6 +80,12 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("weekly-digest-link")
             .listRowBackground(Color.white.opacity(0.12))
+
+            NavigationLink(destination: InsightsView()) {
+                settingsLabel("Insights")
+            }
+            .accessibilityIdentifier("insights-link")
+            .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("SCHEDULE")
         }

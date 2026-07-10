@@ -40,8 +40,12 @@ enum DigestGenerator {
                 Use ONLY the statistics provided in the prompt. Do not invent \
                 events, numbers, people, places, moods, or any detail that is \
                 not explicitly present in those statistics. If a statistic is \
-                absent, say nothing about it. Aim for roughly 120–150 words of \
-                plain prose — no headings, no lists.
+                absent, say nothing about it. Any long-run pattern sentences \
+                provided are precomputed — you may weave them in verbatim or \
+                lightly rephrase them, but never compute, extrapolate, or \
+                invent correlations or patterns yourself, and never present a \
+                pattern as a cause. Aim for roughly 120–150 words of plain \
+                prose — no headings, no lists.
                 """)
                 let prompt = "Write this week's reflection from these statistics only:\n\(facts(for: stats))"
                 var latest = ""
@@ -95,6 +99,12 @@ enum DigestGenerator {
         }
         if stats.streakDays > 0 {
             lines.append("- Current report streak: \(stats.streakDays) days")
+        }
+        if !stats.topInsights.isEmpty {
+            lines.append("- Long-run patterns across ALL reports (precomputed sentences; use as-is, do not derive new ones):")
+            for insight in stats.topInsights {
+                lines.append("  - \(insight.title) \(insight.detail)")
+            }
         }
         return lines.joined(separator: "\n")
     }
