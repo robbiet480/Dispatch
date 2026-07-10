@@ -195,3 +195,9 @@ endpoints (`/api/pending`, `/api/flags`, `/api/approve`, `/api/reject` +
 `/api/resolve-flag`), so it can later be ported to a Cloudflare Worker:
 reimplement the endpoints with WebCrypto ECDSA P-256 signing (key in a Worker
 secret) and serve the same page as a static asset, behind Cloudflare Access.
+
+> **Query lag:** CloudKit query indexes are eventually consistent — `list` can
+> briefly show already-processed submissions (or miss brand-new ones) for a few
+> minutes after mutations. `approve` is safe against this: it verifies the
+> submission with a strongly-consistent fetch before creating anything, so
+> acting on a stale entry fails cleanly rather than duplicating.
