@@ -133,3 +133,37 @@ import Testing
     let second = try V2Exporter.exportData(from: context)
     #expect(first == second) // sorted keys + sorted records
 }
+
+/// Plan-26 connection raws (and unknown future raws) travel the wire untouched:
+/// `connection` is a raw Int? end-to-end, so no importer change is needed.
+@Test func connectionRawsRoundTripThroughV2() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let lte = Report()
+    lte.uniqueIdentifier = "r-lte"
+    lte.connection = 5
+    contextA.insert(lte)
+    let unknown = Report()
+    unknown.uniqueIdentifier = "r-unknown-connection"
+    unknown.connection = 99
+    contextA.insert(unknown)
+    try contextA.save()
+
+    let export = try V2Exporter.exportData(from: contextA)
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(export, into: contextB)
+    let imported = try contextB.fetch(FetchDescriptor<Report>())
+
+    let importedLTE = try #require(imported.first { $0.uniqueIdentifier == "r-lte" })
+    #expect(importedLTE.connection == 5)
+    #expect(importedLTE.connectionType == .cellularLTE)
+
+    let importedUnknown = try #require(imported.first { $0.uniqueIdentifier == "r-unknown-connection" })
+    #expect(importedUnknown.connection == 99)
+    #expect(importedUnknown.connectionType == nil)
+
+    // Unknown raw re-exports untouched.
+    let exportB = try V2Exporter.exportData(from: contextB)
+    #expect(export == exportB)
+}

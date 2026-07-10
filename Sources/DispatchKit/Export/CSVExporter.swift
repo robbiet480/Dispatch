@@ -5,7 +5,7 @@ public enum CSVExporter {
     static let sensorColumns = [
         "date", "timeZone", "kind", "trigger", "latitude", "longitude", "place",
         "weather", "tempF", "altitudeMeters", "audioAvg", "audioPeak",
-        "battery", "steps", "photoCount",
+        "battery", "steps", "photoCount", "connection",
     ]
 
     public static func exportCSV(from context: ModelContext) throws -> String {
@@ -37,6 +37,7 @@ public enum CSVExporter {
                 report.battery.map { String($0) } ?? "",
                 report.health.first { $0.type == "steps" }.map { String(Int($0.value)) } ?? "",
                 String(report.photos.count),
+                report.connectionType?.displayName ?? "",
             ]
             for prompt in prompts {
                 fields.append(flatten(byPrompt[prompt]))
