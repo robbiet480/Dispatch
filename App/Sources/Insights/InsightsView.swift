@@ -11,6 +11,7 @@ import SwiftUI
 /// engine's guards exist to prevent.
 struct InsightsView: View {
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query private var reports: [Report]
     @Query private var questions: [Question]
     /// Person registry (plan 22): person signals resolve alternate names.
@@ -59,8 +60,13 @@ struct InsightsView: View {
                             emptyState
                         } else {
                             explainer
-                            ForEach(Array(insights.enumerated()), id: \.offset) { _, insight in
-                                insightCard(insight)
+                            // Plan 27: adaptive columns on regular width
+                            // (iPad); a single flexible column at compact
+                            // width renders identically to the old VStack.
+                            LazyVGrid(columns: cardColumns, alignment: .leading, spacing: 12) {
+                                ForEach(Array(insights.enumerated()), id: \.offset) { _, insight in
+                                    insightCard(insight)
+                                }
                             }
                         }
                     }
@@ -81,6 +87,15 @@ struct InsightsView: View {
             insights = InsightsEngine.compute(reports: reports, questions: questions,
                                               people: people)
         }
+    }
+
+    /// Plan 27: adaptive card columns on regular width; compact stays one
+    /// flexible column (identical to the previous VStack rendering).
+    private var cardColumns: [GridItem] {
+        if horizontalSizeClass == .regular {
+            return [GridItem(.adaptive(minimum: 320), spacing: 12)]
+        }
+        return [GridItem(.flexible())]
     }
 
     private var filedCount: Int {

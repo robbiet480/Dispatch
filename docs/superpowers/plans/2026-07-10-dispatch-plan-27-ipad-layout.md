@@ -44,7 +44,7 @@ Verify: kit suite + both build-for-testing destinations + iPhone UI suite spot-r
 
 ### Task 3: adaptive Home visualization grid + Insights columns
 
-- [ ] **Files:** `App/Sources/HomeView.swift` (regular width: `LazyVGrid` two-column card grid of `QuestionVisualizationView`s in a `ScrollView`, fixed card height, filter pill + report count unchanged; compact: existing pager untouched), `App/Sources/Insights/InsightsView.swift` (regular width: adaptive-minimum grid for insight cards).
+- [x] **Files:** `App/Sources/HomeView.swift` (regular width: `LazyVGrid` two-column card grid of `QuestionVisualizationView`s in a `ScrollView`, fixed card height, filter pill + report count unchanged; compact: existing pager untouched), `App/Sources/Insights/InsightsView.swift` (regular width: adaptive-minimum grid for insight cards).
 
 **Contract:** grid appears only at `horizontalSizeClass == .regular`; the memoized `visualizationTaskID`/`insightsTaskID` rebuild pattern is reused untouched (the grid consumes the same `visualizations` dictionary); page-selection fallback logic stays for the pager path. No kit changes.
 
