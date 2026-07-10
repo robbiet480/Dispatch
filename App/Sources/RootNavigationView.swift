@@ -59,7 +59,10 @@ private struct PadRootView: View {
             }
         }
         // Clear a dangling selection when the selected report disappears
-        // (swipe-delete in the sidebar, delete-all, remote sync).
+        // (swipe-delete in the sidebar, delete-all, remote sync). Count is a
+        // sufficient trigger even though a same-count delete+insert wouldn't
+        // fire it: the detail destination re-resolves by ID on every render,
+        // so that edge benignly lands on the deleted-report placeholder.
         .onChange(of: reports.count) {
             guard let selectedReportID else { return }
             if !reports.contains(where: { $0.uniqueIdentifier == selectedReportID }) {
