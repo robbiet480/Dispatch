@@ -35,9 +35,11 @@ final class WebhookUITests: XCTestCase {
         urlField.tap()
         urlField.typeText("https://example.com/webhook")
 
-        // Status row starts empty.
-        let status = app.otherElements["webhook-status"].firstMatch
+        // Status value starts empty (identifier lives on the value Text —
+        // house pattern, see backup-caption).
+        let status = app.staticTexts["webhook-status"]
         XCTAssertTrue(status.waitForExistence(timeout: 10))
+        XCTAssertEqual(status.label, "None yet")
 
         // Send Test exercises the same transport path and reports inline.
         app.buttons["webhook-test"].tap()
@@ -70,9 +72,7 @@ final class WebhookUITests: XCTestCase {
         XCTAssertTrue(webhookLink.waitForExistence(timeout: 10))
         webhookLink.tap()
         XCTAssertTrue(status.waitForExistence(timeout: 10))
-        let delivered = NSPredicate(format: "label CONTAINS 'Delivered'")
-        let deliveredText = app.staticTexts.matching(delivered).firstMatch
-        XCTAssertTrue(deliveredText.waitForExistence(timeout: 10),
-                      "status row should show a delivered webhook")
+        XCTAssertTrue(status.label.contains("Delivered"),
+                      "status row should show a delivered webhook, got: \(status.label)")
     }
 }
