@@ -126,6 +126,31 @@ final class BackupManager {
         }
     }
 
+    /// Delete All Data opt-in ("Also delete backups"): removes the whole
+    /// Backups directory off-main and resets the staleness marker + caption
+    /// state, so the next scene-active `backUpIfStale()` writes a fresh
+    /// backup of the (reseeded) store. The enabled toggle is untouched —
+    /// deleting data is not a request to stop backing up.
+    func deleteAllBackups() {
+        guard !isSkipped else { return }
+        let directory = directory
+        Task.detached(priority: .utility) {
+            do {
+                if FileManager.default.fileExists(atPath: directory.path()) {
+                    try FileManager.default.removeItem(at: directory)
+                }
+                backupLog.info("deleted all backups (delete-all-data opt-in)")
+            } catch {
+                backupLog.error("failed to delete backups: \(error, privacy: .public)")
+            }
+            await MainActor.run {
+                self.lastBackupDate = nil
+                self.backupCount = 0
+                self.defaults.removeObject(forKey: Self.lastBackupKey)
+            }
+        }
+    }
+
     private func refreshCountAsync() {
         guard !isSkipped else { return }
         let directory = directory

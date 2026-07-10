@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// The catalog of questions seeded on a fresh install, with deterministic
 /// identities so two fresh installs (or a fresh install syncing against an
@@ -51,6 +52,28 @@ public enum DefaultQuestions {
         Seed(slug: "how-many-coffees", prompt: "How many coffees did you have today?", type: .number),
         Seed(slug: "what-did-you-learn", prompt: "What did you learn today?", type: .note),
     ]
+
+    /// Seeds the catalog into an EMPTY store (no-op when any Question row
+    /// exists) and saves. The launch seeder and delete-all both route through
+    /// here; deterministic UUIDv5 identifiers make the reseed sync-safe — a
+    /// second device reseeding the same catalog merges instead of duplicating.
+    /// Returns the number of questions inserted (0 when skipped).
+    @discardableResult
+    public static func seedIfEmpty(into context: ModelContext) throws -> Int {
+        guard try context.fetchCount(FetchDescriptor<Question>()) == 0 else { return 0 }
+        for (index, seed) in all.enumerated() {
+            let question = Question()
+            question.uniqueIdentifier = seed.identifier
+            question.prompt = seed.prompt
+            question.type = seed.type
+            question.sortOrder = index
+            question.reportKinds = seed.reportKinds
+            question.choices = seed.choices
+            context.insert(question)
+        }
+        try context.save()
+        return all.count
+    }
 
     /// Maps a legacy seeded identifier (`default-question-<N>`) to its
     /// deterministic replacement via the N → slug table above (NOT via the

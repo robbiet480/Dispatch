@@ -1,17 +1,34 @@
 import DispatchKit
+import os
 import SwiftData
 import SwiftUI
+import UserNotifications
+
+private let deleteAllLog = Logger(subsystem: "io.robbie.Dispatch", category: "delete-all")
 
 struct DataSettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeStore.self) private var themeStore
     @Environment(BackupManager.self) private var backupManager
+    @Environment(NotificationScheduler.self) private var scheduler
+    @Environment(AwakeStore.self) private var awakeStore
+    @Environment(\.notificationPrefs) private var notificationPrefs
+    @Environment(\.appDefaults) private var appDefaults
+    @Environment(\.dismiss) private var dismiss
 
     @State private var shareURL: IdentifiableURL?
     @State private var isImporting = false
     @State private var alertMessage: String?
     @State private var showAlert = false
     @State private var isImportRunning = false
+
+    // Delete All Data flow state (review-readiness blocker #2).
+    @State private var showDeleteScopeAlert = false
+    @State private var showDeleteTypeConfirm = false
+    @State private var deleteBackupsToo = false
+    @State private var deleteConfirmationText = ""
+    @State private var isDeleting = false
+    @State private var showDeleteSuccess = false
 
     private var theme: Theme { themeStore.theme }
 
@@ -63,9 +80,20 @@ struct DataSettingsView: View {
                 }
 
                 backupsSection
+
+                deleteSection
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+
+            if isDeleting {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                ProgressView("Deleting…")
+                    .tint(.white)
+                    .foregroundStyle(.white)
+                    .accessibilityIdentifier("delete-all-progress")
+            }
         }
         .navigationTitle("Data")
         .navigationBarTitleDisplayMode(.inline)
@@ -80,6 +108,45 @@ struct DataSettingsView: View {
             Button("OK") {}
         } message: { message in
             Text(message)
+        }
+        // Delete-all gate 1: scope explanation + the backups choice. Alerts
+        // can't host a Toggle, so "Also delete backups" (default OFF —
+        // backups are the safety net) is the secondary destructive button.
+        .alert("Delete All Data?", isPresented: $showDeleteScopeAlert) {
+            Button("Delete Data Only", role: .destructive) {
+                deleteBackupsToo = false
+                deleteConfirmationText = ""
+                showDeleteTypeConfirm = true
+            }
+            Button("Also Delete Backups", role: .destructive) {
+                deleteBackupsToo = true
+                deleteConfirmationText = ""
+                showDeleteTypeConfirm = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(deleteScopeMessage)
+        }
+        // Delete-all gate 2: type-to-confirm — this is irreversible.
+        .alert("Confirm Deletion", isPresented: $showDeleteTypeConfirm) {
+            TextField("Type DELETE to confirm", text: $deleteConfirmationText)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("delete-confirm-field")
+            Button("Delete Everything", role: .destructive) {
+                if deleteConfirmationText == "DELETE" {
+                    deleteAllData(includeBackups: deleteBackupsToo)
+                } else {
+                    presentAlert("Confirmation text didn't match — nothing was deleted.")
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This cannot be undone. Type DELETE to confirm.")
+        }
+        .alert("All Data Deleted", isPresented: $showDeleteSuccess) {
+            Button("OK") { dismiss() }
+        } message: {
+            Text("Dispatch has been reset to its default questions.")
         }
     }
 
@@ -135,6 +202,114 @@ struct DataSettingsView: View {
         lines.append("Daily JSON exports in the Files app under On My iPhone → Dispatch → Backups. "
             + "iCloud sync is not a backup — sync propagates deletions; backups let you rewind.")
         return lines.joined(separator: " ")
+    }
+
+    // MARK: - Delete All Data (review-readiness blocker #2)
+
+    private var deleteSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showDeleteScopeAlert = true
+            } label: {
+                Text("Delete All Data…")
+                    .foregroundStyle(.red)
+            }
+            .listRowBackground(Color.white.opacity(0.12))
+            .accessibilityIdentifier("delete-all-data")
+            .disabled(isDeleting || isImportRunning)
+        } header: {
+            sectionHeader("DANGER ZONE")
+        }
+    }
+
+    private var isTestEnvironment: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains("--mock-sensors") || arguments.contains("--ui-testing")
+    }
+
+    /// CloudKit honesty: row deletions reach the user's private database only
+    /// while mirroring can run. With sync off (or forced off in tests) say so
+    /// instead of promising an immediate server-side erase.
+    private var deleteScopeMessage: String {
+        var text = "Deletes every report, question, prompt group, and vocabulary entry, "
+            + "then restores the default questions."
+        let syncActive = SyncPolicy(
+            defaults: appDefaults, isTestEnvironment: isTestEnvironment
+        ).shouldSync
+        if syncActive {
+            text += " Your iCloud copy is erased as the deletions sync."
+        } else {
+            text += " iCloud sync is off — your iCloud copy, if any, will clear next time sync is enabled."
+        }
+        text += " Consider exporting first. Backups in the Files app are kept unless you also delete them."
+        return text
+    }
+
+    /// Executes the wipe off-main: one background-context pass over every
+    /// model with a SINGLE save (CloudKit mirroring propagates the deletions
+    /// server-side — deliberately no direct CKContainer zone purge; see
+    /// `DeleteAllData` in DispatchKit for the rationale), then the reseed,
+    /// then the main-actor cleanup of everything that referenced the data.
+    private func deleteAllData(includeBackups: Bool) {
+        let container = context.container
+        isDeleting = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let backgroundContext = ModelContext(container)
+                let counts = try DeleteAllData.deleteAllModels(in: backgroundContext)
+                // Reseed the frozen default-question catalog into the
+                // now-empty store; deterministic UUIDv5 IDs keep the reseed
+                // sync-safe (a second device merges, never duplicates).
+                try DefaultQuestions.seedIfEmpty(into: backgroundContext)
+                let summary = "\(counts.reports) reports, \(counts.responses) responses, "
+                    + "\(counts.questions) questions, \(counts.promptGroups) prompt groups, "
+                    + "\(counts.tokens) tokens, \(counts.people) people"
+                deleteAllLog.info("deleted all data: \(summary, privacy: .public)")
+                await MainActor.run {
+                    finishDeleteAllData(includeBackups: includeBackups)
+                }
+            } catch {
+                deleteAllLog.error("delete all data failed: \(error, privacy: .public)")
+                await MainActor.run {
+                    isDeleting = false
+                    presentAlert("Delete failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func finishDeleteAllData(includeBackups: Bool) {
+        // Spotlight: wipe the whole index (test-gated inside the indexer).
+        SpotlightIndexer.deleteAll()
+        // Notifications: remove EVERY identifier family (prompt-/gprompt-/
+        // snooze-/nag-/digest-), pending and delivered — removeAll is exactly
+        // that set. Test-gated like the scheduler's own center access.
+        if !isTestEnvironment {
+            let center = UNUserNotificationCenter.current()
+            center.removeAllPendingNotificationRequests()
+            center.removeAllDeliveredNotifications()
+        }
+        // Runtime defaults keyed to the deleted data — the kit-side lists
+        // document every cleared AND retained key.
+        DeleteAllData.clearRuntimeDefaults(appDefaults)
+        if isTestEnvironment {
+            // Tests run everything against the single isolated suite.
+            DeleteAllData.clearAppGroupDefaults(appDefaults)
+        } else if let groupDefaults = UserDefaults(suiteName: StoreLocation.appGroupID) {
+            DeleteAllData.clearAppGroupDefaults(groupDefaults)
+        }
+        if includeBackups {
+            backupManager.deleteAllBackups()
+        }
+        // Fresh schedule for the reseeded questions; the replan republishes
+        // the widget's next-prompt date. Reload timelines so widgets drop to
+        // placeholder/fresh content immediately.
+        scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
+        if !isTestEnvironment {
+            WidgetRefresher.reload()
+        }
+        isDeleting = false
+        showDeleteSuccess = true
     }
 
     // MARK: - Export

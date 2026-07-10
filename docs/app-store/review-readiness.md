@@ -153,7 +153,15 @@ original code, assets, or branding are used; the data model can import Reporter'
 documented export format for continuity." 4.2 is comfortably met: sync, widgets,
 Control Center, prompt groups, digests, visualizations, backups.
 
-### 2.7 Accounts & data deletion — 5.1.1(v) — GAP (delete-all missing)
+### 2.7 Accounts & data deletion — 5.1.1(v) — RESOLVED (delete-all shipped)
+
+> **Resolved:** Settings → Data → "Delete All Data…" shipped (commit on `main`, see
+> risk register). Two gates (scope alert with optional also-delete-backups + type-DELETE
+> confirmation), single-save background wipe of every model so CloudKit mirroring
+> propagates the deletions to the private database (no direct zone purge — mirroring
+> deletion is the supported path), Spotlight/notifications/runtime-defaults cleanup,
+> default-question reseed, widget reload. Sync-off honesty text included. Original
+> finding preserved below.
 5.1.1(v) account-deletion rules are **N/A** (no accounts, no login). However:
 `App/Sources/Settings/DataSettingsView.swift` offers JSON/CSV **export** and automatic
 Files-app backups, but **no "delete all data" affordance exists anywhere in Settings**
@@ -190,7 +198,7 @@ higher-rating path since the app provides no medical advice. Answer sheet in Tas
 | Guideline | Finding | Severity | Mitigation | Owner |
 |---|---|---|---|---|
 | 5.1.3(ii) | HealthKit readings incl. medication names sync to iCloud via default-on CloudKit mirroring | **Blocker** | Option A: local-only health sidecar (2–4 d) | robbiet480 |
-| 5.1.1 / privacy | No delete-all-data affordance; CloudKit copy survives app deletion | High | Add Settings → Delete All Data w/ CloudKit purge (~1 d) | robbiet480 |
+| 5.1.1 / privacy | No delete-all-data affordance; CloudKit copy survives app deletion | **Resolved** | Shipped: Settings → Data → Delete All Data (mirroring-propagated iCloud erase), commit `feat: delete all data` | robbiet480 |
 | Privacy labels | Labels must reflect post-mitigation data flows; CloudKit private DB = "linked to you" | High | Task 4 answer sheet drafted **after** 5.1.3 fix | robbiet480 |
 | 2.5.1 | Health integration must be stated in App Store description | Medium | Task 4 listing copy | robbiet480 |
 | 2.3.1 | Reviewer notes need specific permission walkthrough; verify `aps-environment=production` in archive | Medium | Task 4 review-notes.md; archive check | robbiet480 |
@@ -202,9 +210,9 @@ higher-rating path since the app provides no medical advice. Answer sheet in Tas
 
 1. **5.1.3(ii) — health readings in iCloud.** Gates everything. Implement mitigation A
    before submission; privacy policy/labels/reviewer notes all depend on its outcome.
-2. **No delete-all-data affordance** — high-probability reviewer/privacy friction for a
-   health-adjacent app with cloud sync; also makes the privacy policy harder to write
-   honestly.
+2. **No delete-all-data affordance** — **RESOLVED** (Settings → Data → "Delete All
+   Data…", commit `feat: delete all data`; see §2.7). Deletions propagate to the iCloud
+   copy via CloudKit mirroring while sync runs; sync-off honesty text included.
 3. **Privacy-label / policy / code three-way consistency** — cannot be finalized until
    (1) lands; submitting labels that declare health "not collected" while the current
    code syncs it would be a 2.3.1 honesty violation.

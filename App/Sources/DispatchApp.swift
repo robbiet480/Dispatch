@@ -508,23 +508,12 @@ struct DispatchApp: App {
     }
 
     private func seedDefaultQuestionsIfNeeded() {
-        let context = ModelContext(container)
-        guard ((try? context.fetchCount(FetchDescriptor<Question>())) ?? 0) == 0 else { return }
         // Table-driven from the frozen catalog: deterministic UUIDv5
         // identifiers so fresh installs on different devices seed IDENTICAL
-        // IDs and iCloud sync merges rather than duplicates.
-        for (index, seed) in DefaultQuestions.all.enumerated() {
-            let question = Question()
-            question.uniqueIdentifier = seed.identifier
-            question.prompt = seed.prompt
-            question.type = seed.type
-            question.sortOrder = index
-            question.reportKinds = seed.reportKinds
-            question.choices = seed.choices
-            context.insert(question)
-        }
+        // IDs and iCloud sync merges rather than duplicates. Shared with the
+        // Delete All Data reseed (kit-side seedIfEmpty).
         do {
-            try context.save()
+            try DefaultQuestions.seedIfEmpty(into: ModelContext(container))
         } catch {
             seedLog.error("failed to seed default questions: \(error, privacy: .public)")
         }
