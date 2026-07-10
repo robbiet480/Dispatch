@@ -61,6 +61,33 @@
                 <string>dispatch</string>
             </array>
         </dict>
+        <!-- Plan 26 Spotify auth callback. Deliberately a SEPARATE scheme
+             from the widget-tap `dispatch` scheme so onOpenURL routing stays
+             unambiguous. Must match SpotifyRedirectURI below AND the redirect
+             URI registered on the Spotify developer dashboard. -->
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>io.robbie.Dispatch.spotify</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>dispatch-spotify</string>
+            </array>
+        </dict>
     </array>
+    <!-- Plan 26: lets SpotifySettingsView check whether the Spotify app is
+         installed via canOpenURL (App Remote requires the real app). -->
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>spotify</string>
+    </array>
+    <!-- Plan 26 Spotify config (config, not code constants). PASTE the client
+         ID from the Spotify developer dashboard app registration over the
+         placeholder; the redirect URI must be registered there verbatim.
+         While the placeholder is present, SpotifySettingsView shows a
+         "not configured" state and the reader never runs. -->
+    <key>SpotifyClientID</key>
+    <string>SPOTIFY_CLIENT_ID_PLACEHOLDER</string>
+    <key>SpotifyRedirectURI</key>
+    <string>dispatch-spotify://callback</string>
 </dict>
 </plist>

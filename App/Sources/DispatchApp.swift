@@ -28,6 +28,7 @@ struct DispatchApp: App {
     let backupManager: BackupManager
     let webhookManager: WebhookManager
     let remoteChangeObserver: RemoteChangeObserver
+    let spotifyController = SpotifyController()
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
     @State private var backgroundedAt: Date?
@@ -271,6 +272,7 @@ struct DispatchApp: App {
                 .environment(backupManager)
                 .environment(webhookManager)
                 .environment(remoteChangeObserver)
+                .environment(spotifyController)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
                 .onOpenURL { url in
@@ -281,6 +283,13 @@ struct DispatchApp: App {
                     // Control Center control no longer routes through here —
                     // it uses StartReportControlIntent (an OpenIntent in both
                     // targets) whose perform() runs in-app.
+                    // dispatch-spotify://callback — Spotify auth redirect
+                    // (plan 26). Routed FIRST, on its own scheme, so the
+                    // widget-tap guard below stays untouched.
+                    if url.scheme == "dispatch-spotify" {
+                        spotifyController.handleCallback(url: url)
+                        return
+                    }
                     guard url.scheme == "dispatch", url.host() == "report" else { return }
                     surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .widget)
                 }

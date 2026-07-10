@@ -7,6 +7,13 @@ options:
 packages:
   DispatchKit:
     path: .
+  # Spotify App Remote (plan 26). Distribution verified 2026-07-10: the repo
+  # ships a Package.swift whose single product is a binaryTarget pointing at
+  # the in-repo SpotifyiOS.xcframework, so plain SPM consumption works — no
+  # vendored binary needed here. ObjC framework; latest release v5.0.1.
+  SpotifyiOS:
+    url: https://github.com/spotify/ios-sdk
+    exactVersion: 5.0.1
 targets:
   DispatchApp:
     type: application
@@ -23,6 +30,7 @@ targets:
       - path: App/PrivacyInfo.xcprivacy
     dependencies:
       - package: DispatchKit
+      - package: SpotifyiOS
       - target: DispatchWidgets
       # Companion watch app (plan 19): embedded in the iOS bundle's Watch/
       # directory. Independent (WKRunsIndependentlyOfCompanionApp) — it syncs

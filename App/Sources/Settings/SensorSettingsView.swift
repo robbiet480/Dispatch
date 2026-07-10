@@ -10,6 +10,7 @@ struct SensorSettingsView: View {
     @State private var contactSuggestionsEnabled: Bool
     @Environment(ThemeStore.self) private var themeStore
     @Environment(PermissionCascade.self) private var permissionCascade
+    @Environment(SpotifyController.self) private var spotifyController
 
     private var theme: Theme { themeStore.theme }
     private let defaults: UserDefaults
@@ -84,6 +85,32 @@ struct SensorSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
                         .listRowBackground(Color.clear)
+                }
+                .listRowBackground(Color.white.opacity(0.12))
+
+                // Media sources (plan 26): the Media toggle itself lives in
+                // the SENSORS list above (allCases); this section carries the
+                // Spotify connection status + connect/disconnect entry point.
+                Section {
+                    NavigationLink {
+                        SpotifySettingsView()
+                    } label: {
+                        HStack {
+                            Text("Spotify")
+                            Spacer()
+                            Text(spotifyStatusCaption)
+                                .font(.caption)
+                                .opacity(0.6)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .accessibilityIdentifier("spotify-settings-link")
+                } header: {
+                    sectionHeader("MEDIA")
+                } footer: {
+                    Text("Apple Music is read automatically when the Media sensor is on. Connect Spotify to record its now-playing track too.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 
@@ -174,6 +201,11 @@ struct SensorSettingsView: View {
                 settings.setEnabled(kind, newValue)
             }
         )
+    }
+
+    private var spotifyStatusCaption: String {
+        if !spotifyController.isConfigured { return "Not configured" }
+        return spotifyController.isConnected ? "Connected" : "Not connected"
     }
 
     private func sectionHeader(_ title: String) -> some View {
