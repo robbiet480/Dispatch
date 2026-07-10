@@ -53,8 +53,8 @@ Nov 2016, all 12 pages — the remaining posts were tooling/meta, not
 questions). Question types and wake/day/sleep tags come from each post's own
 Tumblr tags. Curation choices:
 
-- Prompts lightly normalized (sentence case, grammar, trailing `?`); wording
-  otherwise faithful to the post.
+- Prompts and choices normalized to title case ("w/" expanded to "With",
+  grammar and trailing `?` fixed); wording otherwise faithful to the post.
 - "Are you happy?" was tagged multi-choice but listed no options → `yesNo`.
 - "Barriers to self-actualization" and "What did you fall asleep to?" were
   tagged both tokens and multi-choice → multiple-choice, keeping the posted
