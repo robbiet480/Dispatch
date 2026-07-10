@@ -29,4 +29,34 @@ final class BackupSettingsUITests: XCTestCase {
         XCTAssertTrue(caption.label.contains("On My iPhone"),
                       "Files hint should point at the local copy, got: \(caption.label)")
     }
+
+    /// The iCloud settings screen carries its own "Back Up Now" (same shared
+    /// BackupManager action as the Data screen) with a status caption.
+    @MainActor
+    func testICloudScreenBackUpNowButtonAndCaption() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        app.buttons["settings-button"].tap()
+        let iCloudLink = app.buttons["icloud-settings-link"]
+        XCTAssertTrue(iCloudLink.waitForExistence(timeout: 10))
+        iCloudLink.tap()
+
+        let backUpNow = app.buttons["backup-now-icloud"]
+        XCTAssertTrue(backUpNow.waitForExistence(timeout: 10))
+        XCTAssertEqual(backUpNow.label, "Back Up Now")
+        XCTAssertTrue(backUpNow.isEnabled)
+
+        let caption = app.staticTexts["backup-caption-icloud"]
+        XCTAssertTrue(caption.waitForExistence(timeout: 10))
+        XCTAssertTrue(caption.label.contains("No backups yet")
+                          || caption.label.contains("Last backup"),
+                      "caption should show backup status, got: \(caption.label)")
+
+        // Tapping is safe under test args (BackupManager skips all I/O in
+        // the test environment) and must not disable the button forever.
+        backUpNow.tap()
+        XCTAssertTrue(backUpNow.waitForExistence(timeout: 5))
+    }
 }

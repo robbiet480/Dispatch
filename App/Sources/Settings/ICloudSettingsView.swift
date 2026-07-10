@@ -9,6 +9,7 @@ import SwiftUI
 struct ICloudSettingsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(RemoteChangeObserver.self) private var remoteChangeObserver
+    @Environment(BackupManager.self) private var backupManager
     @Environment(\.appDefaults) private var appDefaults
 
     @State private var syncEnabled = true
@@ -72,6 +73,38 @@ struct ICloudSettingsView: View {
                     sectionHeader("STATUS")
                 }
 
+                // Manual backup (same shared BackupManager action as
+                // Settings → Data's button — one trigger, two surfaces).
+                // Manual backups bypass the first-launch auto-backup guard
+                // by design: an explicit request is explicit consent.
+                Section {
+                    Button {
+                        backupManager.backUpNow()
+                    } label: {
+                        if backupManager.isBackingUp {
+                            HStack {
+                                settingsLabel("Back Up Now")
+                                Spacer()
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                        } else {
+                            settingsLabel("Back Up Now")
+                        }
+                    }
+                    .accessibilityIdentifier("backup-now-icloud")
+                    .disabled(backupManager.isBackingUp)
+                    .listRowBackground(Color.white.opacity(0.12))
+                } header: {
+                    sectionHeader("BACKUP")
+                } footer: {
+                    Text(backupCaption)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .accessibilityIdentifier("backup-caption-icloud")
+                        .listRowBackground(Color.clear)
+                }
+
                 Section {
                     Text("Reports, questions, prompt groups, and vocabulary sync through your private iCloud database. Nothing is shared or public.")
                         .font(.footnote)
@@ -94,6 +127,26 @@ struct ICloudSettingsView: View {
         .task {
             await loadAccountStatus()
         }
+    }
+
+    /// Condensed version of the Data screen's backup caption: last-backup
+    /// line plus the iCloud unavailable/failed status lines it shows.
+    private var backupCaption: String {
+        var lines = [String]()
+        if let last = backupManager.lastBackupDate {
+            lines.append("Last backup: \(last.formatted(date: .abbreviated, time: .shortened)).")
+        } else {
+            lines.append("No backups yet.")
+        }
+        switch backupManager.iCloudAvailability {
+        case .some(false) where backupManager.destination != .local:
+            lines.append("iCloud Drive unavailable — backups stay on this device.")
+        case .some(true) where backupManager.lastICloudBackupFailed:
+            lines.append("Last iCloud Drive backup failed (check your iCloud storage) — the local copy is unaffected.")
+        default:
+            break
+        }
+        return lines.joined(separator: " ")
     }
 
     private var lastActivityText: String {
