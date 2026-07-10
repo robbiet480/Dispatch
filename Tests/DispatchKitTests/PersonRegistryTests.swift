@@ -227,3 +227,49 @@ private func seedPeopleResponses(_ nameLists: [[String]], prompt: String = "Who 
     #expect(tokens.map(\.text) == ["Coding"])
     #expect(tokens.first?.usageCount == 1)
 }
+
+// MARK: - Shared-identifier backfill (migration trap)
+
+/// SwiftData evaluates the `uniqueIdentifier = UUID().uuidString` default
+/// ONCE during lightweight migration, so every pre-existing PersonEntity in
+/// a shipped store woke up with the SAME identifier. Rebuild must backfill:
+/// the deterministic survivor (lowest `SyncDedupe.persistentIDString`, the
+/// dedupe rule) KEEPS the shared identifier — so an existing link-cache row
+/// keyed to it stays attached to exactly one person — and every other row
+/// gets a fresh unique UUID, while usage counts and aliases survive.
+@Test func rebuildBackfillsSharedIdentifiersFromMigration() throws {
+    let context = try makeContext()
+    seedPeopleResponses([["Alex"], ["Robert"], ["Bob"]], in: context)
+    let sharedID = "shared-migration-id"
+    let alex = makePerson("Alex")
+    let robert = makePerson("Robert", alternates: ["Bob"])
+    alex.uniqueIdentifier = sharedID
+    robert.uniqueIdentifier = sharedID
+    context.insert(alex)
+    context.insert(robert)
+    try context.save()
+    let expectedKeeper = [alex, robert]
+        .min { SyncDedupe.persistentIDString($0) < SyncDedupe.persistentIDString($1) }!
+
+    try VocabularyBuilder.rebuild(in: context)
+
+    let people = try context.fetch(FetchDescriptor<PersonEntity>())
+    let identifiers = people.map(\.uniqueIdentifier)
+    #expect(people.count == 2)
+    #expect(Set(identifiers).count == identifiers.count, "identifiers must be unique")
+    // Exactly one row keeps the shared identifier — the deterministic survivor.
+    #expect(identifiers.filter { $0 == sharedID }.count == 1)
+    #expect(expectedKeeper.uniqueIdentifier == sharedID)
+    // Registry data and recomputed usage survive on both rows.
+    let rebuiltRobert = try #require(people.first { $0.text == "Robert" })
+    #expect(rebuiltRobert.alternateNames == ["Bob"])
+    #expect(rebuiltRobert.usageCount == 2) // "Robert" + alias "Bob"
+    let rebuiltAlex = try #require(people.first { $0.text == "Alex" })
+    #expect(rebuiltAlex.usageCount == 1)
+
+    // Idempotent: a second rebuild changes no identifiers.
+    let before = Set(identifiers)
+    try VocabularyBuilder.rebuild(in: context)
+    let after = Set(try context.fetch(FetchDescriptor<PersonEntity>()).map(\.uniqueIdentifier))
+    #expect(before == after)
+}
