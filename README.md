@@ -365,6 +365,9 @@ The listing kit lives in [`docs/app-store/`](docs/app-store/): review
 readiness analysis, listing copy, privacy nutrition labels, and
 reviewer notes. The privacy policy is
 [docs/privacy-policy.md](docs/privacy-policy.md).
+`scripts/asc-listing.swift` pushes the kit to App Store Connect
+(dry-run by default, never submits for review — see
+[docs/app-store/asc-automation.md](docs/app-store/asc-automation.md)).
 
 ## License
 
