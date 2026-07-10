@@ -62,6 +62,38 @@ public enum NumberInputStyle: String, Codable, CaseIterable, Sendable {
         guard resolvedMin < resolvedMax, resolvedStep > 0 else { return defaults }
         return (min: resolvedMin, max: resolvedMax, step: resolvedStep)
     }
+
+    /// Bound on scale-point magnitudes. `resolvedConfig` only guarantees
+    /// finiteness, so a v2-imported bound like 1e300 would otherwise trap
+    /// `Int(_:)`; anything beyond this renders identically (capped dot count)
+    /// so the clamp is lossless in practice.
+    private static let scalePointBound = 1_000_000.0
+
+    /// Converts a finite Double to Int without trapping: clamps to
+    /// `±scalePointBound` first, rounds, and returns nil for non-finite input.
+    private static func scaleInt(_ value: Double) -> Int? {
+        guard value.isFinite else { return nil }
+        return Int(Swift.min(Swift.max(value, -scalePointBound), scalePointBound).rounded())
+    }
+
+    /// Integer scale points for a scale control. Trap-safe for any finite
+    /// min/max (huge v2-imported bounds clamp instead of crashing) and
+    /// defensively capped so a config meant for a slider (say 0–1000)
+    /// can't render a thousand dots.
+    public static func scalePoints(min: Double, max: Double, cap: Int = 20) -> [Int] {
+        let low = scaleInt(min) ?? 1
+        let high = Swift.max(low, scaleInt(max) ?? low)
+        return Array(low...Swift.min(high, low + Swift.max(cap, 1) - 1))
+    }
+
+    /// The scale point matching a previously-typed answer value, or nil when
+    /// the value can't be a selection (non-finite like "nan", or out of Int
+    /// range like "1e20" — both reachable when a question's style becomes
+    /// scale after a free-text answer). Never traps.
+    public static func scaleSelection(for value: Double?) -> Int? {
+        guard let value, value.isFinite else { return nil }
+        return Int(exactly: value.rounded())
+    }
 }
 
 @Model

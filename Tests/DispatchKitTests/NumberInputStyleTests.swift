@@ -93,6 +93,36 @@ import Testing
     #expect(NumberInputStyle.resolvedConfig(for: .slider, min: nil, max: nil, step: .nan) == (0, 10, 1))
 }
 
+// MARK: - Scale point / selection trap safety
+
+/// Huge-but-finite bounds (e.g. `inputMax: 1e300` from a v2 import, which
+/// passes resolvedConfig's finite check) must render a capped dot row, not
+/// trap the Int conversion.
+@Test func scalePointsSurviveHugeFiniteBounds() throws {
+    let config = NumberInputStyle.resolvedConfig(for: .scale, min: -1e300, max: 1e300, step: 1)
+    let points = NumberInputStyle.scalePoints(min: config.min, max: config.max)
+    #expect(points.count == 20)
+    #expect(points.first == -1_000_000)
+
+    // Sane configs are untouched.
+    #expect(NumberInputStyle.scalePoints(min: 1, max: 5) == [1, 2, 3, 4, 5])
+    // Cap still applies.
+    #expect(NumberInputStyle.scalePoints(min: 0, max: 1000).count == 20)
+    // Inverted/degenerate input degrades to a single point rather than trapping.
+    #expect(NumberInputStyle.scalePoints(min: 5, max: 2) == [5])
+}
+
+/// A previously-typed "nan" or overflowing answer string (question style
+/// later switched to scale) yields no selection — never a trap.
+@Test func scaleSelectionRejectsNonFiniteAndOverflowingValues() throws {
+    #expect(NumberInputStyle.scaleSelection(for: Double("nan")) == nil)
+    #expect(NumberInputStyle.scaleSelection(for: Double("inf")) == nil)
+    #expect(NumberInputStyle.scaleSelection(for: Double("1e20")) == nil)
+    #expect(NumberInputStyle.scaleSelection(for: nil) == nil)
+    #expect(NumberInputStyle.scaleSelection(for: 3) == 3)
+    #expect(NumberInputStyle.scaleSelection(for: 3.4) == 3)
+}
+
 // MARK: - v2 wire format
 
 /// Input-style fields round-trip export → import → export byte-identically

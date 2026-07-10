@@ -35,8 +35,11 @@ enum NumberInputFormat {
 }
 
 /// Shared plumbing: parse the current answer string (empty = untouched).
+/// Non-finite parses ("nan", "inf" — possible from a previously-typed text
+/// answer) are treated as untouched so NaN never reaches Slider/dial math.
 private func currentValue(of string: String) -> Double? {
     Double(string.trimmingCharacters(in: .whitespaces))
+        .flatMap { $0.isFinite ? $0 : nil }
 }
 
 // MARK: - Slider
@@ -127,12 +130,23 @@ struct DialInput: View {
     /// Dial diameter; scales with Dynamic Type so the label never clips.
     @ScaledMetric(relativeTo: .largeTitle) private var diameter: CGFloat = 220
 
+    /// Fraction of the previous drag sample; nil when no drag is in flight.
+    /// Anchors the wrap hysteresis in `dragChanged`.
+    @State private var dragFraction: Double?
+
     private var current: Double {
         min(max(currentValue(of: value) ?? config.min, config.min), config.max)
     }
 
     private var fraction: Double {
         (current - config.min) / (config.max - config.min)
+    }
+
+    /// Fraction used for the knob's angle. Clamped just below 1 so max is
+    /// drawn a hair shy of 12 o'clock instead of exactly on top of min's
+    /// position (the ring trim at 1.0 — a full circle — is unambiguous).
+    private var knobFraction: Double {
+        min(fraction, 0.9999)
     }
 
     private var display: String {
@@ -152,7 +166,7 @@ struct DialInput: View {
                 .fill(.tint)
                 .frame(width: 26, height: 26)
                 .offset(y: -diameter / 2)
-                .rotationEffect(.degrees(fraction * 360))
+                .rotationEffect(.degrees(knobFraction * 360))
             Text(display)
                 .font(.system(.largeTitle, design: .rounded).weight(.semibold))
                 .opacity(value.isEmpty ? 0.4 : 1)
@@ -170,7 +184,22 @@ struct DialInput: View {
                     let dy = gesture.location.y - center.y
                     var degrees = atan2(dx, -dy) * 180 / .pi // 0 at top, CW positive
                     if degrees < 0 { degrees += 360 }
-                    write(config.min + (degrees / 360) * (config.max - config.min))
+                    var newFraction = degrees / 360
+                    // Wrap hysteresis: a per-sample jump of more than 180°
+                    // means the drag crossed 12 o'clock, so pin to the nearer
+                    // endpoint instead of wrapping full-range (max stays max
+                    // until the user drags back below it, and vice versa).
+                    let reference = dragFraction ?? fraction
+                    if newFraction - reference > 0.5 {
+                        newFraction = 0
+                    } else if reference - newFraction > 0.5 {
+                        newFraction = 1
+                    }
+                    dragFraction = newFraction
+                    write(config.min + newFraction * (config.max - config.min))
+                }
+                .onEnded { _ in
+                    dragFraction = nil
                 })
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -254,10 +283,10 @@ struct TapCounterInput: View {
         write(count - config.step)
     }
 
-    /// Any interaction produces a real answer — clamped to 0…max, and "0"
+    /// Any interaction produces a real answer — clamped to min…max, and "0"
     /// stays filed (never reset to the empty/skipped string).
     private func write(_ raw: Double) {
-        let clamped = min(max(raw, 0), config.max)
+        let clamped = min(max(raw, config.min), config.max)
         value = NumberInputFormat.string(from: clamped, step: config.step)
     }
 }
@@ -272,16 +301,16 @@ struct ScaleInput: View {
 
     @ScaledMetric(relativeTo: .title3) private var dotSize: CGFloat = 44
 
-    /// Integer scale points. Defensively capped so a config meant for a
-    /// slider (say 0–1000) can't render a thousand dots.
+    /// Integer scale points, via the trap-safe kit helper (huge v2-imported
+    /// bounds clamp; dot count is defensively capped).
     private var points: [Int] {
-        let low = Int(config.min)
-        let high = max(low, Int(config.max))
-        return Array(low...min(high, low + 19))
+        NumberInputStyle.scalePoints(min: config.min, max: config.max)
     }
 
+    /// Selection parsed trap-safely: a previously-typed "nan" or "1e20"
+    /// answer simply renders as no selection.
     private var selected: Int? {
-        currentValue(of: value).map { Int($0) }
+        NumberInputStyle.scaleSelection(for: currentValue(of: value))
     }
 
     var body: some View {
@@ -318,13 +347,26 @@ struct ScaleInput: View {
             @unknown default: break
             }
         }
+        // Sighted users clear by tapping the selected dot; adjustable users
+        // need an explicit action to reach the same state.
+        .accessibilityAction(named: "Clear rating") {
+            clear()
+        }
     }
 
     private func select(_ point: Int, toggle: Bool = true) {
         if toggle, selected == point {
-            value = "" // deselect → skipped, like tapping a selected choice
+            clear()
         } else {
             value = String(point)
         }
+    }
+
+    /// Deselect → skipped, like tapping a selected choice. Deliberate: filing
+    /// "" means the question falls back to its default answer under Plan 11
+    /// semantics (empty = untouched), exactly as if it was never rated —
+    /// deselecting is "un-answering", not "answering nothing".
+    private func clear() {
+        value = ""
     }
 }

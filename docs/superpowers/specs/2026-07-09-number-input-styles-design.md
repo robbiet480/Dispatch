@@ -25,7 +25,7 @@ v2 export includes the fields when set, omits when nil; import tolerates absence
 | tapCounter | optional max | min 0, no max | huge increment button, counts taps; long-press decrements; shows running count |
 | scale | min/max (integer count of points, e.g. 1–5) | 1–5 | row of tappable dots with selected-state fill |
 
-All styles write the same `numericResponse` string through the existing answer path — storage, exports, visualization, default-answer logic, and sync are untouched. Empty/untouched still means skipped (or the question's default answer, per Plan 11 semantics); tapCounter at 0 with no interaction = skipped, after interaction = "0" is a real answer (interaction tracked in view state).
+All styles write the same `numericResponse` string through the existing answer path — storage, exports, visualization, default-answer logic, and sync are untouched. Empty/untouched still means skipped (or the question's default answer, per Plan 11 semantics); tapCounter at 0 with no interaction = skipped, after interaction = "0" is a real answer (interaction tracked in view state). Deselect behavior: tapping the selected scale dot (or the "Clear rating" accessibility action) files "" — deliberately identical to never answering, so the question's default answer applies per Plan 11.
 
 ## Editor
 
