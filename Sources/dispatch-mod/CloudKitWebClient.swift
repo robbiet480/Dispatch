@@ -157,6 +157,37 @@ struct CloudKitWebClient {
             .compactMap { QuestionFlag(recordName: $0.0, fields: $0.1) }
     }
 
+    /// Diagnostic: learn the server key's user identity by creating (and
+    /// deleting) a probe SubmittedQuestion and reading createdUserRecordName
+    /// from the create response. Needed once, to assign the key's user a
+    /// custom "moderator" security role in the Console.
+    func serverUserRecordName() throws -> String {
+        let probeName = "PROBE-" + UUID().uuidString
+        let response = try post(operation: "records/modify", body: [
+            "operations": [[
+                "operationType": "create",
+                "record": [
+                    "recordType": CatalogRecordType.submittedQuestion,
+                    "recordName": probeName,
+                    "fields": Self.fieldJSON([
+                        "prompt": .string("Server identity probe — safe to delete"),
+                        "typeRaw": .int(2),
+                        "submittedAt": .date(Date()),
+                    ]),
+                ] as [String: Any],
+            ] as [String: Any]],
+        ])
+        try Self.verifyModifyResponse(response, recordName: probeName)
+        defer { try? delete(recordName: probeName, recordType: CatalogRecordType.submittedQuestion) }
+        guard let record = (response["records"] as? [[String: Any]])?.first,
+              let created = record["created"] as? [String: Any],
+              let user = created["userRecordName"] as? String else {
+            throw ClientError.malformedResponse(
+                "create response lacked created.userRecordName: \(response)")
+        }
+        return user
+    }
+
     /// Diagnostic: strongly-consistent fetch of any record by name, returned
     /// as the raw server dictionary (record fields or serverErrorCode).
     func rawLookup(recordName: String) throws -> [String: Any] {

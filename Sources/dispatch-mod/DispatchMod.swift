@@ -102,6 +102,13 @@ struct DispatchMod {
                         print("  \(entry.recordName)  \(prompt)")
                     }
                 }
+            case "whoami":
+                // Diagnostic: creates and immediately deletes a probe
+                // SubmittedQuestion to learn the server key's user record
+                // name (needed to assign it a custom security role).
+                try run(envOverride) { client in
+                    print(try client.serverUserRecordName())
+                }
             case "lookup":
                 // Strongly-consistent fetch by recordName (any record type) —
                 // diagnostic for eventual-consistency confusion in queries and
