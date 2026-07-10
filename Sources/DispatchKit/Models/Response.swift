@@ -15,9 +15,27 @@ public final class Response {
     public var answeredOptions: [String]?
     public var locationResponse: LocationAnswer?
     public var numericResponse: String?
-    /// Wall-clock time-of-day answer (questions of type `.time`, plan 28).
-    /// Optional Codable struct — the `locationResponse` precedent, CloudKit-safe.
-    public var timeResponse: TimeAnswer?
+    /// Wall-clock time-of-day answer (questions of type `.time`, plan 28)
+    /// stored as raw scalars, NOT a composite `TimeAnswer`. SwiftData's
+    /// composite-value storage SIGTRAPs on TimeAnswer's renamed CodingKey
+    /// (`minutesSinceMidnight` → "minutes") plus its conditional `dayOffset`
+    /// encode — the same trap documented for MediaSample in Values.swift.
+    /// `timeMinutes == nil` means "no time answer"; the typed `timeResponse`
+    /// accessor rebuilds the struct. The JSON wire format is untouched:
+    /// V2Response still carries a real `TimeAnswer` with its custom Codable.
+    public var timeMinutes: Int?
+    public var timeDayOffset: Int = 0
+
+    public var timeResponse: TimeAnswer? {
+        get {
+            guard let timeMinutes else { return nil }
+            return TimeAnswer(minutesSinceMidnight: timeMinutes, dayOffset: timeDayOffset)
+        }
+        set {
+            timeMinutes = newValue?.minutesSinceMidnight
+            timeDayOffset = newValue?.dayOffset ?? 0
+        }
+    }
     /// Free-text note answers (questions of type `.note`), distinct from `tokens`.
     public var textResponses: [TokenValue]?
     public var report: Report?
