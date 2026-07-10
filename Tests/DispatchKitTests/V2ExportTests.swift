@@ -67,7 +67,7 @@ import Testing
     contextA.insert(question)
     try contextA.save()
 
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
@@ -77,7 +77,7 @@ import Testing
     #expect(imported.defaultAnswerString == "0")
     #expect(imported.allowsMultipleSelectionRaw == false)
 
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 
     // Absence tolerance: a v2 question JSON without the new keys imports as nil.
@@ -129,8 +129,8 @@ import Testing
     let container = try DispatchStore.inMemoryContainer()
     let context = ModelContext(container)
     _ = try V1Importer.importExport(try fixtureData("v1-sample"), into: context)
-    let first = try V2Exporter.exportData(from: context)
-    let second = try V2Exporter.exportData(from: context)
+    let first = try V2Exporter.exportData(from: context, stamp: fixedStamp)
+    let second = try V2Exporter.exportData(from: context, stamp: fixedStamp)
     #expect(first == second) // sorted keys + sorted records
 }
 
@@ -149,7 +149,7 @@ import Testing
     contextA.insert(unknown)
     try contextA.save()
 
-    let export = try V2Exporter.exportData(from: contextA)
+    let export = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
     _ = try V2Importer.importExport(export, into: contextB)
@@ -164,7 +164,7 @@ import Testing
     #expect(importedUnknown.connectionType == nil)
 
     // Unknown raw re-exports untouched.
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(export == exportB)
 }
 
@@ -183,7 +183,7 @@ import Testing
     contextA.insert(silent)
     try contextA.save()
 
-    let export = try V2Exporter.exportData(from: contextA)
+    let export = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
     _ = try V2Importer.importExport(export, into: contextB)
@@ -230,7 +230,7 @@ import Testing
     contextA.insert(report)
     try contextA.save()
 
-    let export = try V2Exporter.exportData(from: contextA)
+    let export = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
     _ = try V2Importer.importExport(export, into: contextB)
@@ -238,6 +238,34 @@ import Testing
     #expect(media.spotifyTrackURI == "spotify:track:1AhDOtG9vPSOmsWgNW0BEY")
     #expect(media.appleMusicStoreID == "1440857781")
 
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(export == exportB)
+}
+
+/// Backup provenance metadata (createdAt + sourceDevice*): stamped at the top
+/// level next to schemaVersion, round-trips through encode → decode, and —
+/// like every v2 addition — import tolerates its absence (lenient decode).
+@Test func exportMetadataRoundTripsAndToleratesAbsence() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let data = try V2Exporter.exportData(from: context, stamp: fixedStamp)
+
+    let decoded = try JSONDecoder.v2.decode(V2Export.self, from: data)
+    #expect(decoded.createdAt == fixedStamp.createdAt)
+    #expect(decoded.sourceDeviceModel == "TestDevice1,1")
+    #expect(decoded.sourceDeviceName == "Test Device")
+
+    // A nil device name is omitted, not encoded as null.
+    let anonymous = V2ExportStamp(createdAt: fixedStamp.createdAt, sourceDeviceModel: "TestDevice1,1")
+    let anonymousJSON = String(decoding: try V2Exporter.exportData(from: context, stamp: anonymous), as: UTF8.self)
+    #expect(!anonymousJSON.contains("\"sourceDeviceName\""))
+
+    // Absence tolerance: pre-metadata v2 files decode (and import) with nils.
+    let legacy = Data(#"{"schemaVersion": 2, "questions": [], "reports": []}"#.utf8)
+    let old = try JSONDecoder.v2.decode(V2Export.self, from: legacy)
+    #expect(old.createdAt == nil)
+    #expect(old.sourceDeviceModel == nil)
+    #expect(old.sourceDeviceName == nil)
+    let containerB = try DispatchStore.inMemoryContainer()
+    _ = try V2Importer.importExport(legacy, into: ModelContext(containerB))
 }

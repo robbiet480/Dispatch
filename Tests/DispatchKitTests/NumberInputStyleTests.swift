@@ -141,7 +141,7 @@ import Testing
     contextA.insert(question)
     try contextA.save()
 
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
@@ -153,7 +153,7 @@ import Testing
     #expect(imported.inputMax == 100)
     #expect(imported.inputStep == 5)
 
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 }
 

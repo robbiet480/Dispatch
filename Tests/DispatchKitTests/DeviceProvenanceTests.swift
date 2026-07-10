@@ -105,7 +105,10 @@ struct DeviceProvenanceTests {
         context.insert(report)
         try context.save()
 
-        let json = String(decoding: try V2Exporter.exportData(from: context), as: UTF8.self)
+        // A device-less stamp: this test pins the REPORT-level provenance
+        // omission, so the top-level export stamp must not contribute keys.
+        let stamp = V2ExportStamp(createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        let json = String(decoding: try V2Exporter.exportData(from: context, stamp: stamp), as: UTF8.self)
         #expect(!json.contains("sourceDeviceModel"))
         #expect(!json.contains("sourceDeviceName"))
     }

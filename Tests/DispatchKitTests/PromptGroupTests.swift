@@ -94,7 +94,7 @@ import Testing
     contextA.insert(report)
     try contextA.save()
 
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
@@ -119,7 +119,7 @@ import Testing
     #expect(try contextB.fetch(FetchDescriptor<PromptGroup>()).count == 2)
 
     // Byte-identical re-export.
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 }
 
@@ -140,7 +140,7 @@ import Testing
     contextA.insert(group)
     try contextA.save()
 
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
     let json = try #require(String(data: exportA, encoding: .utf8))
     #expect(json.contains("\"scheduledTimes\""))
     #expect(json.contains("09:30"))
@@ -155,7 +155,7 @@ import Testing
     #expect(imported.schedule == .dailyAt([nineThirty, seventeen]))
     #expect(imported.scheduledTimeStrings == ["09:30", "17:00"])
 
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 }
 
@@ -195,7 +195,7 @@ import Testing
     contextA.insert(report)
     try contextA.save()
 
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
     let json = try #require(String(data: exportA, encoding: .utf8))
     #expect(json.contains("\"visitArrival\""))
 
@@ -208,7 +208,7 @@ import Testing
     let importedReport = try #require(try contextB.fetch(FetchDescriptor<Report>()).first)
     #expect(importedReport.trigger == .visitArrival)
 
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 }
 

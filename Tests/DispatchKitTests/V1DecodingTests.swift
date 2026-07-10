@@ -2,6 +2,13 @@ import Foundation
 import Testing
 @testable import DispatchKit
 
+/// Fixed export stamp for byte-identical assertions: the default
+/// `.current()` stamp captures Date() (and process-global DeviceIdentity
+/// state), so any test comparing two exports byte-for-byte must pin one.
+let fixedStamp = V2ExportStamp(createdAt: Date(timeIntervalSince1970: 1_780_000_000),
+                               sourceDeviceModel: "TestDevice1,1",
+                               sourceDeviceName: "Test Device")
+
 func fixtureData(_ name: String) throws -> Data {
     let url = Bundle.module.url(forResource: "Fixtures/\(name)", withExtension: "json")
         ?? Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures")

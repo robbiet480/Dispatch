@@ -8,7 +8,7 @@ import Testing
     let containerA = try DispatchStore.inMemoryContainer()
     let contextA = ModelContext(containerA)
     _ = try V1Importer.importExport(try fixtureData("v1-sample"), into: contextA)
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
@@ -17,7 +17,7 @@ import Testing
     #expect(summary.reportsImported == 3)
     #expect(summary.responsesImported == 9)
 
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 }
 
@@ -25,7 +25,7 @@ import Testing
     let containerA = try DispatchStore.inMemoryContainer()
     let contextA = ModelContext(containerA)
     _ = try V1Importer.importExport(try fixtureData("v1-sample"), into: contextA)
-    let data = try V2Exporter.exportData(from: contextA)
+    let data = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
@@ -56,12 +56,12 @@ import Testing
     contextA.insert(report)
     try contextA.save()
 
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
     _ = try V2Importer.importExport(exportA, into: contextB)
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
 
     #expect(exportA == exportB)
 
@@ -105,7 +105,7 @@ import Testing
     group.questionIDs = ["default-question-1", "custom-question"]
     contextA.insert(group)
     try contextA.save()
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     // Store B: post-migration — the seeded question already has its
     // deterministic UUID identity.
@@ -149,7 +149,7 @@ import Testing
     plain.text = "Alex"
     contextA.insert(plain)
     try contextA.save()
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     // Round trip: identity + alternates survive; nil-omission for empty alternates.
     let decoded = try JSONDecoder.v2.decode(V2Export.self, from: exportA)
@@ -173,13 +173,13 @@ import Testing
     _ = try V2Importer.importExport(exportA, into: contextB)
     #expect(try contextB.fetchCount(FetchDescriptor<PersonEntity>()) == 2)
     // Byte-identical re-export.
-    #expect(try V2Exporter.exportData(from: contextB) == exportA)
+    #expect(try V2Exporter.exportData(from: contextB, stamp: fixedStamp) == exportA)
 
     // Absence tolerance + nil-omission: a store without people omits the key,
     // and importing such an export is a people no-op.
     let containerC = try DispatchStore.inMemoryContainer()
     let contextC = ModelContext(containerC)
-    let exportC = try V2Exporter.exportData(from: contextC)
+    let exportC = try V2Exporter.exportData(from: contextC, stamp: fixedStamp)
     #expect(!String(decoding: exportC, as: UTF8.self).contains("\"people\""))
     let containerD = try DispatchStore.inMemoryContainer()
     let contextD = ModelContext(containerD)
@@ -192,12 +192,12 @@ import Testing
     let containerA = try DispatchStore.inMemoryContainer()
     let contextA = ModelContext(containerA)
     _ = try V1Importer.importExport(try Data(contentsOf: URL(fileURLWithPath: path)), into: contextA)
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
     _ = try V2Importer.importExport(exportA, into: contextB)
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 }
 
@@ -210,11 +210,11 @@ import Testing
     report.media = MediaSample(source: .appleMusic, title: "Song", artist: "Artist")
     contextA.insert(report)
     try contextA.save()
-    let exportA = try V2Exporter.exportData(from: contextA)
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
 
     let containerB = try DispatchStore.inMemoryContainer()
     let contextB = ModelContext(containerB)
     _ = try V2Importer.importExport(exportA, into: contextB)
-    let exportB = try V2Exporter.exportData(from: contextB)
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
 }

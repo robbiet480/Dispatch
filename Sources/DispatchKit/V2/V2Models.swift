@@ -4,6 +4,14 @@ import Foundation
 /// are reused directly as payload types so model↔DTO mapping stays trivial.
 public struct V2Export: Codable {
     public var schemaVersion: Int = DispatchKitInfo.schemaVersion
+    /// Backup provenance (backup fix, additive-optional): when this export
+    /// was produced and by which device — so a backup file found in a shared
+    /// iCloud folder is attributable without opening its reports. All three
+    /// are optional and decoded leniently: pre-provenance v2 files (and
+    /// hand-written fixtures) import with nil, per the plan-11 contract.
+    public var createdAt: Date?
+    public var sourceDeviceModel: String?
+    public var sourceDeviceName: String?
     public var questions: [V2Question] = []
     public var reports: [V2Report] = []
     /// Prompt groups (plan 12). Optional and omitted when nil/empty so

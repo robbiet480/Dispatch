@@ -1,9 +1,36 @@
 import Foundation
 import SwiftData
 
+/// Top-level provenance stamped onto an export (backup fix): capture time
+/// plus the exporting device's identity. A value type so tests can pin a
+/// fixed stamp and keep the byte-identical round-trip assertions meaningful.
+public struct V2ExportStamp: Sendable {
+    public var createdAt: Date
+    public var sourceDeviceModel: String?
+    public var sourceDeviceName: String?
+
+    public init(createdAt: Date, sourceDeviceModel: String? = nil, sourceDeviceName: String? = nil) {
+        self.createdAt = createdAt
+        self.sourceDeviceModel = sourceDeviceModel
+        self.sourceDeviceName = sourceDeviceName
+    }
+
+    /// Now, on this device (DeviceIdentity — model via uname, name injected
+    /// by the platform target at launch; nil name in kit tests is expected).
+    public static func current() -> V2ExportStamp {
+        V2ExportStamp(createdAt: Date(),
+                      sourceDeviceModel: DeviceIdentity.model,
+                      sourceDeviceName: DeviceIdentity.deviceName)
+    }
+}
+
 public enum V2Exporter {
-    public static func export(from context: ModelContext) throws -> V2Export {
+    public static func export(from context: ModelContext,
+                              stamp: V2ExportStamp = .current()) throws -> V2Export {
         var export = V2Export()
+        export.createdAt = stamp.createdAt
+        export.sourceDeviceModel = stamp.sourceDeviceModel
+        export.sourceDeviceName = stamp.sourceDeviceName
 
         let questions = try context.fetch(
             FetchDescriptor<Question>(sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.uniqueIdentifier)]))
@@ -51,8 +78,9 @@ public enum V2Exporter {
         return export
     }
 
-    public static func exportData(from context: ModelContext) throws -> Data {
-        try JSONEncoder.v2.encode(try export(from: context))
+    public static func exportData(from context: ModelContext,
+                                  stamp: V2ExportStamp = .current()) throws -> Data {
+        try JSONEncoder.v2.encode(try export(from: context, stamp: stamp))
     }
 
     /// Single-report model → DTO mapping, extracted so consumers that ship
