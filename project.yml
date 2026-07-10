@@ -13,6 +13,12 @@ targets:
     platform: iOS
     sources:
       - App/Sources
+      # Shared sensor providers (plan 19): dual target membership with
+      # DispatchWatch — the QuickAnswerIntent pattern, one directory over.
+      # DispatchKit stays Foundation/SwiftData-only, so the CoreLocation/
+      # WeatherKit/HealthKit/battery providers compile into BOTH app targets
+      # from this group instead of moving into the kit.
+      - path: Shared/Providers
       - path: App/Assets.xcassets
       - path: App/PrivacyInfo.xcprivacy
     dependencies:
@@ -121,9 +127,9 @@ targets:
       # DispatchApp — same pattern as the QuickAnswerIntent/control-intent
       # sharing into DispatchWidgets. DispatchKit stays Foundation/SwiftData-
       # only; the system-framework providers compile into both app targets.
-      # (Added in Task 3; the group starts empty in Task 1.)
+      # Location/Weather/Health compile unchanged on watchOS; battery is the
+      # sole platform conditional (#if os(watchOS) → WKInterfaceDevice).
       - path: Shared/Providers
-        optional: true
       - path: Watch/Assets.xcassets
       - path: Watch/PrivacyInfo.xcprivacy
     dependencies:

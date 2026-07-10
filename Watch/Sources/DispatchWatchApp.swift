@@ -1,6 +1,7 @@
 import DispatchKit
 import SwiftData
 import SwiftUI
+import WatchKit
 
 /// The independent (companion-style) watch app (plan 19): quick answers and
 /// minimal report filing from the wrist, synced through the same private
@@ -23,6 +24,13 @@ struct DispatchWatchApp: App {
     private let isTestEnvironment: Bool
 
     init() {
+        // Device provenance (plan 19): inject the device name for report
+        // stamping. Read UNCONDITIONALLY — until the requested
+        // user-assigned-device-name entitlement is granted this returns the
+        // generic "Apple Watch" (accepted and expected); the grant upgrades
+        // the value in place with no code change. See DeviceIdentity.
+        DeviceIdentity.deviceName = WKInterfaceDevice.current().name
+
         isTestEnvironment = WatchStoreBootstrap.isTestEnvironment()
         let defaults: UserDefaults
         if isTestEnvironment, let testDefaults = UserDefaults(suiteName: "ui-testing") {

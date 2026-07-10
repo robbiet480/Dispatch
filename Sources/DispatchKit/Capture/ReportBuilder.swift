@@ -54,6 +54,13 @@ public enum ReportBuilder {
         report.trigger = trigger
         report.isBackdated = isBackdated
         report.promptGroupID = promptGroupID
+        // Device provenance (plan 19): stamped at creation time on EVERY
+        // filing path — survey, notification action, widget quick answer,
+        // watch — since they all converge here. Imported/backfilled reports
+        // never pass through this builder, so they keep their original/nil
+        // provenance.
+        report.sourceDeviceModel = DeviceIdentity.model
+        report.sourceDeviceName = DeviceIdentity.deviceName
 
         var health: [HealthReading] = []
         for outcome in outcomes.values {

@@ -3,6 +3,7 @@ import DispatchKit
 import os
 import SwiftData
 import SwiftUI
+import UIKit
 import UserNotifications
 
 private let seedLog = Logger(subsystem: "io.robbie.Dispatch", category: "seed")
@@ -32,6 +33,13 @@ struct DispatchApp: App {
     @State private var backgroundedAt: Date?
 
     init() {
+        // Device provenance (plan 19): inject the device name for report
+        // stamping. Read UNCONDITIONALLY — until the requested
+        // user-assigned-device-name entitlement is granted this returns the
+        // generic "iPhone" (accepted and expected); the grant upgrades the
+        // value in place with no code change. See DeviceIdentity.
+        DeviceIdentity.deviceName = UIDevice.current.name
+
         let arguments = ProcessInfo.processInfo.arguments
         isTestEnvironment = arguments.contains("--mock-sensors") || arguments.contains("--ui-testing")
         if isTestEnvironment,

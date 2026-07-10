@@ -81,6 +81,11 @@ public enum V2Importer {
             report.focus = dto.focus
             report.stateOfMindSampleIDs = dto.stateOfMindSampleIDs ?? []
             report.promptGroupID = dto.promptGroupID
+            // Provenance travels verbatim (plan 19): imported reports keep
+            // the exporting device's stamp (or nil for pre-provenance files);
+            // they are never restamped with the importing device's identity.
+            report.sourceDeviceModel = dto.sourceDeviceModel
+            report.sourceDeviceName = dto.sourceDeviceName
             summary.reportsImported += 1
 
             for rdto in dto.responses ?? [] {
