@@ -146,6 +146,12 @@ struct CloudKitWebClient {
             .compactMap { SubmittedQuestion(recordName: $0.0, fields: $0.1) }
     }
 
+    /// Published catalog entries, newest first (moderator visibility).
+    func catalogEntries() throws -> [(recordName: String, fields: [String: CatalogFieldValue])] {
+        try queryRecords(recordType: CatalogRecordType.catalogQuestion, sortField: "approvedAt")
+            .map { (recordName: $0.0, fields: $0.1) }
+    }
+
     func flags() throws -> [QuestionFlag] {
         try queryRecords(recordType: CatalogRecordType.questionFlag, sortField: "flaggedAt")
             .compactMap { QuestionFlag(recordName: $0.0, fields: $0.1) }

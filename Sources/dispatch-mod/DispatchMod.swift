@@ -93,6 +93,15 @@ struct DispatchMod {
                 try run(envOverride) { client in
                     try Dashboard(client: client, port: port).serve()
                 }
+            case "catalog":
+                try run(envOverride) { client in
+                    let entries = try client.catalogEntries()
+                    print("Catalog entries (\(entries.count)):")
+                    for entry in entries {
+                        let prompt = entry.fields["prompt"]?.stringValue ?? "?"
+                        print("  \(entry.recordName)  \(prompt)")
+                    }
+                }
             case "lookup":
                 // Strongly-consistent fetch by recordName (any record type) —
                 // diagnostic for eventual-consistency confusion in queries and
