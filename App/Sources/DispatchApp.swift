@@ -25,6 +25,8 @@ struct DispatchApp: App {
     let privacyCoverWindow: PrivacyCoverWindow
     let permissionCascade: PermissionCascade
     let workoutEndObserver: WorkoutEndObserver
+    // PLAN-39 TASK 0 PROBE — remove after measurement.
+    let sleepDeliveryProbe: SleepDeliveryProbe
     let visitObserver: VisitObserver
     let backupManager: BackupManager
     let webhookManager: WebhookManager
@@ -120,6 +122,14 @@ struct DispatchApp: App {
             isTestEnvironment: isTestEnvironment
         )
         workoutEndObserver = workoutObserver
+
+        // PLAN-39 TASK 0 PROBE — remove after measurement. Diagnostic
+        // sleepAnalysis delivery-timing observer, toggled in Settings >
+        // Sensors; persisted flag so headless background relaunches
+        // re-register it below.
+        sleepDeliveryProbe = SleepDeliveryProbe(
+            defaults: appDefaults, isTestEnvironment: isTestEnvironment
+        )
 
         // Visit-arrival observer (plan 16): same lifecycle contract as the
         // workout-end observer — launch registration, refresh on group
@@ -264,6 +274,10 @@ struct DispatchApp: App {
         // and the no-groups case; the onAppear call stays for group edits.
         workoutEndObserver.refresh()
 
+        // PLAN-39 TASK 0 PROBE — remove after measurement. Same launch
+        // registration rationale as the workout observer directly above.
+        sleepDeliveryProbe.refresh()
+
         // Visit monitoring must likewise restart at LAUNCH: per Apple's
         // startMonitoringVisits() docs the system relaunches a terminated
         // app to deliver visit events, and "upon relaunch, recreate your
@@ -289,6 +303,7 @@ struct DispatchApp: App {
                 .environment(appLockStore)
                 .environment(permissionCascade)
                 .environment(workoutEndObserver)
+                .environment(sleepDeliveryProbe)
                 .environment(visitObserver)
                 .environment(backupManager)
                 .environment(webhookManager)
