@@ -95,6 +95,7 @@ private func gymStepsFixture(withDrafts: Bool = false) -> ([Report], [Question])
             makeResponse(question: "q-mood", options: ["Good"]),
         ]))
         reports.append(makeReport(date: day(100 + index), responses: [
+            makeResponse(question: "q-who", tokens: []),
             makeResponse(question: "q-mood", options: ["Bad"]),
         ]))
     }
@@ -158,6 +159,7 @@ private func gymStepsFixture(withDrafts: Bool = false) -> ([Report], [Question])
         reports.append(makeReport(
             date: day(100 + index),
             responses: [
+                makeResponse(question: "q-doing", tokens: []),
                 makeResponse(question: "q-happy", options: [index % 2 == 0 ? "Yes" : "No"]),
             ],
             health: [HealthReading(type: "steps", value: steps, unit: "count")]))
@@ -179,6 +181,7 @@ private func gymStepsFixture(withDrafts: Bool = false) -> ([Report], [Question])
     for index in 0..<30 {
         reports.append(makeReport(
             date: day(100 + index),
+            responses: [makeResponse(question: "q-doing", tokens: [])],
             health: [HealthReading(type: "steps", value: 1_000 + Double(index), unit: "count")]))
     }
     #expect(InsightsEngine.compute(reports: reports, questions: questions).isEmpty)
@@ -197,6 +200,7 @@ private func gymStepsFixture(withDrafts: Bool = false) -> ([Report], [Question])
             health: [HealthReading(type: "steps", value: base + 100, unit: "count")]))
         reports.append(makeReport(
             date: day(100 + index),
+            responses: [makeResponse(question: "q-doing", tokens: [])],
             health: [HealthReading(type: "steps", value: base, unit: "count")]))
     }
     #expect(InsightsEngine.compute(reports: reports, questions: questions).isEmpty)
@@ -229,6 +233,90 @@ private func gymStepsFixture(withDrafts: Bool = false) -> ([Report], [Question])
     #expect(InsightsEngine.compute(reports: reports, questions: questions).isEmpty)
 }
 
+@Test func questionAdoptedMidHistoryOnlyCountsAnsweredReports() {
+    // The token question exists only for the second half of history; the
+    // pre-question era has very low step counts. If "without the token"
+    // wrongly included the unanswered pre-question reports, a huge spurious
+    // delta (≈ +3,600 steps, effect ≈ 1.3) would surface. Honest eligibility
+    // compares only answered reports, where the delta (200 steps against a
+    // ~1,150-step spread) is far below the effect threshold: silence.
+    let questions = [makeQuestion(id: "q-doing", prompt: "Doing?", type: .tokens)]
+    var reports: [Report] = []
+    for index in 0..<20 {  // pre-adoption: no q-doing response at all
+        reports.append(makeReport(
+            date: day(index),
+            health: [HealthReading(type: "steps", value: 500, unit: "count")]))
+    }
+    for index in 0..<10 {  // post-adoption, token present
+        reports.append(makeReport(
+            date: day(100 + index),
+            responses: [makeResponse(question: "q-doing", tokens: ["gym"])],
+            health: [HealthReading(type: "steps",
+                                   value: 4_000 + Double(index) * 400, unit: "count")]))
+    }
+    for index in 0..<10 {  // post-adoption, answered without the token
+        reports.append(makeReport(
+            date: day(200 + index),
+            responses: [makeResponse(question: "q-doing", tokens: [])],
+            health: [HealthReading(type: "steps",
+                                   value: 3_800 + Double(index) * 400, unit: "count")]))
+    }
+    #expect(InsightsEngine.compute(reports: reports, questions: questions).isEmpty)
+}
+
+@Test func mirroredCooccurrencePairSurfacesOnce() {
+    // "alpha" and "beta" always co-occur, so both directions clear every
+    // guard — but the unordered pair must surface exactly once.
+    let questions = [makeQuestion(id: "q-doing", prompt: "Doing?", type: .tokens)]
+    var reports: [Report] = []
+    for index in 0..<12 {
+        reports.append(makeReport(date: day(index), responses: [
+            makeResponse(question: "q-doing", tokens: ["alpha", "beta"]),
+        ]))
+        reports.append(makeReport(date: day(100 + index), responses: [
+            makeResponse(question: "q-doing", tokens: []),
+        ]))
+    }
+    let insights = InsightsEngine.compute(reports: reports, questions: questions)
+    #expect(insights.count == 1)
+    // Exact |delta| tie (100% vs 0% both ways): the lexicographically
+    // smaller context id wins, so alpha conditions beta.
+    #expect(insights.first?.title
+        == "You mention “beta” on 100% of reports when you mention “alpha”.")
+}
+
+@Test func valenceAveragesOverMappedAnswersOnly() throws {
+    // Each report answers two state-of-mind questions, but one answer ("Zen")
+    // is no longer among the question's choices, so the valence mapping
+    // returns nil for it. The per-report average must divide by the ONE
+    // mapped answer — 1.00 vs -1.00 — not by two, which would halve it.
+    let questions = [
+        makeQuestion(id: "q-doing", prompt: "Doing?", type: .tokens),
+        makeQuestion(id: "q-mood", prompt: "Mood?", type: .multipleChoice,
+                     choices: ["Bad", "OK", "Good"], stateOfMindKind: "mood"),
+        makeQuestion(id: "q-calm", prompt: "Calm?", type: .multipleChoice,
+                     choices: ["Frazzled", "Settled"], stateOfMindKind: "calm"),
+    ]
+    var reports: [Report] = []
+    for index in 0..<12 {
+        reports.append(makeReport(date: day(index), responses: [
+            makeResponse(question: "q-doing", tokens: ["gym"]),
+            makeResponse(question: "q-mood", options: ["Good"]),
+            makeResponse(question: "q-calm", options: ["Zen"]),
+        ]))
+        reports.append(makeReport(date: day(100 + index), responses: [
+            makeResponse(question: "q-doing", tokens: []),
+            makeResponse(question: "q-mood", options: ["Bad"]),
+            makeResponse(question: "q-calm", options: ["Zen"]),
+        ]))
+    }
+    let insights = InsightsEngine.compute(reports: reports, questions: questions)
+    let valenceInsight = try #require(insights.first {
+        $0.title == "Your mood valence tends to run higher when you mention “gym”."
+    })
+    #expect(valenceInsight.detail == "Average 1.00 vs -1.00 otherwise — based on 24 reports.")
+}
+
 @Test func tooFewReportsOverallStaysSilent() {
     let questions = [makeQuestion(id: "q-doing", prompt: "Doing?", type: .tokens)]
     let reports = (0..<19).map { index in
@@ -257,15 +345,23 @@ private func manySignalsFixture() -> ([Report], [Question]) {
             health: [HealthReading(type: "steps", value: 9_000 + Double(index), unit: "count")]))
         reports.append(makeReport(
             date: day(100 + index),
+            responses: [makeResponse(question: "q-doing", tokens: [])],
             health: [HealthReading(type: "steps", value: 1_000 + Double(index), unit: "count")]))
     }
     return (reports, questions)
 }
 
-@Test func outputIsCappedAtTopEight() {
+@Test func outputIsCappedAtTopEightWithKindDiversity() {
     let (reports, questions) = manySignalsFixture()
     let insights = InsightsEngine.compute(reports: reports, questions: questions)
     #expect(insights.count == 8)
+    // The fixture plants both kinds in abundance (10 mean-difference
+    // candidates, 45 deduped co-occurrence pairs). The per-kind quota must
+    // keep both represented instead of letting one flood every slot.
+    let cooccurrenceCount = insights.filter { $0.kind == .cooccurrence }.count
+    let meanDifferenceCount = insights.filter { $0.kind == .categoricalNumeric }.count
+    #expect(cooccurrenceCount == 4)
+    #expect(meanDifferenceCount == 4)
 }
 
 @Test func orderingIsDeterministicAndInputOrderInvariant() {

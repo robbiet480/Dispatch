@@ -25,8 +25,11 @@ public enum InsightsEngine {
 
     /// Minimum reports on each side of a split (with/without the signal).
     static let minimumSideCount = 10
-    /// Minimum standardized mean difference (|Δ| / pooled SD) for
+    /// Minimum standardized mean difference (|Δ| / combined-sample SD — both
+    /// sides pooled into ONE sample, not the classic pooled-variance SD) for
     /// categorical×numeric — a "medium" effect; smaller deltas stay silent.
+    /// `strength` divides the effect by 2 so two combined-sample SDs map to
+    /// full strength.
     static let minimumMeanEffect = 0.5
     /// Minimum absolute rate difference for co-occurrence pairs.
     static let minimumRateDelta = 0.25
@@ -100,9 +103,11 @@ public enum InsightsEngine {
 
         // Prefilter + cap: keep signals that can possibly pass the side
         // guards, then bound the pair space (most-present first, id tiebreak).
+        // `present ⊆ eligible` by construction for every signal kind, so the
+        // "without" side is plain count arithmetic — no set allocation.
         categoricals = categoricals.filter {
             $0.present.count >= minimumSideCount &&
-            $0.eligible.subtracting($0.present).count >= minimumSideCount
+            $0.eligible.count - $0.present.count >= minimumSideCount
         }
         categoricals.sort { lhs, rhs in
             if lhs.present.count != rhs.present.count { return lhs.present.count > rhs.present.count }
@@ -120,7 +125,29 @@ public enum InsightsEngine {
             if lhs.title != rhs.title { return lhs.title < rhs.title }
             return lhs.detail < rhs.detail
         }
-        return Array(insights.prefix(maximumInsights))
+
+        // Per-kind quota: co-occurrence candidates grow combinatorially
+        // (every token↔token pair), so one kind could flood all
+        // `maximumInsights` slots and crowd the other out entirely. Each kind
+        // may take at most the cap minus the slots the OTHER kind can actually
+        // fill (itself capped at half), so mixed candidates keep kind
+        // diversity (≥ half the slots per kind when both are plentiful) while
+        // single-kind candidates still fill every slot.
+        var availableByKind: [Insight.Kind: Int] = [:]
+        for insight in insights { availableByKind[insight.kind, default: 0] += 1 }
+        func quota(for kind: Insight.Kind) -> Int {
+            let others = insights.count - (availableByKind[kind] ?? 0)
+            return maximumInsights - min(others, maximumInsights / 2)
+        }
+        var takenByKind: [Insight.Kind: Int] = [:]
+        var selected: [Insight] = []
+        for insight in insights {
+            guard selected.count < maximumInsights else { break }
+            guard takenByKind[insight.kind, default: 0] < quota(for: insight.kind) else { continue }
+            takenByKind[insight.kind, default: 0] += 1
+            selected.append(insight)
+        }
+        return selected
     }
 
     // MARK: - Signal extraction
@@ -146,9 +173,19 @@ public enum InsightsEngine {
         var choiceMeta: [String: (prompt: String, choice: String, questionKey: String,
                                   sourceKey: String)] = [:]
 
+        // Token/person/place eligibility mirrors `yesNoEligible`: a report is
+        // eligible only when the OWNING question has a response there, so a
+        // question adopted mid-history never counts its pre-question era as
+        // "without" — missing data must not masquerade as absence. Owners map
+        // each signal to the question(s) it appeared under; eligibility is the
+        // union of those questions' response sets.
+        var questionResponded: [String: Set<Int>] = [:]
         var tokenPresent: [String: Set<Int>] = [:]
+        var tokenOwners: [String: Set<String>] = [:]
         var personPresent: [String: Set<Int>] = [:]
+        var personOwners: [String: Set<String>] = [:]
         var placePresent: [String: (indices: Set<Int>, text: String)] = [:]
+        var placeOwners: [String: Set<String>] = [:]
 
         var weatherEligible: Set<Int> = []
         var weatherPresent: [String: Set<Int>] = [:]
@@ -160,6 +197,10 @@ public enum InsightsEngine {
             for response in report.responses ?? [] {
                 let resolved = question(response)
                 let type = resolved?.type
+                // Deleted questions fall back to the prompt so their token
+                // signals still get honest eligibility.
+                let questionKey = resolved?.uniqueIdentifier
+                    ?? "prompt:\(response.questionPrompt)"
                 switch type {
                 case .yesNo:
                     guard let resolved, let answer = response.answeredOptions?.first else { break }
@@ -186,17 +227,22 @@ public enum InsightsEngine {
                     // token text for now. When the person registry lands,
                     // alias→canonical-person resolution slots in right here so
                     // "Angie" and "Angela" merge into one signal.
+                    questionResponded[questionKey, default: []].insert(index)
                     for token in response.tokens ?? [] {
                         personPresent[token.text, default: []].insert(index)
+                        personOwners[token.text, default: []].insert(questionKey)
                     }
                 default:
                     // Untyped responses (question deleted) count as tokens —
                     // matches the digest's catch-all behavior.
+                    questionResponded[questionKey, default: []].insert(index)
                     for token in response.tokens ?? [] {
                         tokenPresent[token.text, default: []].insert(index)
+                        tokenOwners[token.text, default: []].insert(questionKey)
                     }
                 }
                 if let location = response.locationResponse {
+                    questionResponded[questionKey, default: []].insert(index)
                     // Group by venue ID, else text — ReportsOverview convention.
                     let key: String
                     let text: String
@@ -212,6 +258,7 @@ public enum InsightsEngine {
                     var entry = placePresent[key] ?? (indices: [], text: text)
                     entry.indices.insert(index)
                     placePresent[key] = entry
+                    placeOwners[key, default: []].insert(questionKey)
                 }
             }
             if let condition = report.weather?.condition, !condition.isEmpty {
@@ -249,19 +296,24 @@ public enum InsightsEngine {
                 contextPhrase: "when you answer “\(meta.choice)” to “\(meta.prompt)”",
                 present: present, eligible: eligible))
         }
+        func owningEligible(_ owners: Set<String>?) -> Set<Int> {
+            (owners ?? []).reduce(into: Set<Int>()) { union, key in
+                union.formUnion(questionResponded[key] ?? [])
+            }
+        }
         for (text, present) in tokenPresent.sorted(by: { $0.key < $1.key }) {
             signals.append(CategoricalSignal(
                 id: "token:\(text)", sourceKey: "token:\(text)",
                 verbPhrase: "mention “\(text)”",
                 contextPhrase: "when you mention “\(text)”",
-                present: present, eligible: allIndices))
+                present: present, eligible: owningEligible(tokenOwners[text])))
         }
         for (name, present) in personPresent.sorted(by: { $0.key < $1.key }) {
             signals.append(CategoricalSignal(
                 id: "person:\(name)", sourceKey: "person:\(name)",
                 verbPhrase: "see \(name)",
                 contextPhrase: "when you see \(name)",
-                present: present, eligible: allIndices))
+                present: present, eligible: owningEligible(personOwners[name])))
         }
         for (key, entry) in placePresent.sorted(by: { $0.key < $1.key }) {
             // Context-only: "Reports at Office …" reads honestly; a verb
@@ -270,7 +322,7 @@ public enum InsightsEngine {
                 id: "place:\(key)", sourceKey: "place:\(key)",
                 verbPhrase: nil,
                 contextPhrase: "at \(entry.text)",
-                present: entry.indices, eligible: allIndices))
+                present: entry.indices, eligible: owningEligible(placeOwners[key])))
         }
         for (condition, present) in weatherPresent.sorted(by: { $0.key < $1.key }) {
             // Eligible = reports with any recorded condition, so the "other"
@@ -306,6 +358,7 @@ public enum InsightsEngine {
         var flights: [Int: Double] = [:]
         var decibels: [Int: Double] = [:]
         var valence: [Int: Double] = [:]
+        var valenceCounts: [Int: Int] = [:]
         var workoutMinutes: [Int: Double] = [:]
 
         for (index, report) in filed.enumerated() {
@@ -326,15 +379,15 @@ public enum InsightsEngine {
                     // Per-report mean when several state-of-mind questions land
                     // on one report: accumulate then average below.
                     valence[index] = (valence[index] ?? 0) + value
+                    valenceCounts[index, default: 0] += 1
                 }
             }
-            // Average the accumulated valence over the report's answered
-            // state-of-mind questions.
-            let stateOfMindAnswers = (report.responses ?? []).filter {
-                question($0)?.stateOfMindKind != nil && $0.answeredOptions?.first != nil
-            }.count
-            if stateOfMindAnswers > 1, let sum = valence[index] {
-                valence[index] = sum / Double(stateOfMindAnswers)
+            // Average the accumulated valence over the report's MAPPED
+            // state-of-mind answers only — an answer the valence mapping
+            // can't place (edited/stale choice labels) contributes nothing to
+            // the sum, so it must not inflate the divisor either.
+            if let count = valenceCounts[index], count > 1, let sum = valence[index] {
+                valence[index] = sum / Double(count)
             }
 
             var hasHealth = false
@@ -418,6 +471,11 @@ public enum InsightsEngine {
                 let withMean = mean(withValues)
                 let withoutMean = mean(withoutValues)
                 let delta = withMean - withoutMean
+                // Combined-sample SD: both sides pooled into ONE sample (not
+                // the classic pooled-variance SD, which averages the per-side
+                // variances). It runs a bit larger when means differ, so the
+                // effect reads conservatively; `strength` divides by 2 to
+                // re-normalize — two combined-sample SDs = full strength.
                 let spread = standardDeviation(withValues + withoutValues)
                 guard spread > 1e-9 else { continue }
                 let effect = abs(delta) / spread
@@ -451,12 +509,21 @@ public enum InsightsEngine {
     private static func cooccurrenceInsights(
         categoricals: [CategoricalSignal]
     ) -> [Insight] {
-        // Context (place/weather/Focus/person/…) conditions an answer
+        // Context (place/weather/Focus/…) conditions an answer
         // (yes-no/choice/token/…): ordered roles so each association reads one
-        // way instead of surfacing twice as mirror images.
+        // way. Signals carrying BOTH phrases (tokens, persons, yes-no,
+        // choices, workout) still produce mirror pairs (A conditions B and B
+        // conditions A), so results are deduped on the UNORDERED signal-id
+        // pair below — keep the direction with the larger |rate delta|; on an
+        // exact tie the lexicographically smaller context id wins.
+        struct Candidate {
+            var insight: Insight
+            var contextID: String
+            var absDelta: Double
+        }
         let contexts = categoricals.filter { $0.contextPhrase != nil }
         let answers = categoricals.filter { $0.verbPhrase != nil }
-        var insights: [Insight] = []
+        var bestByPair: [String: Candidate] = [:]
         for context in contexts {
             for answer in answers {
                 guard context.id != answer.id,
@@ -478,12 +545,28 @@ public enum InsightsEngine {
                 let strength = min(abs(delta) / 0.5, 1)
                 let title = "You \(answer.verbPhrase!) on \(percent(rateWith)) of reports \(context.contextPhrase!)."
                 let detail = "Compared with \(percent(rateWithout)) of other reports — based on \(sampleCount) reports."
-                insights.append(Insight(title: title, detail: detail,
-                                        kind: .cooccurrence,
-                                        strength: strength, sampleCount: sampleCount))
+                let candidate = Candidate(
+                    insight: Insight(title: title, detail: detail,
+                                     kind: .cooccurrence,
+                                     strength: strength, sampleCount: sampleCount),
+                    contextID: context.id,
+                    absDelta: abs(delta))
+                let pairKey = context.id < answer.id
+                    ? "\(context.id)|\(answer.id)" : "\(answer.id)|\(context.id)"
+                if let existing = bestByPair[pairKey] {
+                    if candidate.absDelta > existing.absDelta
+                        || (candidate.absDelta == existing.absDelta
+                            && candidate.contextID < existing.contextID) {
+                        bestByPair[pairKey] = candidate
+                    }
+                } else {
+                    bestByPair[pairKey] = candidate
+                }
             }
         }
-        return insights
+        // Dictionary order is arbitrary; the caller's deterministic sort
+        // restores a stable ranking.
+        return bestByPair.values.map(\.insight)
     }
 
     // MARK: - Math
