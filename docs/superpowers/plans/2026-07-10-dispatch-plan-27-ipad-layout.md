@@ -60,7 +60,7 @@ Verify: kit suite + both build-for-testing destinations. Commit `feat: iPad surv
 
 ### Task 5: keyboard shortcuts
 
-- [ ] **Files:** `App/Sources/HomeView.swift` (⌘N on the REPORT action), `App/Sources/Reports/ReportsListView.swift` (⌘F focuses search via `searchFocused` + hidden shortcut button).
+- [x] **Files:** `App/Sources/HomeView.swift` (⌘N on the REPORT action), `App/Sources/Reports/ReportsListView.swift` (⌘F focuses search via `searchFocused` + hidden shortcut button).
 
 **Contract:** shortcuts work from a hardware keyboard on iPad; zero behavior change without one; no shortcut fires while the survey cover/sheet is up (the presenting view is off-screen — verify, don't assume; guard if SwiftUI keeps it active).
 

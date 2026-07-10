@@ -20,6 +20,9 @@ struct ReportsListView: View {
     var selection: Binding<String?>? = nil
 
     @State private var searchQuery = ""
+    // Fully qualified: DispatchKit declares a `FocusState` model type (the
+    // focus sensor value), which makes the bare name ambiguous here.
+    @SwiftUI.FocusState private var isSearchFocused: Bool
     @State private var showingBackfillSheet = false
     @State private var backfillDate = Date()
 
@@ -169,6 +172,17 @@ struct ReportsListView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .searchable(text: $searchQuery, prompt: "Search reports")
+        .searchFocused($isSearchFocused)
+        // Plan 27: ⌘F focuses the search field from a hardware keyboard.
+        // A zero-size, accessibility-hidden button is the cheapest shortcut
+        // anchor that doesn't add visible UI.
+        .background {
+            Button("") { isSearchFocused = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
         .accessibilityIdentifier("reports-list")
     }
 

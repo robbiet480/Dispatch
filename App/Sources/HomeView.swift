@@ -305,10 +305,17 @@ struct HomeView: View {
     private var bottomBar: some View {
         HStack {
             Button("REPORT") {
+                // Guarded for the ⌘N path: a hardware-keyboard shortcut can
+                // fire while the survey is already presented (the presenting
+                // view stays in the responder chain under a sheet) — don't
+                // stomp an in-progress survey's request.
+                guard surveyPresenter.request == nil else { return }
                 surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .manual)
             }
             .font(.headline)
             .foregroundStyle(.white)
+            // Plan 27: new report from a hardware keyboard (iPad).
+            .keyboardShortcut("n", modifiers: .command)
             .accessibilityIdentifier("report-button")
 
             Spacer()
