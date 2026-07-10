@@ -1,125 +1,88 @@
 # Dispatch — Notes for Review (App Store Connect)
 
-*Plan 23, Task 4. Paste (trimmed as needed) into ASC → App Review
-Information → Notes. Written to satisfy 2.3.1's "describe with
-specificity" bar: every permission, how to trigger it, and the two
-stories a reviewer is most likely to question (Always location,
-medications/health-in-iCloud).*
+*Plan 23, Task 4. Paste into ASC → App Review Information → Notes.
+Written to satisfy 2.3.1's "describe with specificity" bar: every
+permission and how to trigger it, described factually — no
+editorializing about guideline risk. Kept under ASC's 4000-character
+notes limit — `asc-listing.swift` uploads this block verbatim and
+truncates anything over the cap, so check the length after editing.*
 
 ## Paste-ready reviewer notes
 
 ```
 Dispatch is a self-tracking app: it prompts the user a few times a day
 with their own short questionnaire and attaches sensor context to each
-answer. No account or sign-in exists — the app is fully usable the
-moment it launches. No demo credentials are needed.
+answer. No account or sign-in exists; no demo credentials are needed.
 
-QUICK DEMO PATH
-1. Complete onboarding (each permission below is requested in context
-   with an explanation screen; all can be denied and the app still
-   works).
-2. Tap the large REPORT button on the home screen, answer the
-   questions, tap DONE. The first survey page shows exactly which
-   sensors are being captured for that report.
-3. After 2–3 reports the home screen fills with charts. Settings →
-   Weekly Digest and Settings → Insights read from the same data.
-4. Settings → Data shows export (JSON/CSV), automatic local backups,
-   and Delete All Data.
+QUICK DEMO PATH: complete onboarding (every permission is asked in
+context and can be denied; the app still works), tap REPORT, answer,
+tap DONE — the first survey page lists the sensors being captured.
+After 2-3 reports the home screen fills with charts. Settings → Data
+has export (JSON/CSV), automatic backups, and Delete All Data.
 
 PERMISSIONS, ONE BY ONE
 - Notifications: the core mechanic — randomly timed survey prompts.
-  Optional "nag" re-reminders use Time Sensitive notifications so a
-  deliberately-set reminder can break through Focus.
-- Location (When in Use): stamps the report with where it was filed
-  and fetches weather via Apple's WeatherKit.
-- Location (ALWAYS — the upgrade prompt appears ONLY in one place):
-  Settings → Prompt Groups → New Group → schedule "When I arrive
-  somewhere". This uses Apple's power-efficient CLVisit monitoring so
-  a group of questions can fire on arriving at a location. The Always
-  request is made contextually at that moment, never at onboarding.
-  If declined, the group type is simply unavailable; nothing else
-  changes. Purpose string states this scope.
+  Optional "nag" re-reminders use Time Sensitive notifications.
+- Location (When in Use): stamps the report location and fetches
+  weather via Apple's WeatherKit.
+- Location (ALWAYS — requested ONLY in one place): Settings → Prompt
+  Groups → New Group → "When I arrive somewhere", which uses Apple's
+  power-efficient CLVisit monitoring. Asked contextually at that
+  moment, never at onboarding; if declined, only that group type is
+  unavailable. Purpose string states this scope.
 - Health (read): steps, flights, heart rate, HRV, resting HR, sleep,
-  workouts, caffeine, Activity rings — captured as a snapshot on each
-  report for the user's own review. Displayed only; never used for
-  advertising and never shared with any third party (there are none —
-  no analytics, no SDKs, no server of ours).
-- Health medications (separate per-object read authorization): only
-  requested via its own explanation step; captures dose events the
-  user already logged in the Health app, shown back in their reports.
-  Dispatch provides no medical advice (age rating: None for
-  Medical/Treatment Information).
-- Health (write): only State of Mind, and only for questions the user
-  explicitly marks to log mood.
-- Microphone: sampled to a single decibel number per report. No audio
-  is recorded or stored at any time (purpose string says the same).
-- Photos: counts photos taken since the previous report; the images
-  themselves are never read, copied, or uploaded.
-- Motion & Fitness: stairs descended via the motion coprocessor, to
-  pair with flights climbed from Health.
-- Face ID: optional app lock (Settings → App Lock).
-- Focus status: records whether a Focus was active when a report was
-  filed; an optional Focus Filter (set up in iOS Settings → Focus)
-  lets each Focus mute chosen prompt groups.
-- Contacts (OPTIONAL, default off): Settings → Sensors → "Suggest
-  from Contacts" is the only place the permission is requested. When
-  on, typing in a "who are you with?" question matches contact names
-  on device and shows name/photo chips. Contact matching and the
-  person↔contact link cache are entirely device-local; contact photos
-  are fetched live and never stored; nothing from the contact book is
-  uploaded or synced. Settings → People can also link a person via
-  the system contact picker, which needs no permission at all.
-- Local Network (only if a webhook is configured): the optional
-  webhook feature (Settings → Data → Advanced → Webhook, default off)
-  lets the user POST their reports to a URL they choose; plain-HTTP
-  targets are restricted to local-network hosts, hence the purpose
-  string. No connection is made unless the user configures one.
+  workouts, caffeine, Activity rings — a snapshot per report for the
+  user's own review. Displayed only; no advertising, no third parties
+  (no analytics, no SDKs, no server of ours).
+- Health medications (separate per-object authorization, its own
+  explanation step): shows dose events the user already logged in
+  Health. No medical advice is given.
+- Health (write): State of Mind only, for questions the user marks to
+  log mood.
+- Microphone: sampled to a single decibel number per report; no audio
+  is ever recorded or stored.
+- Photos: counts photos taken since the last report; images are never
+  read, copied, or uploaded.
+- Motion & Fitness: stairs descended, to pair with Health's flights.
+- Face ID: optional app lock.
+- Focus status: whether a Focus was active at filing; an optional
+  Focus Filter can mute chosen prompt groups.
+- Contacts (OPTIONAL, default off; asked only at Settings → Sensors →
+  "Suggest from Contacts"): matches names on device for name/photo
+  chips. Matching and the link cache are device-local; photos are
+  live-fetched, never stored; nothing from Contacts leaves the device.
+- Local Network: only if the opt-in webhook is configured; plain HTTP
+  is limited to local-network hosts.
 
-HEALTH DATA AND ICLOUD (proactive disclosure)
-Dispatch syncs via SwiftData's CloudKit mirroring to the user's OWN
-PRIVATE CloudKit database (default on; Settings → Data → iCloud turns
-it off). Reports include their attached snapshot Health readings, so
-with sync on those snapshots reside in the user's private database —
-disclosed in the privacy policy, the App Privacy labels, and the app
-description. Our reading of 5.1.3(ii): these are contextual snapshot
-readings attached to the user's own self-tracking entries in their
-private database — not a wholesale copy of Health data to iCloud, and
-nothing is ever accessible to the developer or any third party. The
-automatic backup files (default destination: the user's own iCloud
-Drive plus the local Files app) carry the same report data and the
-same reasoning. Users who prefer zero off-device health data can
-disable sync and set backups to device-only (fully functional), and
-Delete All Data propagates erasure to iCloud.
+ICLOUD
+Data syncs via SwiftData's CloudKit mirroring to the user's own
+private CloudKit database (Settings → Data → iCloud turns it off).
+Automatic backups write to the local Files app and, optionally, the
+user's own iCloud Drive. Delete All Data propagates erasure to iCloud.
+No data is ever accessible to the developer or any third party.
 
 BACKGROUND MODES
-remote-notification only — CloudKit's standard silent change pushes.
-Workout-end and visit-arrival prompt triggers use HealthKit background
-delivery and CLVisit relaunches respectively (no location background
-mode needed or present).
+remote-notification only (CloudKit silent pushes). Workout-end and
+visit-arrival triggers use HealthKit background delivery and CLVisit
+relaunches (no location background mode).
 
-WEBHOOKS (user-directed data egress, opt-in)
-Off by default and configured entirely by the user. When enabled it
-sends the user's own report JSON directly from the device to the
-single endpoint they entered (their home-automation hub, their own
-server). We operate no server and receive nothing. HTTPS is required
-for non-local endpoints; optional HMAC signing and AES-256-GCM payload
-encryption are available, with the user's secret held in the device
-Keychain. All crypto is OS-provided (CryptoKit), consistent with
-ITSAppUsesNonExemptEncryption = NO.
+WEBHOOKS (opt-in, user-directed)
+Off by default; sends the user's own report JSON from the device to
+the single endpoint they entered. We operate no server and receive
+nothing. HTTPS required for non-local endpoints; optional HMAC signing
+and AES-256-GCM encryption via OS CryptoKit (consistent with
+ITSAppUsesNonExemptEncryption = NO).
 
 COMMUNITY CATALOG (user-generated content)
 Settings → Questions → Catalog browses shared question sets from a
-public CloudKit database. Submissions contain only question text
-chosen by the submitter (never answers/reports), are held for
-moderation before appearing, and can be reported/removed; a moderation
-tool operates on the same database.
+public CloudKit database. Submissions contain only question text, are
+held for moderation before appearing, and can be reported/removed.
 
 ORIGIN
-Dispatch is an original, open-source (MIT) implementation inspired by
-Reporter (Nicholas Felton, 2014), which was discontinued years ago.
-No original Reporter code, assets, or branding are used; Dispatch
-imports Reporter's documented JSON export format so former users keep
-their history. Source: github.com/robbiet480/Dispatch
+Original, open-source (MIT) implementation inspired by Reporter
+(Nicholas Felton, 2014, discontinued). No original Reporter code,
+assets, or branding; imports Reporter's documented JSON export so
+former users keep their history. Source: github.com/robbiet480/Dispatch
 ```
 
 ## Internal reminders (do not paste)
@@ -129,9 +92,10 @@ their history. Source: github.com/robbiet480/Dispatch
   (`codesign -d --entitlements - <app>`), per review-readiness §2.9.
 - Contact info fields in ASC: personal email/phone (this is a personal
   app — nothing @campus.edu).
-- If the reviewer rejects on 5.1.3(ii), respond with the framing above
-  (step 2 of the accepted-risk escalation ladder in
-  review-readiness.md §1) before building the sidecar fallback.
+- If the reviewer rejects on 5.1.3(ii), respond with the
+  snapshot/private-DB framing in review-readiness.md §1 (step 2 of the
+  accepted-risk escalation ladder) before building the sidecar
+  fallback.
 - Catalog moderation must be responsive during review week: run
   `swift run dispatch-mod dashboard` daily so a reviewer-submitted
   question set doesn't sit unmoderated.
