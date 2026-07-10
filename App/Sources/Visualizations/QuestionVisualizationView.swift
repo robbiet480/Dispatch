@@ -200,6 +200,15 @@ struct NumericSeriesView: View {
     /// the curved corners.
     var isFullBleed: Bool = false
 
+    /// The DATA layer (line, point symbols, axis captions) maps into an inset
+    /// rect while the canvas paints full width — otherwise the oldest/newest
+    /// point circles are bisected by the physical screen edge (full-bleed) or
+    /// the card edge (iPad grid). Matches the 20pt in-chart text inset.
+    private var dataInsetX: CGFloat { isFullBleed ? 20 : 8 }
+    /// Min/max points also need clearance so their symbols don't clip against
+    /// the heading above / bottom strip below.
+    private let dataInsetY: CGFloat = 8
+
     var body: some View {
         Chart {
             ForEach(Array(points.enumerated()), id: \.offset) { _, point in
@@ -226,6 +235,11 @@ struct NumericSeriesView: View {
         // Plan 29: no leading Y-axis gutter — the chart owns the full page
         // width; the average rule + min/max are the value anchors.
         .chartYAxis(.hidden)
+        // Inset the plot DOMAIN, not the canvas: the background still bleeds
+        // edge-to-edge, but data (and the axis tick captions that follow the
+        // scale) stay clear of the screen edges so no marker is clipped.
+        .chartXScale(range: .plotDimension(startPadding: dataInsetX, endPadding: dataInsetX))
+        .chartYScale(range: .plotDimension(startPadding: dataInsetY, endPadding: dataInsetY))
         .chartXAxis {
             AxisMarks(values: .automatic) {
                 AxisValueLabel()
