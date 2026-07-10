@@ -27,14 +27,14 @@ import Testing
 
 /// The explicit Spotify-timeout→otherAudio test: a Spotify read failure or
 /// budget overrun (nil) still reaches the floor.
-@Test func spotifyFailureDegradesToOtherAudioFloor() async {
+@Test func spotifyFailureDegradesToOtherAudioFloor() async throws {
     let resolved = await MediaChain.resolve(
         music: nil,
         spotify: { nil }, // simulates timeout/connection failure
         otherAudioPlaying: { true })
-    let sample = try? #require(resolved)
-    #expect(sample?.sourceType == .otherAudio)
-    #expect(sample?.playbackStateType == .playing)
+    let sample = try #require(resolved)
+    #expect(sample.sourceType == .otherAudio)
+    #expect(sample.playbackStateType == .playing)
 }
 
 @Test func silenceResolvesToNil() async {

@@ -1,3 +1,4 @@
+import DispatchKit
 import Foundation
 import os
 import SpotifyiOS
@@ -34,7 +35,7 @@ final class SpotifyController {
         self.isTestEnvironment = resolvedTestEnvironment
         // Test env: no Keychain reads, no SDK traffic — settings render a
         // deterministic "Not connected".
-        self.isConnected = resolvedTestEnvironment ? false : SpotifyTokenStore.load() != nil
+        self.isConnected = resolvedTestEnvironment ? false : SpotifyTokenStore().load() != nil
     }
 
     var isConfigured: Bool { SpotifyConfig.isConfigured }
@@ -68,9 +69,14 @@ final class SpotifyController {
         appRemote = remote
         let parameters = remote.authorizationParameters(from: url)
         if let token = parameters?[SPTAppRemoteAccessTokenKey] {
-            SpotifyTokenStore.save(token)
-            isConnected = true
-            spotifyLog.info("spotify connected — token stored")
+            // A failed Keychain persist must NOT claim a connected state
+            // (PR #25 review) — the reader would find no token next capture.
+            if SpotifyTokenStore().save(token) {
+                isConnected = true
+                spotifyLog.info("spotify connected — token stored")
+            } else {
+                spotifyLog.error("spotify auth succeeded but keychain save failed — staying disconnected")
+            }
         } else {
             let description = parameters?[SPTAppRemoteErrorDescriptionKey] ?? "no token in callback"
             spotifyLog.error("spotify auth callback failed: \(description, privacy: .public)")
@@ -78,9 +84,19 @@ final class SpotifyController {
     }
 
     func disconnect() {
-        SpotifyTokenStore.delete()
+        SpotifyTokenStore().delete()
         isConnected = false
         spotifyLog.info("spotify disconnected — token deleted")
+    }
+
+    /// Delete All Data hook (PR #25 review; mirrors
+    /// `WebhookManager.clearSecretForDataWipe`): the token is a credential in
+    /// the Keychain, outside both defaults suites — and Keychain items even
+    /// survive app deletion — so the wipe path must clear it explicitly and
+    /// reset the published connection state. Delete is idempotent
+    /// (kit-tested), safe on installs that never connected.
+    func clearCredentialForDataWipe() {
+        disconnect()
     }
 
     private func makeAppRemote(config: SpotifyConfig) -> SPTAppRemote {
