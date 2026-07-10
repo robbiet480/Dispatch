@@ -1,12 +1,19 @@
 import Foundation
 
-/// Pure weekly aggregation feeding the digest screen: everything the
+/// Pure period aggregation feeding the digest screen: everything the
 /// FoundationModels prompt (and the deterministic template fallback) is
 /// allowed to talk about. Foundation-only, no HealthKit/SwiftUI.
 ///
-/// Week window: the 7 local calendar days ending at (and excluding) the start
-/// of the day after `weekEnding` — i.e. `weekEnding`'s day is the last day of
-/// the week. The prior week is the 7 days immediately before.
+/// Window: a trailing `DigestPeriod` interval ending at (and excluding) the
+/// start of the day after `ending` — for `.week`, the 7 local calendar days
+/// whose last day is `ending`'s (the exact plan-14 rule); `.month`/`.quarter`
+/// swap the trailing-step unit. The prior window is the same-length interval
+/// immediately before.
+///
+/// Wrapped (plan 33) computes calendar-aligned periods (THE March, THE 2026);
+/// its implementer should reuse this interval-parameterized `compute` (or
+/// helpers extracted from it) instead of duplicating the aggregation — see the
+/// plan-40 shared-period-surface decision.
 public struct DigestStats: Equatable, Sendable {
     public struct RankedItem: Equatable, Sendable {
         public var text: String
@@ -28,10 +35,12 @@ public struct DigestStats: Equatable, Sendable {
         }
     }
 
-    public var weekStart: Date
-    public var weekEnd: Date
+    /// Which trailing window these stats cover.
+    public var period: DigestPeriod
+    public var periodStart: Date
+    public var periodEnd: Date
     public var reportCount: Int
-    public var priorWeekReportCount: Int
+    public var priorPeriodReportCount: Int
     /// Top 5 token answers (questions of type `.tokens`), descending count,
     /// alphabetical tiebreak.
     public var topTokens: [RankedItem]
@@ -68,18 +77,30 @@ public struct DigestStats: Equatable, Sendable {
     private static let topLimit = 5
     private static let insightLimit = 2
 
-    /// `questions` supplies what responses alone can't: the tokens/people type
-    /// split, choice order for valence mapping, and `stateOfMindKind` flags.
+    /// Thin `.week` wrapper preserving plan-14's call shape (and its
+    /// byte-identical output). New callers pass an explicit `period`.
     public static func compute(reports: [Report], questions: [Question],
                                weekEnding: Date, calendar: Calendar = .current) -> DigestStats {
-        let dayAfterEnd = calendar.date(byAdding: .day, value: 1,
-                                        to: calendar.startOfDay(for: weekEnding))!
-        let weekStart = calendar.date(byAdding: .day, value: -7, to: dayAfterEnd)!
-        let priorStart = calendar.date(byAdding: .day, value: -7, to: weekStart)!
+        compute(reports: reports, questions: questions,
+                period: .week, ending: weekEnding, calendar: calendar)
+    }
+
+    /// `questions` supplies what responses alone can't: the tokens/people type
+    /// split, choice order for valence mapping, and `stateOfMindKind` flags.
+    /// The window is derived from `DigestPeriod.interval(ending:calendar:)`;
+    /// every aggregation below is period-agnostic — only the two window
+    /// filters change source.
+    public static func compute(reports: [Report], questions: [Question],
+                               period: DigestPeriod, ending: Date,
+                               calendar: Calendar = .current) -> DigestStats {
+        let window = period.interval(ending: ending, calendar: calendar)
+        let periodStart = window.start
+        let dayAfterEnd = window.end
+        let priorStart = window.priorStart
 
         let filed = reports.filter { !$0.isDraft }
-        let week = filed.filter { $0.date >= weekStart && $0.date < dayAfterEnd }
-        let prior = filed.filter { $0.date >= priorStart && $0.date < weekStart }
+        let week = filed.filter { $0.date >= periodStart && $0.date < dayAfterEnd }
+        let prior = filed.filter { $0.date >= priorStart && $0.date < periodStart }
 
         let byIdentifier = Dictionary(questions.map { ($0.uniqueIdentifier, $0) },
                                       uniquingKeysWith: { first, _ in first })
@@ -188,10 +209,11 @@ public struct DigestStats: Equatable, Sendable {
         }
 
         return DigestStats(
-            weekStart: weekStart,
-            weekEnd: dayAfterEnd,
+            period: period,
+            periodStart: periodStart,
+            periodEnd: dayAfterEnd,
             reportCount: week.count,
-            priorWeekReportCount: prior.count,
+            priorPeriodReportCount: prior.count,
             topTokens: ranked(tokenCounts),
             topPeople: ranked(peopleCounts),
             topPlaces: Array(places),
@@ -205,7 +227,7 @@ public struct DigestStats: Equatable, Sendable {
             stepsTotal: stepsTotal,
             workoutCount: workouts.count,
             workoutSeconds: workoutSeconds,
-            streakDays: ReportStreak.days(reports: filed, now: weekEnding, calendar: calendar),
+            streakDays: ReportStreak.days(reports: filed, now: ending, calendar: calendar),
             topInsights: Array(InsightsEngine.compute(reports: filed, questions: questions)
                 .prefix(insightLimit))
         )
@@ -219,18 +241,19 @@ public struct DigestStats: Equatable, Sendable {
     public var templateSummary: String {
         var sentences: [String] = []
 
-        let delta = reportCount - priorWeekReportCount
+        let noun = period.noun
+        let delta = reportCount - priorPeriodReportCount
         let deltaClause: String
-        if priorWeekReportCount == 0 && reportCount > 0 {
-            deltaClause = "your first reports in a fortnight"
+        if priorPeriodReportCount == 0 && reportCount > 0 {
+            deltaClause = "your first reports in two \(noun)s"
         } else if delta > 0 {
-            deltaClause = "\(delta) more than the week before"
+            deltaClause = "\(delta) more than the \(noun) before"
         } else if delta < 0 {
-            deltaClause = "\(-delta) fewer than the week before"
+            deltaClause = "\(-delta) fewer than the \(noun) before"
         } else {
-            deltaClause = "the same as the week before"
+            deltaClause = "the same as the \(noun) before"
         }
-        sentences.append("You filed \(reportCount) \(reportCount == 1 ? "report" : "reports") this week, \(deltaClause).")
+        sentences.append("You filed \(reportCount) \(reportCount == 1 ? "report" : "reports") this \(noun), \(deltaClause).")
 
         if !topTokens.isEmpty {
             sentences.append("Your most frequent answers were \(Self.joined(topTokens)).")
@@ -245,11 +268,11 @@ public struct DigestStats: Equatable, Sendable {
             if let prior = priorValenceAverage {
                 let difference = valence - prior
                 if difference > 0.05 {
-                    sentences.append("Your mood trended up from the week before.")
+                    sentences.append("Your mood trended up from the \(noun) before.")
                 } else if difference < -0.05 {
-                    sentences.append("Your mood trended down from the week before.")
+                    sentences.append("Your mood trended down from the \(noun) before.")
                 } else {
-                    sentences.append("Your mood held steady week over week.")
+                    sentences.append("Your mood held steady \(noun) over \(noun).")
                 }
             } else {
                 sentences.append(valence >= 0

@@ -73,7 +73,7 @@ struct WeeklyDigestView: View {
     }
 
     private func deltaText(_ stats: DigestStats) -> String? {
-        let delta = stats.reportCount - stats.priorWeekReportCount
+        let delta = stats.reportCount - stats.priorPeriodReportCount
         if delta > 0 { return "+\(delta) vs last week" }
         if delta < 0 { return "\(delta) vs last week" }
         return "same as last week"
