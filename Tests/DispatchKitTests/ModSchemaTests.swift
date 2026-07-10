@@ -17,9 +17,20 @@ final class ModSchemaTests: XCTestCase {
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }()
 
-    /// The body of one RECORD TYPE block.
+    /// Whitespace-normalized schema (runs of spaces/newlines collapsed to one
+    /// space) so assertions don't depend on the exact column alignment of
+    /// schema.ckdb — a `setup --export` re-snapshot may realign it.
+    static let normalizedSchema: String = normalize(schema)
+
+    private static func normalize(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: "\\s+", with: " ", options: .regularExpression
+        ).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The whitespace-normalized body of one RECORD TYPE block.
     private func block(_ type: String) -> String {
-        let schema = Self.schema
+        let schema = Self.normalizedSchema
         guard let start = schema.range(of: "RECORD TYPE \(type) ("),
               let end = schema.range(of: ");", range: start.upperBound..<schema.endIndex)
         else { return "" }
@@ -34,7 +45,7 @@ final class ModSchemaTests: XCTestCase {
     }
 
     func testModeratorRoleIsDefinedAndGranted() {
-        XCTAssertTrue(Self.schema.contains("CREATE ROLE moderator;"))
+        XCTAssertTrue(Self.normalizedSchema.contains("CREATE ROLE moderator;"))
         // Server key executes as a regular user: it needs explicit grants.
         XCTAssertTrue(block("CatalogQuestion").contains("GRANT CREATE, WRITE TO moderator"))
         XCTAssertTrue(block("SubmittedQuestion").contains("GRANT READ, WRITE TO moderator"))
@@ -69,13 +80,13 @@ final class ModSchemaTests: XCTestCase {
         // recordName queryable everywhere the app/tool queries.
         for type in ["CatalogQuestion", "SubmittedQuestion", "QuestionFlag"] {
             XCTAssertTrue(
-                block(type).contains("\"___recordID\"   REFERENCE QUERYABLE"),
+                block(type).contains("\"___recordID\" REFERENCE QUERYABLE"),
                 "\(type) needs a queryable recordName index")
         }
         // Sort indexes.
-        XCTAssertTrue(block("CatalogQuestion").contains("approvedAt      TIMESTAMP SORTABLE"))
-        XCTAssertTrue(block("SubmittedQuestion").contains("submittedAt     TIMESTAMP SORTABLE"))
-        XCTAssertTrue(block("QuestionFlag").contains("flaggedAt       TIMESTAMP SORTABLE"))
+        XCTAssertTrue(block("CatalogQuestion").contains("approvedAt TIMESTAMP SORTABLE"))
+        XCTAssertTrue(block("SubmittedQuestion").contains("submittedAt TIMESTAMP SORTABLE"))
+        XCTAssertTrue(block("QuestionFlag").contains("flaggedAt TIMESTAMP SORTABLE"))
     }
 
     func testCreatedByQueryableTrap() {
@@ -83,10 +94,10 @@ final class ModSchemaTests: XCTestCase {
         // creator filter, which requires the creator metadata field to be
         // queryable. Console calls it createdUserRecordName, server errors
         // say createdBy, and the schema language spells it ___createdBy.
-        XCTAssertTrue(block("SubmittedQuestion").contains("\"___createdBy\"  REFERENCE QUERYABLE"))
-        XCTAssertTrue(block("QuestionFlag").contains("\"___createdBy\"  REFERENCE QUERYABLE"))
+        XCTAssertTrue(block("SubmittedQuestion").contains("\"___createdBy\" REFERENCE QUERYABLE"))
+        XCTAssertTrue(block("QuestionFlag").contains("\"___createdBy\" REFERENCE QUERYABLE"))
         // CatalogQuestion keeps world read — no creator filter, no index needed.
-        XCTAssertFalse(block("CatalogQuestion").contains("\"___createdBy\"  REFERENCE QUERYABLE"))
+        XCTAssertFalse(block("CatalogQuestion").contains("\"___createdBy\" REFERENCE QUERYABLE"))
     }
 
     func testNoSearchableIndexes() {

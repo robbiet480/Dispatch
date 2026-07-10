@@ -22,13 +22,17 @@ import Foundation
 ///     `GRANT CREATE, WRITE TO moderator`. EXPRESSIBLE.
 ///   - Role → USER assignment: appears nowhere in the grammar or any known
 ///     export. NOT EXPRESSIBLE — Console only, once per environment.
+///   - Schema import/validate against PRODUCTION: rejected by the service
+///     ("endpoint not applicable in the environment 'production'", verified
+///     empirically 2026-07-09). NOT EXPRESSIBLE — promotion is Console-only
+///     via "Deploy Schema Changes" (docs/moderation.md §3c).
 ///   - `cktool reset-schema` exists but is destructive (wipes Development
 ///     data); setup never invokes it.
 enum Setup {
     static let helpText = """
     dispatch-mod setup — bootstrap a CloudKit environment for the question catalog
 
-    USAGE: dispatch-mod setup [--env development|production] [--export]
+    USAGE: dispatch-mod setup [--env development|production] [--export] [--strict]
 
     Imports Sources/dispatch-mod/schema.ckdb (record types, indexes — including
     the ___createdBy/createdUserRecordName queryable index — the moderator
@@ -37,12 +41,26 @@ enum Setup {
     the remaining manual steps (management-token minting and the per-environment
     moderator role→user assignment, which no CloudKit tooling can automate).
 
+    Schema import applies to DEVELOPMENT only: Production rejects cktool
+    schema import/validate ("endpoint not applicable in the environment
+    'production'"). `--env production` therefore skips the import and prints
+    the Console-only promotion step (Deploy Schema Changes → Production,
+    docs/moderation.md §3c); the verification probes and checklist still run.
+
+    The schema file is resolved relative to this source file (via #filePath),
+    so setup must run from a source checkout (e.g. `swift run dispatch-mod setup`).
+
     OPTIONS:
       --env development|production   Target environment (default development)
       --export                       Instead of importing, snapshot the
                                      environment's CURRENT schema over
                                      Sources/dispatch-mod/schema.ckdb (requires
                                      a management token; never destructive)
+      --strict                       Exit nonzero if ANY verification probe
+                                     fails, even failures that are expected
+                                     before the moderator role→user assignment
+                                     (unexpected probe failures always exit
+                                     nonzero)
 
     REQUIREMENTS:
       - Xcode with cktool (`xcrun cktool version`)
@@ -50,8 +68,11 @@ enum Setup {
         (setup detects absence and prints minting instructions)
       - The server-to-server key (~/.dispatch-mod/) for verification probes
 
-    Setup is idempotent and additive-only: it never runs `cktool reset-schema`
-    and never deletes records.
+    Setup never runs `cktool reset-schema` and never deletes records. NOTE:
+    `cktool import-schema` replaces the environment's WHOLE schema with the
+    file's contents, so schema.ckdb must contain every record type in the
+    container (CloudKit refuses imports that would drop types active in
+    Production; run `setup --export` to snapshot the full live schema first).
     """
 
     /// Repo-canonical schema file, located relative to this source file so
@@ -62,7 +83,7 @@ enum Setup {
             .appendingPathComponent("schema.ckdb")
     }
 
-    static func run(environmentOverride: String?, export: Bool) throws {
+    static func run(environmentOverride: String?, export: Bool, strict: Bool = false) throws {
         // Config is optional for the cktool half (container/team have
         // defaults); the s2s key is only needed for verification probes.
         let config = try? ModConfig.load(environmentOverride: environmentOverride)
@@ -93,11 +114,28 @@ enum Setup {
         if haveToken {
             print("✓ CloudKit management token found")
         } else {
+            let detail = teams.output.trimmingCharacters(in: .whitespacesAndNewlines)
             print("✗ No CloudKit management token — schema \(export ? "export" : "import") skipped")
+            if !detail.isEmpty {
+                // Surface cktool's own words so a network/auth failure is not
+                // misdiagnosed as a missing token.
+                print("    cktool get-teams (exit \(teams.status)): \(detail)")
+            }
         }
 
         var schemaApplied = false
-        if haveToken {
+        if haveToken, environment == "production", !export {
+            // Verified empirically 2026-07-09: Production rejects cktool
+            // schema import/validate with "endpoint not applicable in the
+            // environment 'production'". Promotion is Console-only.
+            print("""
+            ~ Schema import skipped: cktool cannot import or validate schema against
+              Production. Promote the Development schema in the Console instead:
+                CloudKit Console → \(container) → Development → Schema →
+                Deploy Schema Changes → Production   (docs/moderation.md §3c)
+              The verification probes and checklist below still apply to production.
+            """)
+        } else if haveToken {
             let common = [
                 "--team-id", teamID,
                 "--container-id", container,
@@ -122,7 +160,21 @@ enum Setup {
             print("✓ Schema validated against \(environment)")
             let importResult = cktool(["import-schema"] + common + ["--file", schemaURL.path])
             guard importResult.status == 0 else {
-                throw SetupError.cktool("import-schema", importResult.output)
+                var output = importResult.output
+                if output.contains("delete a record type") {
+                    // Discovered on the real container 2026-07-09:
+                    // import-schema REPLACES the environment's schema with the
+                    // file's contents, so record types missing from the file
+                    // are scheduled for deletion (CloudKit refuses when they
+                    // are active in Production).
+                    output += """
+
+                    schema.ckdb does not contain every record type in this container.
+                    Snapshot the live schema first, merge, and retry:
+                        swift run dispatch-mod setup --export
+                    """
+                }
+                throw SetupError.cktool("import-schema", output)
             }
             schemaApplied = true
             print("✓ Schema imported into \(environment) (types, indexes, roles, grants)")
@@ -138,20 +190,37 @@ enum Setup {
         //    "Field 'createdBy' is not marked queryable" trap if the
         //    ___createdBy index is missing.
         var serverUser: String?
+        var unexpectedProbeFailures = 0
+        var expectedProbeFailures = 0
         if let config {
             let client = CloudKitWebClient(
                 signer: try config.makeSigner(),
                 container: config.container,
                 environment: environment
             )
-            probe("CatalogQuestion query (recordName queryable + approvedAt sortable)") {
+            // The server key is role-bound, not a superuser: until the Console
+            // moderator role→user assignment (checklist below), creator-scoped
+            // reads make the SubmittedQuestion/QuestionFlag probes fail on a
+            // fresh environment. That is expected and does NOT mean the schema
+            // import broke.
+            let roleHint = "expected on a fresh environment until the moderator "
+                + "role→user assignment (see checklist below)"
+            if !probe("CatalogQuestion query (recordName queryable + approvedAt sortable)", {
                 _ = try client.catalogEntries()
+            }) {
+                unexpectedProbeFailures += 1
             }
-            probe("SubmittedQuestion query (___createdBy queryable + submittedAt sortable)") {
+            if !probe("SubmittedQuestion query (___createdBy queryable + submittedAt sortable)",
+                      expectedFailureHint: roleHint, {
                 _ = try client.pendingSubmissions()
+            }) {
+                expectedProbeFailures += 1
             }
-            probe("QuestionFlag query (___createdBy queryable + flaggedAt sortable)") {
+            if !probe("QuestionFlag query (___createdBy queryable + flaggedAt sortable)",
+                      expectedFailureHint: roleHint, {
                 _ = try client.flags()
+            }) {
+                expectedProbeFailures += 1
             }
             serverUser = try? client.serverUserRecordName()
         } else {
@@ -165,6 +234,18 @@ enum Setup {
             container: container,
             serverUser: serverUser
         )
+
+        if unexpectedProbeFailures > 0 {
+            throw SetupError.plain(
+                "\(unexpectedProbeFailures) verification probe(s) failed unexpectedly (see ✗ lines above).")
+        }
+        if strict, expectedProbeFailures > 0 {
+            throw SetupError.plain("""
+            --strict: \(expectedProbeFailures) probe(s) failed. If the moderator \
+            role→user assignment is done, this is a real failure; otherwise re-run \
+            after completing the checklist.
+            """)
+        }
     }
 
     // MARK: - Manual-steps checklist
@@ -194,10 +275,34 @@ enum Setup {
             """)
         }
         if !schemaApplied {
+            if environment == "production" {
+                item("""
+                Deploy the schema to Production via the Console (cktool cannot —
+                     import/validate-schema are rejected in Production):
+                       CloudKit Console → \(container) → Development → Schema →
+                       Deploy Schema Changes → Production   (docs/moderation.md §3c)
+                """)
+            } else {
+                item("""
+                Schema not imported this run. Until it is, follow the manual Console
+                     checklist in docs/moderation.md §2–§3 (record types, permission
+                     matrix, indexes — including createdUserRecordName).
+                """)
+            }
+        }
+        if environment == "production" {
             item("""
-            Schema not imported this run. Until it is, follow the manual Console
-                 checklist in docs/moderation.md §2–§3 (record types, permission
-                 matrix, indexes — including createdUserRecordName).
+            Register the server key's PUBLIC key in Production (key registrations
+                 are PER ENVIRONMENT — the Development key ID returns
+                 AUTHENTICATION_FAILED against Production, and the Production
+                 registration yields a DIFFERENT key ID):
+                   CloudKit Console → \(container) → Production →
+                   Server-to-Server Keys → ＋, paste the public half of the
+                   same private key:
+                     openssl ec -in ~/.dispatch-mod/eckey.pem -pubout
+                   then save the new key ID as "keyIDProduction" in
+                   ~/.dispatch-mod/config.json (or export DISPATCH_MOD_KEY_ID
+                   for one-off runs).
             """)
         }
         let identity = serverUser.map { "user record name: \($0)" }
@@ -218,11 +323,19 @@ enum Setup {
         """)
         if environment == "development" {
             item("""
-            Production bootstrap, when ready:
-                 swift run dispatch-mod setup --env production
-                 then repeat the moderator role→user assignment there (the key's
-                 identity may DIFFER per environment — re-run whoami with
-                 --env production).
+            Production bootstrap, when ready (schema promotion is Console-only —
+                 cktool cannot import/validate schema against Production):
+                 a. CloudKit Console → \(container) → Development → Schema →
+                    Deploy Schema Changes → Production   (docs/moderation.md §3c)
+                 b. register the same s2s public key under Production (key
+                    registrations are per-environment; the new key ID goes in
+                    "keyIDProduction" in ~/.dispatch-mod/config.json):
+                      openssl ec -in ~/.dispatch-mod/eckey.pem -pubout
+                 c. swift run dispatch-mod setup --env production
+                    (verification probes + this checklist for production)
+                 d. repeat the moderator role→user assignment there (the key's
+                    identity may DIFFER per environment — re-run whoami with
+                    --env production).
             """)
         }
         print("""
@@ -235,12 +348,25 @@ enum Setup {
 
     // MARK: - Helpers
 
-    private static func probe(_ label: String, _ body: () throws -> Void) {
+    /// Runs a verification probe. Returns true on success. On failure, prints
+    /// the error plus `expectedFailureHint` (when given) so pre-role-assignment
+    /// failures aren't misread as a broken schema import.
+    @discardableResult
+    private static func probe(
+        _ label: String,
+        expectedFailureHint: String? = nil,
+        _ body: () throws -> Void
+    ) -> Bool {
         do {
             try body()
             print("✓ probe OK: \(label)")
+            return true
         } catch {
             print("✗ probe FAILED: \(label)\n    \(error)")
+            if let expectedFailureHint {
+                print("    (\(expectedFailureHint))")
+            }
+            return false
         }
     }
 

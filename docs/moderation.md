@@ -20,8 +20,8 @@ where CloudKit tooling allows. The manual sections are preserved as the
 reference truth and as the fallback when `cktool` is unavailable.
 
 ```sh
-swift run dispatch-mod setup                     # bootstrap Development
-swift run dispatch-mod setup --env production    # bootstrap Production (issue #8)
+swift run dispatch-mod setup                     # bootstrap Development (schema import + probes)
+swift run dispatch-mod setup --env production    # verify Production (issue #8) — schema deploys via Console, see below
 swift run dispatch-mod setup --export            # snapshot live schema → schema.ckdb
 ```
 
@@ -29,9 +29,29 @@ swift run dispatch-mod setup --export            # snapshot live schema → sche
 repo-canonical schema `Sources/dispatch-mod/schema.ckdb` — record types,
 field indexes, the `moderator` security role and every grant in §3a —
 then verifies with the same list queries the moderation commands use, and
-finally prints the steps that remain manual. It is additive-only: it never
-runs `cktool reset-schema` (which wipes Development data) and never deletes
-records.
+finally prints the steps that remain manual. It never runs
+`cktool reset-schema` (which wipes Development data) and never deletes
+records — but note that `cktool import-schema` **replaces** the
+environment's whole schema with the file's contents, so record types
+missing from `schema.ckdb` are scheduled for deletion (observed on the
+live container 2026-07-09; CloudKit refuses when they are active in
+Production). On a container with pre-existing types, run
+`setup --export` first, merge, then import. Run setup from a source
+checkout: the schema path is resolved relative to the source file
+(`#filePath`).
+
+**Schema import is Development-only.** Production rejects `cktool`
+`import-schema`/`validate-schema` with *"endpoint not applicable in the
+environment 'production'"* (verified empirically 2026-07-09). Promotion to
+Production is Console-only: **Deploy Schema Changes → Production** (§3c).
+`setup --env production` therefore skips the import, prints that Console
+instruction, and still runs the verification probes and checklist.
+
+On a **fresh environment**, expect the `SubmittedQuestion`/`QuestionFlag`
+probes to fail until the moderator role→user assignment is done in Console —
+the server key is role-bound, not a superuser. `setup` labels those failures
+as expected; `--strict` makes any probe failure exit nonzero (unexpected
+failures always do).
 
 **What the schema language can and cannot express** (verified against
 Apple's `sample-cloudkit-tooling` examples and real `cktool export-schema`
@@ -45,15 +65,17 @@ output, 2026-07-09):
 | Permission matrix (§3a) | ✅ | `GRANT READ TO "_world"`, `GRANT CREATE TO "_icloud"`, `GRANT READ, WRITE TO "_creator"` |
 | Custom security roles | ✅ | `CREATE ROLE moderator;` + `GRANT CREATE, WRITE TO moderator` |
 | Role → **user** assignment | ❌ | Console only, once per environment (see the moderator section below) — `setup` prints the exact instruction with the key's `whoami` identity embedded |
-| Server-to-server / management keys | ❌ | Console only (§1 and below) |
+| Schema promotion to **Production** | ❌ | Console only — **Deploy Schema Changes → Production** (§3c). `cktool import-schema`/`validate-schema` are rejected in Production ("endpoint not applicable in the environment 'production'") |
+| Server-to-server / management keys | ❌ | Console only (§1 and below). Registrations are **per environment**: register the same public key under Production and you get a *different* key ID — `"keyIDProduction"` in config.json (falls back to `"keyID"`) |
 
 `Tests/DispatchKitTests/ModSchemaTests.swift` pins `schema.ckdb` to the
 documented matrix/indexes so an export can't silently drop them.
 
 > **Provenance:** `schema.ckdb` was authored from this document's
-> battle-tested truth (grammar validated against Apple's published examples),
-> not yet round-tripped through a live `cktool export-schema` — no management
-> token existed on this machine at authoring time. After minting a token, run
+> battle-tested truth (grammar validated against Apple's published examples).
+> `xcrun cktool validate-schema` accepts it against the live Development
+> environment ("✅ Schema is valid.", 2026-07-09). It has not yet been
+> round-tripped through a live `cktool export-schema`; run
 > `swift run dispatch-mod setup --export` against Development once, diff, and
 > commit — that makes the file export-canonical.
 
@@ -83,8 +105,12 @@ and defaults to the personal team.
   environment, in Console (the grammar has no role→user statement; role
   *definitions* deploy with the schema, *assignments* never do).
 - Verify the permission matrix from a second Apple ID (§3a).
-- For Production: re-run `setup --env production`, then repeat the role
-  assignment there (`whoami --env production` — the identity may differ).
+- For Production: deploy the schema in Console (**Deploy Schema Changes →
+  Production**, §3c — cktool cannot), register the same s2s public key under
+  Production and record the new key ID as `"keyIDProduction"` (§1 — key
+  registrations are per-environment), then run `setup --env production`
+  (probes + checklist only), then repeat the role assignment there
+  (`whoami --env production` — the identity may differ).
 
 ## Bootstrap sequencing (chicken-and-egg order)
 
@@ -100,7 +126,8 @@ setup below has a required order:
 3. **`QuestionFlag`:** flag the first catalog entry from the app (or create
    the type manually) — it can't be created before a catalog entry exists.
 4. **Then** apply the permission matrix + indexes (§3a/§3b).
-5. **Deploy Development → Production** (§3c).
+5. **Deploy Development → Production** (§3c) — Console only; `cktool` cannot
+   import or validate schema against Production.
 
 ## 1. Create the server-to-server key (one time)
 
@@ -127,11 +154,28 @@ setup below has a required order:
    EOF
    ```
 
-   Optional keys: `"keyPath"` (default `~/.dispatch-mod/eckey.pem`),
-   `"container"` (default `iCloud.io.robbie.Dispatch`), `"environment"`
-   (default `development`). Environment variables `DISPATCH_MOD_KEY_ID`,
-   `DISPATCH_MOD_KEY_PATH`, `DISPATCH_MOD_CONTAINER`, `DISPATCH_MOD_ENV`
-   override the file.
+   Optional keys: `"keyIDProduction"` (see below), `"keyPath"` (default
+   `~/.dispatch-mod/eckey.pem`), `"container"` (default
+   `iCloud.io.robbie.Dispatch`), `"environment"` (default `development`).
+   Environment variables `DISPATCH_MOD_KEY_ID`, `DISPATCH_MOD_KEY_PATH`,
+   `DISPATCH_MOD_CONTAINER`, `DISPATCH_MOD_ENV` override the file.
+
+### Key registrations are per-environment (verified live, 2026-07-09)
+
+Server-to-server public keys are registered **per environment**, and each
+registration gets its **own key ID**. The Development key ID returns
+`AUTHENTICATION_FAILED` against Production until the *same public key* is
+registered under Production (Console → **Production** → Server-to-Server
+Keys → paste the output of
+`openssl ec -in ~/.dispatch-mod/eckey.pem -pubout`), which yields a
+different key ID that then authenticates immediately. Put that ID in
+`config.json` as `"keyIDProduction"` (it falls back to `"keyID"` when
+absent); `DISPATCH_MOD_KEY_ID` remains the quick one-off override for any
+environment. The private key stays the same single PEM.
+
+This joins the other production-vs-development traps: schema promotion is
+Console-only (§3c) and the moderator role→user assignment is per-environment
+and Console-only (bottom section).
 
 ## 2. Create the record types (first dev write)
 
@@ -209,6 +253,10 @@ index on `prompt` is needed.
 ### 3c. Deploy to Production
 
 Console → Schema → **Deploy Schema Changes → Development → Production**.
+This step is Console-only: Production rejects `cktool`
+`import-schema`/`validate-schema` ("endpoint not applicable in the
+environment 'production'"), so `dispatch-mod setup --env production` prints
+this instruction instead of importing.
 TestFlight builds talk to Production: until this deploy (types + permissions
 + indexes), TestFlight users see an empty/erroring catalog. Approving into
 Production afterwards: `swift run dispatch-mod list --env production`, etc.
@@ -247,7 +295,10 @@ Dashboard hardening (beyond binding to 127.0.0.1 only):
 Smoke test after key setup (safe on an empty database):
 `swift run dispatch-mod list` — an empty listing (`Pending submissions (0)`)
 proves the signature is accepted; an authentication failure returns
-`CloudKit error AUTHENTICATION_FAILED`.
+`CloudKit error AUTHENTICATION_FAILED`. Against Production, that error
+almost always means the public key isn't registered under Production yet
+(or `keyIDProduction` is missing) — key registrations are per-environment,
+see §1.
 
 ## 5. Signature format (verified against Apple docs, 2026-07-09)
 
