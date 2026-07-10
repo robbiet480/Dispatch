@@ -154,12 +154,12 @@ final class BackupManager {
                 let data = try V2Exporter.exportData(from: ModelContext(container))
                 let filename = BackupRotation.backupFilename(for: now)
                 if let localTarget {
-                    let count = try Self.writeAndRotate(data: data, filename: filename, in: localTarget)
+                    let count = try BackupWriter.writeAndRotate(data: data, filename: filename, in: localTarget)
                     result = (now, count)
                 }
                 if let cloudTarget {
                     do {
-                        let count = try Self.writeAndRotate(data: data, filename: filename, in: cloudTarget)
+                        let count = try BackupWriter.writeAndRotate(data: data, filename: filename, in: cloudTarget)
                         // The caption's count comes from the local copy when
                         // both were written (they rotate identically).
                         if result == nil { result = (now, count) }
@@ -188,31 +188,11 @@ final class BackupManager {
         }
     }
 
-    /// One destination's pass: ensure the directory, write the new file
-    /// atomically, prune per the kit-side rotation arithmetic, and return
-    /// how many backups remain. Runs off-main inside the backup task.
-    private nonisolated static func writeAndRotate(data: Data, filename: String,
-                                                   in directory: URL) throws -> Int {
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: directory.appendingPathComponent(filename), options: .atomic)
-
-        // Rotation: kit-side arithmetic decides, this loop deletes. Backups
-        // are our own write-once files, so a plain FileManager delete is
-        // correct for the ubiquity directory too (no evict-then-delete).
-        var existing = try fileManager.contentsOfDirectory(atPath: directory.path())
-        for doomed in BackupRotation.filesToDelete(existing: existing) {
-            do {
-                try fileManager.removeItem(at: directory.appendingPathComponent(doomed))
-                existing.removeAll { $0 == doomed }
-            } catch {
-                backupLog.error("failed to prune backup \(doomed, privacy: .public): \(error, privacy: .public)")
-            }
-        }
-        let count = existing.filter { BackupRotation.date(fromFilename: $0) != nil }.count
-        backupLog.info("wrote backup \(filename, privacy: .public) to \(directory.path(), privacy: .public) (\(count, privacy: .public) kept)")
-        return count
-    }
+    // The per-destination write/rotate pass moved kit-side (BackupWriter,
+    // tested): its rotation listing MUST be URL-based, because `URL.path()`
+    // percent-encodes and the ubiquity container path contains a space
+    // (`Mobile Documents`) — the old atPath listing threw Cocoa error 260
+    // ("The folder Backups doesn't exist") on every iCloud pass.
 
     /// Delete All Data opt-in ("Also delete backups"): removes the whole
     /// Backups directory off-main and resets the staleness marker + caption
@@ -227,7 +207,10 @@ final class BackupManager {
         Task.detached(priority: .utility) {
             for directory in directories {
                 do {
-                    if FileManager.default.fileExists(atPath: directory.path()) {
+                    // percentEncoded:false — the ubiquity path contains a
+                    // space ("Mobile Documents"); the encoded default never
+                    // matches, so iCloud backups would silently survive.
+                    if FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)) {
                         try FileManager.default.removeItem(at: directory)
                     }
                 } catch {
