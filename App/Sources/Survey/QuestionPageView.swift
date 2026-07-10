@@ -286,6 +286,7 @@ struct TokenEntryView: View {
     let flushRegistry: PendingFlushRegistry
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appDefaults) private var appDefaults
     @SwiftUI.FocusState private var fieldFocused: Bool
     /// Live keystrokes stay in this local `@State`; suggestions are computed
     /// purely from local state per render — never writing to any observable
@@ -294,6 +295,16 @@ struct TokenEntryView: View {
     @State private var draft = ""
     /// Vocabulary candidates, fetched once per appearance — never per keystroke.
     @State private var candidates: [(text: String, usageCount: Int)] = []
+    /// Contact matches for the current draft (people questions with the
+    /// contacts toggle on). Provider is created per field appearance so the
+    /// contact store is fetched at most once per appearance, off-main.
+    @State private var contactProvider: (any ContactSuggestionProviding)?
+    @State private var contactMatches: [ContactMatch] = []
+    @State private var showsContactsOffer = false
+
+    private var contactsEnabled: Bool {
+        appDefaults.bool(forKey: ContactSuggestions.enabledKey)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -310,10 +321,26 @@ struct TokenEntryView: View {
             if fieldFocused, !suggestions.isEmpty {
                 suggestionsRow
             }
+            if showsContactsOffer {
+                contactsOfferRow
+            }
         }
         .padding()
         .task {
             loadCandidates()
+            if isPeople {
+                showsContactsOffer = !contactsEnabled
+                    && !appDefaults.bool(forKey: ContactSuggestions.inlineOfferSeenKey)
+                if contactsEnabled {
+                    contactProvider = ContactSuggestions.makeProvider()
+                }
+            }
+        }
+        .task(id: draft) {
+            guard let contactProvider else { return }
+            // Empty query = history only; denied/errors → [] from the provider.
+            let matches = await contactProvider.matches(prefix: draft)
+            if !Task.isCancelled { contactMatches = matches }
         }
         .onAppear {
             flushRegistry.register(identifier, flush: commitDraft)
@@ -344,35 +371,125 @@ struct TokenEntryView: View {
         onChange(tokens + [trimmed])
     }
 
-    private var suggestions: [String] {
-        TokenSuggester.suggest(query: draft, candidates: candidates, excluding: tokens)
+    /// History/registry suggestions first, then contact matches (people
+    /// questions only), blended and deduped by `PersonSuggestionMerger`.
+    private var suggestions: [PersonSuggestion] {
+        let history = TokenSuggester.suggest(query: draft, candidates: candidates, excluding: tokens)
+        guard isPeople, !contactMatches.isEmpty else {
+            return history.map { PersonSuggestion(text: $0, isContact: false) }
+        }
+        let excluded = Set(tokens.map(PersonResolver.normalize))
+        let eligible = contactMatches.filter {
+            !excluded.contains(PersonResolver.normalize($0.displayName))
+        }
+        return PersonSuggestionMerger.blend(history: history, contacts: eligible)
     }
 
     private var suggestionsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack {
-                ForEach(suggestions, id: \.self) { suggestion in
+                ForEach(suggestions, id: \.text) { suggestion in
                     Button {
-                        onChange(tokens + [suggestion])
-                        draft = ""
+                        pick(suggestion)
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: "clock.arrow.circlepath").imageScale(.small)
-                                .accessibilityHidden(true) // decorative "recent" glyph
-                            Text(suggestion)
+                            suggestionGlyph(suggestion)
+                                .accessibilityHidden(true) // decorative source glyph
+                            Text(suggestion.text)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(.quaternary, in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(suggestion)
-                    .accessibilityHint("Adds this recent entry.")
-                    .accessibilityIdentifier("token-suggestion-\(suggestion)")
+                    .accessibilityLabel(suggestion.text)
+                    .accessibilityHint(suggestion.isContact
+                        ? "Adds this contact."
+                        : "Adds this recent entry.")
+                    .accessibilityIdentifier("token-suggestion-\(suggestion.text)")
                 }
             }
         }
         .accessibilityIdentifier("token-suggestions")
+    }
+
+    /// Contact chips show the contact's photo when one exists; history chips
+    /// keep the "recent" glyph.
+    @ViewBuilder
+    private func suggestionGlyph(_ suggestion: PersonSuggestion) -> some View {
+        if let data = suggestion.thumbnail, let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 20, height: 20)
+                .clipShape(Circle())
+        } else if suggestion.isContact {
+            Image(systemName: "person.crop.circle").imageScale(.small)
+        } else {
+            Image(systemName: "clock.arrow.circlepath").imageScale(.small)
+        }
+    }
+
+    private func pick(_ suggestion: PersonSuggestion) {
+        draft = ""
+        if !tokens.contains(suggestion.text) {
+            onChange(tokens + [suggestion.text])
+        }
+        if suggestion.isContact { recordContactPick(suggestion.text) }
+    }
+
+    /// Picking a contact suggestion creates the PersonEntity if it's new
+    /// (via PersonResolver so alternate names heal to the same person) and
+    /// records the per-device contact link.
+    private func recordContactPick(_ displayName: String) {
+        guard let match = contactMatches.first(where: {
+            PersonResolver.normalize($0.displayName) == PersonResolver.normalize(displayName)
+        }) else { return }
+        let people = (try? modelContext.fetch(FetchDescriptor<PersonEntity>())) ?? []
+        let person = PersonResolver.person(matching: displayName, in: people) ?? {
+            let created = PersonEntity()
+            created.text = displayName
+            modelContext.insert(created)
+            try? modelContext.save()
+            return created
+        }()
+        guard let contactIdentifier = match.contactIdentifier else { return }
+        let cache = ContactLinkCache(
+            defaults: ContactSuggestions.isTestEnvironment ? appDefaults : nil)
+        cache.link(personID: person.uniqueIdentifier,
+                   contactIdentifier: contactIdentifier,
+                   matchKeys: match.matchKeys)
+    }
+
+    /// One-time inline offer under a people question (spec §Contacts in the
+    /// typeahead): enabling makes the single standard requestAccess call;
+    /// either choice marks the offer seen so it never reappears.
+    private var contactsOfferRow: some View {
+        HStack(spacing: 12) {
+            Text("Suggest names from your Contacts?")
+                .font(.footnote)
+                .opacity(0.8)
+            Button("Enable") {
+                appDefaults.set(true, forKey: ContactSuggestions.inlineOfferSeenKey)
+                showsContactsOffer = false
+                Task {
+                    let provider = ContactSuggestions.makeProvider()
+                    _ = await provider.requestAccess()
+                    appDefaults.set(true, forKey: ContactSuggestions.enabledKey)
+                    contactProvider = provider
+                }
+            }
+            .font(.footnote.weight(.semibold))
+            .accessibilityIdentifier("contacts-offer-enable")
+            Button("No Thanks") {
+                appDefaults.set(true, forKey: ContactSuggestions.inlineOfferSeenKey)
+                showsContactsOffer = false
+            }
+            .font(.footnote)
+            .accessibilityIdentifier("contacts-offer-dismiss")
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("contacts-inline-offer")
     }
 
     private func loadCandidates() {
