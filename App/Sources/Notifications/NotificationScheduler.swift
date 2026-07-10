@@ -219,6 +219,23 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// daemon processes an add before a stale remove and the new schedule
     /// gets deleted out from under it.
     func replanNow(prefs: NotificationPrefs, awakeStore: AwakeStore, now: Date = Date(), calendar: Calendar = .current) async {
+        // Authorization gate (kit-tested: ReplanAuthorizationGate): while
+        // permission is denied or notDetermined every `center.add` below
+        // fails with "Source is not authorized" — seven-plus error lines per
+        // pass, several passes at first launch (stamp-migration replan,
+        // remote-change replans). Skip the whole pass with one debug line;
+        // `requestPermissionIfNeeded`'s grant completion replans as soon as
+        // permission arrives, so the schedule materializes then. Test
+        // environments bypass the gate: UI tests never grant permission (the
+        // dialog would block the runner) but still exercise the replan path.
+        if !isTestEnvironment {
+            let status = await center.notificationSettings().authorizationStatus
+            guard ReplanAuthorizationGate.canSchedule(status) else {
+                notificationLog.debug("replan skipped: notifications not authorized")
+                return
+            }
+        }
+
         // Fetch the quick-answer question ONCE per replan and thread it
         // through category registration and every content build below —
         // avoids a full sorted Question fetch per scheduled request.
