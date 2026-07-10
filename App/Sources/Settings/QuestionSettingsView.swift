@@ -31,6 +31,15 @@ struct QuestionSettingsView: View {
                 }
                 .listRowBackground(Color.white.opacity(0.12))
                 .accessibilityIdentifier("add-question-button")
+
+                NavigationLink(destination: CatalogView()) {
+                    Text("QUESTION CATALOG…")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                }
+                .listRowBackground(Color.white.opacity(0.12))
+                .accessibilityIdentifier("question-catalog-link")
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)

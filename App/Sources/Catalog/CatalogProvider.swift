@@ -1,0 +1,234 @@
+import CloudKit
+import DispatchKit
+import Foundation
+
+/// Moderation boundary (plan 20): the app NEVER writes `CatalogQuestion`
+/// records. This provider can create `SubmittedQuestion` and `QuestionFlag`
+/// records only; catalog entries are created exclusively by the
+/// server-to-server key via `dispatch-mod`. Keep it that way — approval
+/// happens outside the app by construction, not by policy.
+
+/// Opaque pagination token. Wraps `CKQueryOperation.Cursor` for the CloudKit
+/// provider and a plain offset for the UI-test stub.
+struct CatalogQueryCursor: @unchecked Sendable {
+    let value: Any
+}
+
+enum CatalogAccountStatus: Sendable {
+    case available
+    case unavailable(reason: String)
+}
+
+enum CatalogProviderError: LocalizedError {
+    case network(underlying: String)
+    case validation([CatalogValidationError])
+
+    var errorDescription: String? {
+        switch self {
+        case .network(let underlying): underlying
+        case .validation(let errors): errors.map(\.message).joined(separator: " ")
+        }
+    }
+}
+
+protocol CatalogProviding: Sendable {
+    /// One page of approved catalog entries, newest approval first.
+    /// `cursor == nil` requests the first page; a nil returned cursor means
+    /// the listing is exhausted.
+    func approvedQuestions(
+        after cursor: CatalogQueryCursor?
+    ) async throws -> (entries: [CatalogQuestion], cursor: CatalogQueryCursor?)
+
+    /// Create a SubmittedQuestion record (values already validated/normalized).
+    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?) async throws
+
+    /// Create a QuestionFlag record against a catalog entry.
+    func flag(catalogRecordName: String, reason: String) async throws
+
+    /// Whether writes are possible (submitting/flagging needs an iCloud
+    /// account; browsing the public database does not).
+    func accountStatus() async -> CatalogAccountStatus
+}
+
+/// Real provider: the existing CloudKit container's PUBLIC database. No new
+/// entitlements — the public DB rides the container the private sync DB
+/// already uses.
+final class CloudKitCatalogProvider: CatalogProviding {
+    static let pageSize = 25
+
+    private var database: CKDatabase {
+        CKContainer(identifier: SyncPolicy.containerIdentifier).publicCloudDatabase
+    }
+
+    func approvedQuestions(
+        after cursor: CatalogQueryCursor?
+    ) async throws -> (entries: [CatalogQuestion], cursor: CatalogQueryCursor?) {
+        let matchResults: [(CKRecord.ID, Result<CKRecord, Error>)]
+        let nextCursor: CKQueryOperation.Cursor?
+        do {
+            if let ckCursor = cursor?.value as? CKQueryOperation.Cursor {
+                (matchResults, nextCursor) = try await database.records(
+                    continuingMatchFrom: ckCursor, resultsLimit: Self.pageSize
+                )
+            } else {
+                let query = CKQuery(
+                    recordType: CatalogRecordType.catalogQuestion,
+                    predicate: NSPredicate(value: true)
+                )
+                query.sortDescriptors = [NSSortDescriptor(key: "approvedAt", ascending: false)]
+                (matchResults, nextCursor) = try await database.records(
+                    matching: query, resultsLimit: Self.pageSize
+                )
+            }
+        } catch {
+            throw CatalogProviderError.network(underlying: Self.friendlyMessage(for: error))
+        }
+
+        let entries = matchResults.compactMap { _, result -> CatalogQuestion? in
+            guard let record = try? result.get() else { return nil }
+            return Self.catalogQuestion(from: record)
+        }
+        return (entries, nextCursor.map { CatalogQueryCursor(value: $0) })
+    }
+
+    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?) async throws {
+        let submission = SubmittedQuestion(
+            recordName: UUID().uuidString, prompt: prompt, typeRaw: typeRaw,
+            choices: choices, creditName: creditName, submittedAt: .now
+        )
+        let record = CKRecord(
+            recordType: CatalogRecordType.submittedQuestion,
+            recordID: CKRecord.ID(recordName: submission.recordName)
+        )
+        Self.apply(fields: submission.fields, to: record)
+        do {
+            _ = try await database.save(record)
+        } catch {
+            throw CatalogProviderError.network(underlying: Self.friendlyMessage(for: error))
+        }
+    }
+
+    func flag(catalogRecordName: String, reason: String) async throws {
+        let flag = QuestionFlag(
+            recordName: UUID().uuidString, catalogRecordName: catalogRecordName,
+            reason: reason, flaggedAt: .now
+        )
+        let record = CKRecord(
+            recordType: CatalogRecordType.questionFlag,
+            recordID: CKRecord.ID(recordName: flag.recordName)
+        )
+        Self.apply(fields: flag.fields, to: record)
+        do {
+            _ = try await database.save(record)
+        } catch {
+            throw CatalogProviderError.network(underlying: Self.friendlyMessage(for: error))
+        }
+    }
+
+    func accountStatus() async -> CatalogAccountStatus {
+        do {
+            let status = try await CKContainer(identifier: SyncPolicy.containerIdentifier).accountStatus()
+            switch status {
+            case .available:
+                return .available
+            case .noAccount:
+                return .unavailable(reason: "Sign in to iCloud to submit or flag questions. Browsing works without an account.")
+            case .restricted, .couldNotDetermine, .temporarilyUnavailable:
+                return .unavailable(reason: "iCloud isn't available right now. Browsing still works; try submitting later.")
+            @unknown default:
+                return .unavailable(reason: "iCloud isn't available right now.")
+            }
+        } catch {
+            return .unavailable(reason: "iCloud isn't available right now.")
+        }
+    }
+
+    // MARK: - CKRecord ↔ kit value mapping
+
+    /// The kit's typed field dictionaries keep DispatchKit CloudKit-free;
+    /// this is the app-side bridge (write side: submissions + flags ONLY).
+    static func apply(fields: [String: CatalogFieldValue], to record: CKRecord) {
+        for (key, value) in fields {
+            switch value {
+            case .string(let string): record[key] = string as CKRecordValue
+            case .int(let int): record[key] = int as CKRecordValue
+            case .date(let date): record[key] = date as CKRecordValue
+            case .stringList(let list): record[key] = list as CKRecordValue
+            }
+        }
+    }
+
+    static func catalogQuestion(from record: CKRecord) -> CatalogQuestion? {
+        var fields: [String: CatalogFieldValue] = [:]
+        if let prompt = record["prompt"] as? String { fields["prompt"] = .string(prompt) }
+        if let typeRaw = record["typeRaw"] as? Int64 {
+            fields["typeRaw"] = .int(Int(typeRaw))
+        } else if let typeRaw = record["typeRaw"] as? Int {
+            fields["typeRaw"] = .int(typeRaw)
+        }
+        if let choicesJSON = record["choicesJSON"] as? String { fields["choicesJSON"] = .string(choicesJSON) }
+        if let credit = record["credit"] as? String { fields["credit"] = .string(credit) }
+        if let approvedAt = record["approvedAt"] as? Date { fields["approvedAt"] = .date(approvedAt) }
+        if let tags = record["tags"] as? [String] { fields["tags"] = .stringList(tags) }
+        return CatalogQuestion(recordName: record.recordID.recordName, fields: fields)
+    }
+
+    private static func friendlyMessage(for error: Error) -> String {
+        if let ckError = error as? CKError {
+            switch ckError.code {
+            case .networkUnavailable, .networkFailure:
+                return "The catalog needs a network connection."
+            case .notAuthenticated:
+                return "Sign in to iCloud to do that. Browsing works without an account."
+            case .requestRateLimited, .zoneBusy, .serviceUnavailable:
+                return "iCloud is busy — try again in a moment."
+            default:
+                break
+            }
+        }
+        return "The catalog couldn't reach iCloud. Try again later."
+    }
+}
+
+/// UI-test stub (selected under --ui-testing/--mock-sensors): fixed entries,
+/// in-memory submissions/flags, no CloudKit anywhere near the test suite.
+final class StubCatalogProvider: CatalogProviding, @unchecked Sendable {
+    static let stubEntries: [CatalogQuestion] = [
+        CatalogQuestion(
+            recordName: "stub-catalog-1", prompt: "Did you drink water today?",
+            typeRaw: QuestionType.yesNo.rawValue, choices: [], credit: "Stub Author",
+            approvedAt: Date(timeIntervalSinceReferenceDate: 800_000_000), tags: ["health"]
+        ),
+        CatalogQuestion(
+            recordName: "stub-catalog-2", prompt: "How is your energy level?",
+            typeRaw: QuestionType.multipleChoice.rawValue, choices: ["High", "Medium", "Low"],
+            credit: nil, approvedAt: Date(timeIntervalSinceReferenceDate: 799_000_000), tags: []
+        ),
+        CatalogQuestion(
+            recordName: "stub-catalog-3", prompt: "What did you eat?",
+            typeRaw: QuestionType.tokens.rawValue, choices: [], credit: nil,
+            approvedAt: Date(timeIntervalSinceReferenceDate: 798_000_000), tags: ["food"]
+        ),
+    ]
+
+    private(set) var submissions: [(prompt: String, typeRaw: Int, choices: [String], creditName: String?)] = []
+    private(set) var flags: [(catalogRecordName: String, reason: String)] = []
+
+    func approvedQuestions(
+        after cursor: CatalogQueryCursor?
+    ) async throws -> (entries: [CatalogQuestion], cursor: CatalogQueryCursor?) {
+        // Single page; a non-nil cursor request returns the empty tail.
+        if cursor != nil { return ([], nil) }
+        return (Self.stubEntries, nil)
+    }
+
+    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?) async throws {
+        submissions.append((prompt, typeRaw, choices, creditName))
+    }
+
+    func flag(catalogRecordName: String, reason: String) async throws {
+        flags.append((catalogRecordName, reason))
+    }
+
+    func accountStatus() async -> CatalogAccountStatus { .available }
+}
