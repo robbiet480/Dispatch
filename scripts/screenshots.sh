@@ -13,7 +13,8 @@
 # Device classes (verified against Apple's screenshot specifications,
 # https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications/
 # fetched 2026-07-09):
-#   - 6.9" (1260x2736, iPhone 17 Pro Max class) — REQUIRED.
+#   - 6.9" (iPhone 17 Pro Max class; ASC accepts 1320x2868 — what the
+#     simulator produces — alongside 1260x2736) — REQUIRED.
 #   - 6.5" (1284x2778) — only a FALLBACK slot used when no 6.9" set exists;
 #     no 6.5"-class device can run the iOS 26 simulator runtime (that class
 #     ended with iPhone 14 Plus), so providing the 6.9" set satisfies App
@@ -43,13 +44,14 @@ for DEVICE in "${DEVICES[@]}"; do
   RESULT="$WORK/screenshots.xcresult"
 
   echo "==> Capturing on $DEVICE"
-  xcodebuild test \
+  # TEST_RUNNER_* must be in xcodebuild's ENVIRONMENT (not a build setting)
+  # to reach the test runner's process environment with the prefix stripped.
+  env TEST_RUNNER_SCREENSHOT_MODE=1 xcodebuild test \
     -project Dispatch.xcodeproj \
     -scheme "$SCHEME" \
     -destination "platform=iOS Simulator,name=$DEVICE" \
     -only-testing:DispatchUITests/ScreenshotTests \
     -resultBundlePath "$RESULT" \
-    TEST_RUNNER_SCREENSHOT_MODE=1 \
     | tail -5
 
   echo "==> Extracting attachments from $RESULT"
@@ -60,7 +62,7 @@ for DEVICE in "${DEVICES[@]}"; do
   # manifest.json maps exported files back to attachment names; keep only our
   # "shot-<nn>-<name>" captures and write <device-slug>-<nn>-<name>.png.
   python3 - "$EXPORT_DIR" "$OUT_DIR" "$SLUG" <<'PY'
-import json, pathlib, shutil, sys
+import json, pathlib, re, shutil, sys
 
 export_dir = pathlib.Path(sys.argv[1])
 out_dir = pathlib.Path(sys.argv[2])
@@ -88,6 +90,8 @@ for att in attachments(manifest):
     shot = name.split("shot-", 1)[1]
     for ext in (".png", ".jpeg", ".jpg"):
         shot = shot.removesuffix(ext)
+    # xcresulttool appends "_<n>_<UUID>" to suggested names — strip it.
+    shot = re.sub(r"_\d+_[0-9A-Fa-f-]{36}$", "", shot)
     dest = out_dir / f"{slug}-{shot}.png"
     shutil.copyfile(export_dir / exported, dest)
     copied += 1
