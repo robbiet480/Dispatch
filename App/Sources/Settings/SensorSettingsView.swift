@@ -45,36 +45,25 @@ struct SensorSettingsView: View {
                 .ignoresSafeArea()
 
             List {
-                Section {
-                    ForEach(SensorKind.allCases, id: \.self) { kind in
-                        HStack(spacing: 12) {
-                            Text(kind.displayName)
-                                .foregroundStyle(.white)
-                            Spacer()
-                            // A locked sensor (permission not yet granted, or
-                            // denied) can't be enabled — its slider is off and
-                            // disabled, with a Request/Settings button beside
-                            // it. Granted (and HealthKit's opaque "requested")
-                            // leave the slider free.
-                            permissionButton(for: kind)
-                            Toggle(
-                                kind.displayName,
-                                isOn: isLocked(kind) ? .constant(false) : enabledBinding(kind)
-                            )
-                            .labelsHidden()
-                            .fixedSize()
-                            .tint(.white.opacity(0.4))
-                            .disabled(isLocked(kind))
-                            .accessibilityIdentifier("sensor-toggle-\(kind)")
+                // Sensors grouped into categories, each sorted alphabetically
+                // by display name (see sensorCategories).
+                ForEach(sensorCategories, id: \.title) { category in
+                    Section {
+                        ForEach(category.kinds, id: \.self) { kind in
+                            sensorRow(kind)
                         }
+                    } header: {
+                        sectionHeader(category.title)
                     }
+                    .listRowBackground(Color.white.opacity(0.12))
+                }
 
-                    // Bulk request lives at the BOTTOM of the section and
-                    // only while something is actually requestable — when
-                    // every permission is granted or denied there is no
-                    // dialog left for the cascade to show (denied can only
-                    // be fixed in the Settings app, via the row affordance).
-                    if hasRequestablePermissions {
+                // Bulk request: its own section, present only while something
+                // is actually requestable — when every permission is granted
+                // or denied there is no dialog left for the cascade to show
+                // (denied can only be fixed in the Settings app, per row).
+                if hasRequestablePermissions {
+                    Section {
                         Button {
                             Task { await requestSensorAccess() }
                         } label: {
@@ -90,10 +79,8 @@ struct SensorSettingsView: View {
                         .disabled(isRequestingPermissions)
                         .accessibilityIdentifier("request-all-sensors")
                     }
-                } header: {
-                    sectionHeader("SENSORS")
+                    .listRowBackground(Color.white.opacity(0.12))
                 }
-                .listRowBackground(Color.white.opacity(0.12))
 
                 // Focus filter hint (plan 15): Apple provides no in-app
                 // enrollment for Focus Filters, so the best we can do is
@@ -260,6 +247,53 @@ struct SensorSettingsView: View {
     /// "Denied" button deep-linking to the Settings app (the only place a
     /// denial can be fixed). Rows without a gating permission — and unknown
     /// states — render nothing.
+    private struct SensorCategory {
+        let title: String
+        let kinds: [SensorKind]
+    }
+
+    /// Sensor rows grouped into categories, each sorted alphabetically by
+    /// display name. Every SensorKind appears in exactly one category — the
+    /// four groups partition all 19 cases.
+    private var sensorCategories: [SensorCategory] {
+        let groups: [(String, [SensorKind])] = [
+            ("HEALTH", [
+                .healthActivityRings, .healthCaffeine, .healthHeart, .healthHRV,
+                .healthMedications, .healthRestingHeart, .healthSleep,
+                .healthFlights, .healthSteps, .healthWorkouts,
+            ]),
+            ("LOCATION & WEATHER", [.location, .weather, .altitude]),
+            ("DEVICE", [.battery, .connection, .focus]),
+            ("MEDIA & SURROUNDINGS", [.audio, .media, .photos]),
+        ]
+        return groups.map { title, kinds in
+            SensorCategory(title: title, kinds: kinds.sorted { $0.displayName < $1.displayName })
+        }
+    }
+
+    @ViewBuilder
+    private func sensorRow(_ kind: SensorKind) -> some View {
+        HStack(spacing: 12) {
+            Text(kind.displayName)
+                .foregroundStyle(.white)
+            Spacer()
+            // A locked sensor (permission not yet granted, or denied) can't be
+            // enabled — its slider is off and disabled, with a Request/Settings
+            // button beside it. Granted (and HealthKit's opaque "requested")
+            // leave the slider free.
+            permissionButton(for: kind)
+            Toggle(
+                kind.displayName,
+                isOn: isLocked(kind) ? .constant(false) : enabledBinding(kind)
+            )
+            .labelsHidden()
+            .fixedSize()
+            .tint(.white.opacity(0.4))
+            .disabled(isLocked(kind))
+            .accessibilityIdentifier("sensor-toggle-\(kind)")
+        }
+    }
+
     /// Whether the sensor's slider must be off + disabled because the app
     /// can't read it yet: true when the gating permission is not-determined
     /// or denied. Granted, HealthKit's opaque `.requested`, `.unknown`, and

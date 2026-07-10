@@ -5,6 +5,19 @@ import XCTest
 /// test-environment stub: `SENSOR_PERMISSION_STATUSES` launch-environment
 /// JSON feeds SensorPermissionStatusProvider per-permission states.
 final class SensorSettingsUITests: XCTestCase {
+    /// Swipes up (bounded) until `element` materializes; returns whether it
+    /// did. Categories render in fixed vertical order, so callers scroll
+    /// through them top-to-bottom without needing to scroll back up.
+    @MainActor
+    private func scrollDownUntil(_ element: XCUIElement, _ app: XCUIApplication, max: Int = 10) -> Bool {
+        var remaining = max
+        while !element.exists, remaining > 0 {
+            app.swipeUp()
+            remaining -= 1
+        }
+        return element.exists
+    }
+
     @MainActor
     private func launchToSensors(statuses: String?) -> XCUIApplication {
         let app = XCUIApplication()
@@ -29,18 +42,28 @@ final class SensorSettingsUITests: XCTestCase {
             statuses: #"{"location":"granted","microphone":"notDetermined","photos":"denied"}"#
         )
 
-        // Not-determined renders a "Request" button beside a locked slider.
+        // Sensors are grouped into categories (each sorted alphabetically),
+        // in a fixed vertical order — scroll down past each in turn (List
+        // rows materialize lazily). Elements below the fold don't exist in
+        // the tree until scrolled to.
+        for header in ["HEALTH", "LOCATION & WEATHER", "DEVICE", "MEDIA & SURROUNDINGS"] {
+            XCTAssertTrue(scrollDownUntil(app.staticTexts[header].firstMatch, app),
+                          "missing category header \(header)")
+        }
+
+        // Microphone (Audio) and Photos live in the last category. Not-
+        // determined → "Request" button; denied → "Settings" (deep link).
         let request = app.buttons["permission-request-microphone"].firstMatch
-        XCTAssertTrue(request.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollDownUntil(request, app))
         XCTAssertEqual(request.label, "Request")
 
-        // Denied renders a "Settings" button (deep link) beside a locked slider.
         let settings = app.buttons["permission-settings-photos"].firstMatch
-        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        XCTAssertTrue(scrollDownUntil(settings, app))
         XCTAssertEqual(settings.label, "Settings")
 
         // Granted leaves the slider free — no Request/Settings button on the
-        // location rows (Location/Weather/Elevation share the permission).
+        // location rows (Location/Weather/Elevation share the permission);
+        // those identifiers never appear anywhere in the tree.
         XCTAssertFalse(app.buttons["permission-request-location"].exists)
         XCTAssertFalse(app.buttons["permission-settings-location"].exists)
 
