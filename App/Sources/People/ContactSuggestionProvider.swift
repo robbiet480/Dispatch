@@ -139,14 +139,9 @@ actor CNContactSuggestionProvider: ContactSuggestionProviding {
         let displayName = CNContactFormatter.string(from: contact, style: .fullName)
             ?? [contact.givenName, contact.familyName].filter { !$0.isEmpty }.joined(separator: " ")
         guard !displayName.isEmpty else { return nil }
-        let emails = contact.emailAddresses.map {
-            ($0.value as String).lowercased().trimmingCharacters(in: .whitespaces)
-        }
-        let phones = contact.phoneNumbers.map { normalizePhone($0.value.stringValue) }
-        let matchKeys = (emails + phones).filter { !$0.isEmpty }
         let match = ContactMatch(displayName: displayName,
                                  thumbnail: contact.thumbnailImageData,
-                                 matchKeys: matchKeys,
+                                 matchKeys: matchKeys(for: contact),
                                  contactIdentifier: contact.identifier)
         var nameKeys = [displayName, contact.givenName, contact.familyName, contact.nickname]
             .filter { !$0.isEmpty }
@@ -157,7 +152,17 @@ actor CNContactSuggestionProvider: ContactSuggestionProviding {
         return Entry(match: match, nameKeys: nameKeys)
     }
 
-    private static func normalizePhone(_ raw: String) -> String {
+    /// Normalized email/phone match keys for the per-device link cache.
+    /// Shared with the zero-permission contact picker's link flow.
+    nonisolated static func matchKeys(for contact: CNContact) -> [String] {
+        let emails = contact.emailAddresses.map {
+            ($0.value as String).lowercased().trimmingCharacters(in: .whitespaces)
+        }
+        let phones = contact.phoneNumbers.map { normalizePhone($0.value.stringValue) }
+        return (emails + phones).filter { !$0.isEmpty }
+    }
+
+    private nonisolated static func normalizePhone(_ raw: String) -> String {
         raw.filter { $0.isNumber || $0 == "+" }
     }
 }
