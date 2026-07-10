@@ -137,7 +137,10 @@ struct CaptureChecklistView: View {
                 return "\(medications.count) MEDICATION\(medications.count == 1 ? "" : "S") LOGGED"
             }
             return "\(label) CAPTURED"
-        case .battery, .connection, .focus:
+        case .connection(let raw):
+            return ConnectionType(rawValue: raw).map { "\($0.displayName.uppercased()) CONNECTION" }
+                ?? "\(label) CAPTURED"
+        case .battery, .focus:
             return "\(label) CAPTURED"
         }
     }

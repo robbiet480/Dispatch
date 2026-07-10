@@ -104,13 +104,7 @@ struct ReportDetailView: View {
             append("moon.circle", "Focus", value)
         }
         if let connection = report.connectionType {
-            let value: String
-            switch connection {
-            case .cellular: value = "Cellular"
-            case .wifi: value = "Wi-Fi"
-            case .none: value = "None"
-            }
-            append("antenna.radiowaves.left.and.right", "Connection", value)
+            append("antenna.radiowaves.left.and.right", "Connection", connection.displayName)
         }
         return rows
     }
