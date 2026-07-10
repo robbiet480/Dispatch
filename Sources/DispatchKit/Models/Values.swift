@@ -101,14 +101,26 @@ public struct MediaSample: Codable, Hashable, Sendable {
     public var album: String?
     /// Raw MediaPlaybackState value; unknown values are preserved verbatim.
     public var playbackState: Int
+    /// Spotify content URI (e.g. "spotify:track:…") from the App Remote
+    /// player state's `track.uri`. Additive (deep-link feature): omitted from
+    /// the wire when nil; pre-existing payloads decode with nil. Property
+    /// name == coding key (the SwiftData composite-storage rule above).
+    public var spotifyTrackURI: String?
+    /// Apple Music catalog store ID from `MPMediaItem.playbackStoreID`; nil
+    /// for purely local files (whose store ID comes back "0"/empty). Same
+    /// additive wire rules as `spotifyTrackURI`.
+    public var appleMusicStoreID: String?
 
     public init(source: MediaSource, title: String? = nil, artist: String? = nil,
-                album: String? = nil, playbackState: MediaPlaybackState = .playing) {
+                album: String? = nil, playbackState: MediaPlaybackState = .playing,
+                spotifyTrackURI: String? = nil, appleMusicStoreID: String? = nil) {
         self.source = source.rawValue
         self.title = title
         self.artist = artist
         self.album = album
         self.playbackState = playbackState.rawValue
+        self.spotifyTrackURI = spotifyTrackURI
+        self.appleMusicStoreID = appleMusicStoreID
     }
 
     public var sourceType: MediaSource? { MediaSource(rawValue: source) }

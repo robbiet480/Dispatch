@@ -32,14 +32,58 @@ struct ReportDetailView: View {
     @ViewBuilder
     private var sensorSection: some View {
         let rows = sensorRows
-        if !rows.isEmpty {
+        if !rows.isEmpty || report.media != nil {
             Section {
                 ForEach(rows, id: \.id) { row in
                     sensorRow(icon: row.icon, label: row.label, value: row.value)
                 }
+                // Media renders outside the generic ForEach: when a deep link
+                // resolves the row is tappable (opens the song in its source
+                // app); otherwise it's a plain row like every other sensor.
+                if let media = report.media {
+                    mediaRow(media)
+                }
             } header: {
                 sectionHeader("SENSORS")
             }
+        }
+    }
+
+    /// Tappable when `MediaDeepLink` resolves a URL — Apple Music universal
+    /// link, or Spotify URI/web link per the content-linking guide (the
+    /// scheme check needs `spotify` in LSApplicationQueriesSchemes, present).
+    /// Old reports without captured identifiers get the resolver's search
+    /// fallback; the other-audio floor and unknown sources stay plain.
+    @ViewBuilder
+    private func mediaRow(_ media: MediaSample) -> some View {
+        let spotifyInstalled = URL(string: "spotify:").map { UIApplication.shared.canOpenURL($0) } ?? false
+        if let url = MediaDeepLink.url(for: media, spotifyAppInstalled: spotifyInstalled) {
+            Button {
+                UIApplication.shared.open(url)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "music.note")
+                        .foregroundStyle(.white.opacity(0.8))
+                        .frame(width: 24)
+                    Text("Media")
+                        .foregroundStyle(.white.opacity(0.85))
+                    Spacer()
+                    Text(media.detailLine)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.trailing)
+                    // Subtle link affordance — only shown when a link resolves.
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .font(.subheadline)
+            }
+            .listRowBackground(Color.white.opacity(0.12))
+            .accessibilityAddTraits(.isLink)
+            .accessibilityHint(Text("Opens in \(media.sourceType?.displayName ?? "the music app")."))
+            .accessibilityIdentifier("media-deep-link")
+        } else {
+            sensorRow(icon: "music.note", label: "Media", value: media.detailLine)
         }
     }
 
@@ -106,9 +150,8 @@ struct ReportDetailView: View {
         if let connection = report.connectionType {
             append("antenna.radiowaves.left.and.right", "Connection", connection.displayName)
         }
-        if let media = report.media {
-            append("music.note", "Media", media.detailLine)
-        }
+        // Media is rendered by mediaRow(_:) in sensorSection, not here — it
+        // needs a tappable variant the plain-tuple rows can't express.
         return rows
     }
 

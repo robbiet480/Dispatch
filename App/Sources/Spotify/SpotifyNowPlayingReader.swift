@@ -81,7 +81,10 @@ private final class SpotifyReadSession: NSObject, SPTAppRemoteDelegate {
                     title: state.track.name,
                     artist: state.track.artist.name,
                     album: state.track.album.name,
-                    playbackState: state.isPaused ? .paused : .playing
+                    playbackState: state.isPaused ? .paused : .playing,
+                    // track.URI (v5.0.1 header) — the "spotify:track:…" form
+                    // the content-linking guide deep-links with.
+                    spotifyTrackURI: state.track.uri.isEmpty ? nil : state.track.uri
                 ))
             }
         }

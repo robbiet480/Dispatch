@@ -59,7 +59,11 @@ struct MediaProvider: SensorProvider {
         guard MPMediaLibrary.authorizationStatus() == .authorized else { return nil }
         let player = MPMusicPlayerController.systemMusicPlayer
         guard player.playbackState == .playing, let item = player.nowPlayingItem else { return nil }
+        // playbackStoreID is "0"/empty for purely local files — store nil so
+        // the deep-link resolver falls back to a title/artist search.
+        let storeID = item.playbackStoreID
         return MediaSample(source: .appleMusic, title: item.title, artist: item.artist,
-                           album: item.albumTitle, playbackState: .playing)
+                           album: item.albumTitle, playbackState: .playing,
+                           appleMusicStoreID: (storeID.isEmpty || storeID == "0") ? nil : storeID)
     }
 }

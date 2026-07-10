@@ -215,3 +215,29 @@ import Testing
     let old = try #require(try contextC.fetch(FetchDescriptor<Report>()).first)
     #expect(old.media == nil)
 }
+
+/// Deep-link identifier fields (post-plan-26) round-trip through SwiftData +
+/// v2 export/import — pinned separately because SwiftData composite storage
+/// silently drops mis-keyed properties (the plan-26 sourceRaw lesson).
+@Test func mediaIdentifiersRoundTripThroughStoreAndV2() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let report = Report()
+    report.uniqueIdentifier = "r-media-ids"
+    report.media = MediaSample(source: .spotify, title: "Song", artist: "Artist",
+                               spotifyTrackURI: "spotify:track:1AhDOtG9vPSOmsWgNW0BEY",
+                               appleMusicStoreID: "1440857781")
+    contextA.insert(report)
+    try contextA.save()
+
+    let export = try V2Exporter.exportData(from: contextA)
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(export, into: contextB)
+    let media = try #require(try contextB.fetch(FetchDescriptor<Report>()).first?.media)
+    #expect(media.spotifyTrackURI == "spotify:track:1AhDOtG9vPSOmsWgNW0BEY")
+    #expect(media.appleMusicStoreID == "1440857781")
+
+    let exportB = try V2Exporter.exportData(from: contextB)
+    #expect(export == exportB)
+}
