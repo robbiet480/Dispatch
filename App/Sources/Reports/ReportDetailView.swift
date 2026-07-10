@@ -19,6 +19,8 @@ struct ReportDetailView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            // Plan 27: readable column on iPad; no-op at iPhone widths.
+            .readableColumn()
         }
         .navigationTitle(timeTitle)
         .navigationBarTitleDisplayMode(.inline)

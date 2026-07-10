@@ -83,6 +83,8 @@ struct ChoiceOptionsEditorView: View {
                 .listRowBackground(Color.white.opacity(0.12))
             }
             .scrollContentBackground(.hidden)
+            // Plan 27: readable column on iPad; no-op at iPhone widths.
+            .readableColumn()
         }
         .navigationTitle("Choices")
         .navigationBarTitleDisplayMode(.inline)

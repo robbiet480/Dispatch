@@ -106,6 +106,9 @@ struct SurveyFlowView: View {
                                              },
                                              flushRegistry: flushRegistry)
                         }
+                        // Plan 27: readable column so wide layouts (iPad
+                        // sheet/landscape) don't stretch inputs edge-to-edge.
+                        .readableColumn()
                     }
                     .tag(index)
                 }
