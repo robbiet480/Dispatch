@@ -27,6 +27,11 @@ enum NotificationIdentifiers {
     /// `digest-weekly`; removals join the prompt-/gprompt-/nag- batch.
     static let digestPrefix = "digest-"
     static let digestWeeklyIdentifier = "digest-weekly"
+    /// Webhook delivery-failure notice (plan 24): `webhook-failed-<reportID>`,
+    /// posted by WebhookManager on a report's 3rd failed attempt. Joins the
+    /// standard removal-batch prefix discipline (replan batch + the
+    /// delete-all removeAll).
+    static let webhookFailedPrefix = "webhook-failed-"
     /// userInfo key carrying the PromptGroup uniqueIdentifier.
     static let promptGroupIDKey = "promptGroupID"
     /// userInfo key carrying the UUID of the HKWorkout that fired a
@@ -268,6 +273,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                     || $0.hasPrefix(NotificationIdentifiers.groupPromptPrefix)
                     || $0.hasPrefix(NotificationIdentifiers.nagPrefix)
                     || $0.hasPrefix(NotificationIdentifiers.digestPrefix)
+                    || $0.hasPrefix(NotificationIdentifiers.webhookFailedPrefix)
             }
 
         // Snoozes survive replans while awake — including replans while a
@@ -830,16 +836,22 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Webhook enqueue+drain hook (plan 24), set by DispatchApp — the
+    /// notification quick-answer save path runs in the app process, so it
+    /// delivers immediately like any in-app save.
+    var reportFiledWebhookHook: ((String) -> Void)?
+
     private func fileQuickAnswer(isYes: Bool) {
         let context = ModelContext(container)
         guard let question = Self.firstEnabledYesNoQuestion(in: context) else { return }
         do {
-            try QuickAnswerFiler.file(
+            let report = try QuickAnswerFiler.file(
                 question: question,
                 choiceIndex: isYes ? 0 : 1,
                 trigger: .notification,
                 in: context
             )
+            reportFiledWebhookHook?(report.uniqueIdentifier)
             if !isTestEnvironment {
                 WidgetRefresher.reload()
             }

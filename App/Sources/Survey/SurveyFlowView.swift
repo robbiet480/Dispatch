@@ -10,6 +10,7 @@ struct SurveyFlowView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(NotificationScheduler.self) private var notificationScheduler
     @Environment(BackupManager.self) private var backupManager
+    @Environment(WebhookManager.self) private var webhookManager
     @State private var controller: SurveyController?
     /// Text fields register a synchronous flush closure here (see
     /// `LocalTextEditorField`/`PendingFlushRegistry`). Called immediately
@@ -105,7 +106,7 @@ struct SurveyFlowView: View {
                 Button(controller.survey.isLastPage ? "DONE" : "NEXT") {
                     flushRegistry.flushAll()
                     if controller.survey.isLastPage {
-                        if (try? controller.save(in: modelContext)) != nil {
+                        if let report = try? controller.save(in: modelContext) {
                             // A filed report satisfies any past-due prompt:
                             // cancel their pending nag reminders.
                             notificationScheduler.reportFiled()
@@ -113,6 +114,9 @@ struct SurveyFlowView: View {
                             // staleness gate as scene-active — at most one
                             // backup a day, off-main, never blocks dismiss.
                             backupManager.backUpIfStale()
+                            // Webhook hook (plan 24): enqueue + immediate
+                            // drain; no-ops unless a webhook is configured.
+                            webhookManager.enqueueAndDrain(reportID: report.uniqueIdentifier)
                         }
                         dismiss()
                     } else {

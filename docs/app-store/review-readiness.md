@@ -178,6 +178,18 @@ the app implements no proprietary encryption; it uses only Apple OS-provided TLS
 CloudKit encryption, which is exempt under category 5A992/mass-market OS-services
 carve-outs (<https://developer.apple.com/documentation/security/complying-with-encryption-export-regulations>).
 
+**Re-verified 2026-07-09 for plan 24 (webhooks):** the webhook feature adds CryptoKit
+HMAC-SHA256 signing and optional AES-256-GCM payload encryption with HKDF-SHA256 key
+derivation. All of it is OS-provided (CryptoKit), standard-algorithm, non-proprietary
+crypto. Apple's current guidance (fetched 2026-07-09, same URL as above) states: "the
+use of encryption that's built into the operating system … is exempt from export
+documentation upload requirements, whereas the use of proprietary encryption is not,"
+and the `ITSAppUsesNonExemptEncryption` key doc permits `NO` when the app "only uses
+encryption that's exempt from export compliance requirements." Verdict: **`NO` remains
+valid.** Standing obligation unchanged: exempt/mass-market use may still require the
+annual self-classification report to BIS/NSA per EAR §742.15(b) — a developer filing,
+not an App Store Connect one.
+
 ### 2.9 Metadata accuracy — 2.3.1 — WATCH
 2.3.1(a): "All new features, functionality, and product changes must be described with
 specificity in the Notes for Review section… (generic descriptions will be rejected)."
@@ -204,7 +216,7 @@ higher-rating path since the app provides no medical advice. Answer sheet in Tas
 | 2.3.1 | Reviewer notes need specific permission walkthrough; verify `aps-environment=production` in archive | Medium | Task 4 review-notes.md; archive check | robbiet480 |
 | 4.1 | Onboarding headlines verbatim from original Reporter | Low | Optional rewrite (~1 h); attribution defense drafted (§2.6) | robbiet480 |
 | 5.1.5 | Always-location | Low (compliant) | Document contextual-ask story in reviewer notes | robbiet480 |
-| Export compliance | ITSAppUsesNonExemptEncryption=NO | Low (compliant) | None | — |
+| Export compliance | ITSAppUsesNonExemptEncryption=NO — re-verified 2026-07-09 with plan-24 CryptoKit AES-GCM/HKDF/HMAC (OS-provided, standard algorithms ⇒ exempt per Apple's encryption-export doc; §2.8) | Low (compliant) | Annual BIS self-classification report | robbiet480 |
 
 ## 4. Top-3 blockers
 

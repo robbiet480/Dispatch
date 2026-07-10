@@ -98,7 +98,10 @@ final class SurveyController {
         }
     }
 
-    func save(in context: ModelContext) throws {
+    /// Returns the saved report so post-save hooks (webhook enqueue,
+    /// plan 24) can reference its uniqueIdentifier.
+    @discardableResult
+    func save(in context: ModelContext) throws -> Report {
         let report = try ReportBuilder.save(kind: kind, trigger: trigger, date: overrideDate ?? Date(),
                                             timeZone: TimeZone.current, outcomes: outcomes,
                                             answers: survey.drafts(), in: context,
@@ -107,7 +110,7 @@ final class SurveyController {
 
         SpotlightIndexer.index(report: report)
 
-        guard !isTestEnvironment else { return }
+        guard !isTestEnvironment else { return report }
         // Widgets read the shared store directly but get no change
         // notifications — poke them after every report save.
         WidgetRefresher.reload()
@@ -115,6 +118,7 @@ final class SurveyController {
         Task {
             await StateOfMindWriter.write(for: report, in: savedQuestions, context: context)
         }
+        return report
     }
 }
 

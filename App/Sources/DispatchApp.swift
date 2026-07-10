@@ -25,6 +25,7 @@ struct DispatchApp: App {
     let workoutEndObserver: WorkoutEndObserver
     let visitObserver: VisitObserver
     let backupManager: BackupManager
+    let webhookManager: WebhookManager
     let remoteChangeObserver: RemoteChangeObserver
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
@@ -125,6 +126,28 @@ struct DispatchApp: App {
             container: container, defaults: appDefaults, isTestEnvironment: isTestEnvironment
         )
 
+        // Report webhooks (plan 24): queue-and-drain. The queue and the
+        // device-local config live in the App Group defaults (the widget
+        // process enqueues into the same suite); tests use the isolated
+        // per-launch suite plus a stub transport (`--stub-webhook`) so no
+        // test ever touches the real network.
+        let webhookDefaults = isTestEnvironment
+            ? appDefaults
+            : (UserDefaults(suiteName: StoreLocation.appGroupID) ?? .standard)
+        let webhookTransport: any WebhookTransport = arguments.contains("--stub-webhook")
+            ? StubWebhookTransport()
+            : URLSession.shared
+        let madeWebhookManager = WebhookManager(
+            container: container, defaults: webhookDefaults,
+            transport: webhookTransport, isTestEnvironment: isTestEnvironment
+        )
+        webhookManager = madeWebhookManager
+        // The notification quick-answer save runs in this process — deliver
+        // immediately, like any in-app save.
+        scheduler.reportFiledWebhookHook = { reportID in
+            madeWebhookManager.enqueueAndDrain(reportID: reportID)
+        }
+
         // Remote-change reactions: dedupe/vocabulary/Spotlight run on a
         // background context inside the observer; the callback re-plans
         // notifications (which also re-registers the quick-answer category)
@@ -223,6 +246,7 @@ struct DispatchApp: App {
                 .environment(workoutEndObserver)
                 .environment(visitObserver)
                 .environment(backupManager)
+                .environment(webhookManager)
                 .environment(remoteChangeObserver)
                 .environment(\.appDefaults, appDefaults)
                 .environment(\.notificationPrefs, notificationPrefs)
@@ -281,6 +305,11 @@ struct DispatchApp: App {
                         // Backup staleness check (plan 16): cheap when fresh,
                         // writes a rotating v2 export off-main when >20h old.
                         backupManager.backUpIfStale()
+                        // Webhook drain (plan 24): deliver anything queued —
+                        // widget quick-answers enqueued by the extension
+                        // process (after their marker drain above), plus any
+                        // reports still owed retries. No-op when disabled.
+                        webhookManager.drain()
                         // Foreground poke: sync may have changed the shared
                         // store while the widget had no reason to refresh.
                         if !isTestEnvironment {
