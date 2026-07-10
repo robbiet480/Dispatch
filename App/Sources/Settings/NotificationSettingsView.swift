@@ -188,6 +188,10 @@ struct NotificationSettingsView: View {
                 .disabled(alertsPerDay >= 12)
                 .accessibilityIdentifier("alerts-per-day-increment")
             }
+            // Two Buttons in one List row: without an explicit style the
+            // whole row is a single tap target that fires BOTH actions (see
+            // SensorSettingsView's capsule buttons for the same pattern).
+            .buttonStyle(.borderless)
             .foregroundStyle(.white)
             .listRowBackground(Color.white.opacity(0.12))
         } header: {
@@ -239,7 +243,10 @@ struct NotificationSettingsView: View {
                 newTimeSelection = Date()
                 isAddingTime = true
             } label: {
-                Text("ADD A NOTIFICATION TIME…")
+                // Title case like the app's other action rows ("Request All
+                // Sensors…", "Delete All Data…") — all-caps read as a
+                // section header, not a tappable action.
+                Text("Add a Notification Time…")
                     .foregroundStyle(.white)
             }
             .accessibilityIdentifier("add-notification-time")
@@ -353,6 +360,9 @@ struct NotificationSettingsView: View {
             .disabled(incrementDisabled)
             .accessibilityIdentifier("\(identifier)-increment")
         }
+        // Same borderless scoping as the Alerts per Day row — two Buttons
+        // in one List row need their own tap targets.
+        .buttonStyle(.borderless)
         .foregroundStyle(.white)
         .listRowBackground(Color.white.opacity(0.12))
     }
