@@ -271,6 +271,17 @@ swift run dispatch-mod serve                   # http://127.0.0.1:8787 dashboard
 swift run dispatch-mod serve --port 9000 --env production
 ```
 
+**Accepted question types.** `CatalogValidation` resolves the submission's
+`typeRaw` through `QuestionType(rawValue:)`, so every shipped type is
+structurally valid — including **time questions (`typeRaw` 7, plan 28)**, which
+are accepted in community submissions. Time questions carry **no choices** (a
+submitted choice list rejects with `choicesNotAllowed`, same as every
+non-multiple-choice type). No moderator action is needed for the new type. Note
+the forward-compatibility trade-off: app builds **older than plan 28** render a
+catalog time entry as "Unknown type" and cannot install it (the client guards
+unknown raws by design — forward-lenient, no data loss). New builds install it
+normally.
+
 `approve` validates the submission structurally (same `CatalogValidation` the
 app uses), creates the `CatalogQuestion` with a fresh record name, then
 deletes the submission. `reject` just deletes. If the post-approve submission

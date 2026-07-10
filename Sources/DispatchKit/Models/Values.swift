@@ -252,3 +252,66 @@ public struct LocationAnswer: Codable, Hashable, Sendable {
     public var location: LocationSnapshot?
     public init() {}
 }
+
+/// Wall-clock time-of-day answer (plan 28). Timezone-independent by
+/// construction: minutes since local midnight, never a Date — a 9:00
+/// breakfast stays 9:00 across timezones. `dayOffset` handles the
+/// "answered at 00:30, meant yesterday evening" case: 0 = today,
+/// -1 = yesterday (the only values the v1 UI writes; storage tolerates
+/// other ints per the raw-leniency precedent).
+public struct TimeAnswer: Codable, Hashable, Sendable {
+    /// Nominal range 0...1439. Imported values are stored as-is
+    /// (leniency); display sites read `clampedMinutes`.
+    public var minutesSinceMidnight: Int
+    public var dayOffset: Int
+
+    enum CodingKeys: String, CodingKey {
+        case minutesSinceMidnight = "minutes"
+        case dayOffset
+    }
+
+    public init(minutesSinceMidnight: Int, dayOffset: Int = 0) {
+        self.minutesSinceMidnight = minutesSinceMidnight
+        self.dayOffset = dayOffset
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        minutesSinceMidnight = try container.decode(Int.self, forKey: .minutesSinceMidnight)
+        dayOffset = try container.decodeIfPresent(Int.self, forKey: .dayOffset) ?? 0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(minutesSinceMidnight, forKey: .minutesSinceMidnight)
+        if dayOffset != 0 { try container.encode(dayOffset, forKey: .dayOffset) }
+    }
+
+    public var clampedMinutes: Int { min(max(minutesSinceMidnight, 0), 1439) }
+
+    /// Locale-independent "HH:mm" (24-hour, zero-padded) — the CSV/wire
+    /// display form.
+    public var hhmm: String {
+        String(format: "%02d:%02d", clampedMinutes / 60, clampedMinutes % 60)
+    }
+
+    /// Locale-aware display, e.g. "9:00 AM" / "10:30 PM (yesterday)".
+    public func displayText(locale: Locale = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        let date = calendar.date(bySettingHour: clampedMinutes / 60,
+                                 minute: clampedMinutes % 60, second: 0,
+                                 of: Date()) ?? Date()
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeStyle = .short
+        let time = formatter.string(from: date)
+        return dayOffset == -1 ? "\(time) (yesterday)" : time
+    }
+
+    /// The current wall-clock minute — the survey's "Now" button value.
+    public static func now(_ date: Date = Date(), calendar: Calendar = .current) -> TimeAnswer {
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        return TimeAnswer(minutesSinceMidnight: (components.hour ?? 0) * 60 + (components.minute ?? 0))
+    }
+}

@@ -125,6 +125,60 @@ import Testing
     #expect(decoded.reports.allSatisfy { $0.responses == nil })
 }
 
+/// Plan 28: a time response round-trips both fields; a nil `timeResponse` is
+/// OMITTED from the wire and imports back as nil (absence tolerance).
+@Test func timeResponseRoundTripsAndOmitsWhenNil() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let report = Report()
+    report.uniqueIdentifier = "r-time"
+    let timed = Response()
+    timed.uniqueIdentifier = "resp-time"
+    timed.questionPrompt = "What time did you last eat?"
+    timed.timeResponse = TimeAnswer(minutesSinceMidnight: 555, dayOffset: -1)
+    let plain = Response()
+    plain.uniqueIdentifier = "resp-plain"
+    plain.questionPrompt = "Doing?"
+    plain.tokens = [TokenValue(text: "Working")]
+    report.responses = [timed, plain]
+    for response in report.responses ?? [] { response.report = report }
+    contextA.insert(report)
+    try contextA.save()
+
+    let export = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
+    let json = try #require(String(data: export, encoding: .utf8))
+    // Only the timed response carries the key; the plain one omits it.
+    #expect(json.contains("\"timeResponse\""))
+    #expect(json.components(separatedBy: "\"timeResponse\"").count == 2)
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(export, into: contextB)
+    let responses = try contextB.fetch(FetchDescriptor<Response>())
+    let importedTimed = try #require(responses.first { $0.uniqueIdentifier == "resp-time" })
+    #expect(importedTimed.timeResponse?.minutesSinceMidnight == 555)
+    #expect(importedTimed.timeResponse?.dayOffset == -1)
+    let importedPlain = try #require(responses.first { $0.uniqueIdentifier == "resp-plain" })
+    #expect(importedPlain.timeResponse == nil)
+}
+
+/// A pre-plan-28 v2 payload (no `timeResponse` key) imports with nil.
+@Test func timeResponseAbsenceImportsAsNil() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let json = """
+    {"schemaVersion": 2, "questions": [], "reports": [
+      {"uniqueIdentifier": "r-old", "date": "2021-01-01T00:00:00Z", "timeZone": "GMT",
+       "kind": "regular", "trigger": "manual",
+       "isBackdated": false, "isDraft": false, "wasInBackground": false,
+       "responses": [{"uniqueIdentifier": "resp-old", "questionPrompt": "Doing?"}]}
+    ]}
+    """
+    _ = try V2Importer.importExport(Data(json.utf8), into: context)
+    let responses = try context.fetch(FetchDescriptor<Response>())
+    #expect(responses.first?.timeResponse == nil)
+}
+
 @Test func exportIsDeterministic() throws {
     let container = try DispatchStore.inMemoryContainer()
     let context = ModelContext(container)

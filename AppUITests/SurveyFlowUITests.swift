@@ -423,4 +423,153 @@ final class SurveyFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["10"].waitForExistence(timeout: 10),
                       "slider answer '10' was not found in the saved report — numericResponse path broken")
     }
+
+    /// Creates a time question via the editor (Type → Time), then adds it, and
+    /// returns the app on the Questions screen. Shared by the two time flows.
+    @MainActor
+    private func addTimeQuestion(_ app: XCUIApplication, prompt: String) {
+        let settingsButton = app.buttons["settings-button"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
+        settingsButton.tap()
+
+        let questionsLink = app.buttons["questions-settings-link"]
+        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
+        questionsLink.tap()
+
+        let addButton = app.buttons["add-question-button"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+        var scrollsRemaining = 8
+        while !addButton.isHittable, scrollsRemaining > 0 {
+            app.swipeUp()
+            scrollsRemaining -= 1
+        }
+        addButton.tap()
+
+        let promptField = app.textFields["Prompt"]
+        XCTAssertTrue(promptField.waitForExistence(timeout: 10))
+        promptField.tap()
+        promptField.typeText(prompt)
+
+        let typePicker = app.buttons["question-type"]
+        XCTAssertTrue(typePicker.waitForExistence(timeout: 10))
+        typePicker.tap()
+        let timeOption = app.buttons["Time"]
+        XCTAssertTrue(timeOption.waitForExistence(timeout: 10))
+        timeOption.tap()
+
+        app.buttons["Save"].tap()
+
+        // Back out of Questions, then Settings, to Home.
+        XCTAssertTrue(app.buttons["add-question-button"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+    }
+
+    /// Plan 28 (time question): create a time question, run a survey, tap Now,
+    /// then the Yesterday chip, DONE; the saved report detail must show a time
+    /// string tagged "(yesterday)" — proving the wheel/Now/Yesterday controls
+    /// write `.time` through the shared answer path.
+    @MainActor
+    func testTimeQuestionNowAndYesterdaySavesAnswer() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        let prompt = "Ate probe \(Int(Date().timeIntervalSince1970) % 100_000)"
+        addTimeQuestion(app, prompt: prompt)
+
+        let countLabel = app.staticTexts["report-count"]
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        let before = countLabel.label
+
+        app.buttons["report-button"].tap()
+        XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
+                      || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
+
+        let next = app.buttons["survey-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+        if app.buttons["Yes"].exists { app.buttons["Yes"].tap() }
+
+        let nowButton = app.buttons["time-now"]
+        while !nowButton.exists && next.label == "NEXT" {
+            next.tap()
+        }
+        XCTAssertTrue(nowButton.waitForExistence(timeout: 10),
+                      "time input never appeared — the .time case did not reach the survey")
+        nowButton.tap()
+        app.buttons["time-yesterday"].tap()
+
+        while next.label == "NEXT" { next.tap() }
+        XCTAssertEqual(next.label, "DONE")
+        next.tap()
+
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        XCTAssertNotEqual(countLabel.label, before, "report count did not increment")
+
+        app.buttons["reports-list-button"].tap()
+        let reportsList = app.collectionViews["reports-list"].exists
+            ? app.collectionViews["reports-list"]
+            : app.tables["reports-list"]
+        XCTAssertTrue(reportsList.waitForExistence(timeout: 10))
+        let firstRow = app.buttons["report-row"].firstMatch.exists
+            ? app.buttons["report-row"].firstMatch
+            : app.cells["report-row"].firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
+        firstRow.tap()
+
+        let yesterdayText = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS[c] %@", "(yesterday)")).firstMatch
+        XCTAssertTrue(yesterdayText.waitForExistence(timeout: 10),
+                      "no time answer tagged '(yesterday)' in the saved report — .time path broken")
+    }
+
+    /// The untouched-wheel path: leaving the time question alone records no
+    /// answer (untouched == skipped, the number-control convention). The saved
+    /// report's detail must not show the time question as answered.
+    @MainActor
+    func testTimeQuestionUntouchedRecordsNoAnswer() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        let prompt = "Skipped time \(Int(Date().timeIntervalSince1970) % 100_000)"
+        addTimeQuestion(app, prompt: prompt)
+
+        let countLabel = app.staticTexts["report-count"]
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+
+        app.buttons["report-button"].tap()
+        XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
+                      || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
+
+        let next = app.buttons["survey-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+        if app.buttons["Yes"].exists { app.buttons["Yes"].tap() }
+
+        // Advance without touching the wheel/Now/Yesterday controls.
+        let picker = app.datePickers["time-picker"]
+        while !picker.exists && next.label == "NEXT" {
+            next.tap()
+        }
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        while next.label == "NEXT" { next.tap() }
+        XCTAssertEqual(next.label, "DONE")
+        next.tap()
+
+        app.buttons["reports-list-button"].tap()
+        let reportsList = app.collectionViews["reports-list"].exists
+            ? app.collectionViews["reports-list"]
+            : app.tables["reports-list"]
+        XCTAssertTrue(reportsList.waitForExistence(timeout: 10))
+        let firstRow = app.buttons["report-row"].firstMatch.exists
+            ? app.buttons["report-row"].firstMatch
+            : app.cells["report-row"].firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
+        firstRow.tap()
+
+        // The untouched time question shows no answer row (answerText == nil),
+        // so its uppercased prompt never appears in the detail list.
+        XCTAssertFalse(app.staticTexts[prompt.uppercased()].waitForExistence(timeout: 3),
+                       "untouched time question was recorded as answered")
+    }
 }

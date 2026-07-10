@@ -10,6 +10,8 @@ public enum QuestionType: Int, Codable, Sendable, CaseIterable {
     case people = 4
     case number = 5
     case note = 6
+    /// 7+ are additive (plan 28) — NEVER renumber existing raws.
+    case time = 7
 }
 
 /// Wraps a decodable element to capture failures on a per-record basis.

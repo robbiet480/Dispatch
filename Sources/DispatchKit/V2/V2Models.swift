@@ -169,6 +169,9 @@ public struct V2Response: Codable {
     public var locationResponse: LocationAnswer?
     public var numericResponse: String?
     public var textResponses: [TokenValue]?
+    /// Wall-clock time answer (plan 28). Omitted when nil; import tolerates
+    /// absence (older v2 files) by yielding nil.
+    public var timeResponse: TimeAnswer?
 
     public init(uniqueIdentifier: String, questionPrompt: String) {
         self.uniqueIdentifier = uniqueIdentifier

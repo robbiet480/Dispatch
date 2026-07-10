@@ -119,6 +119,7 @@ public enum V2Exporter {
                 rdto.locationResponse = resp.locationResponse
                 rdto.numericResponse = resp.numericResponse
                 rdto.textResponses = resp.textResponses
+                rdto.timeResponse = resp.timeResponse
                 return rdto
             }
         dto.responses = responses.isEmpty ? nil : responses

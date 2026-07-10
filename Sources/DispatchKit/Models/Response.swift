@@ -15,6 +15,9 @@ public final class Response {
     public var answeredOptions: [String]?
     public var locationResponse: LocationAnswer?
     public var numericResponse: String?
+    /// Wall-clock time-of-day answer (questions of type `.time`, plan 28).
+    /// Optional Codable struct — the `locationResponse` precedent, CloudKit-safe.
+    public var timeResponse: TimeAnswer?
     /// Free-text note answers (questions of type `.note`), distinct from `tokens`.
     public var textResponses: [TokenValue]?
     public var report: Report?

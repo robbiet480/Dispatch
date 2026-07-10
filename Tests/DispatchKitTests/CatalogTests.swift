@@ -98,6 +98,20 @@ import Testing
     }
 }
 
+/// Plan 28: time questions ARE allowed in community submissions (raw 7 resolves
+/// structurally), carry no choices, and still reject choices like any non-choice type.
+@Test func validationAllowsTimeQuestionsWithoutChoices() {
+    #expect(CatalogValidation.validate(
+        prompt: "What time did you last eat?", typeRaw: QuestionType.time.rawValue, choices: []
+    ).isEmpty)
+    #expect(CatalogValidation.validate(
+        prompt: "What time did you last eat?", typeRaw: QuestionType.time.rawValue, choices: ["Morning"]
+    ).contains(.choicesNotAllowed))
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: 99, choices: []
+    ).contains(.unknownQuestionType(raw: 99)))
+}
+
 @Test func validationRejectsEmptyAndOverlongPrompts() {
     #expect(CatalogValidation.validate(prompt: "", typeRaw: 0, choices: [])
         .contains(.emptyPrompt))

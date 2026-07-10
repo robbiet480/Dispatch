@@ -34,7 +34,8 @@ private func location(_ text: String) -> LocationAnswer {
 private func makeResponse(questionIdentifier: String? = nil, questionPrompt: String = "",
                            answeredOptions: [String]? = nil, tokens: [TokenValue]? = nil,
                            numericResponse: String? = nil, textResponses: [TokenValue]? = nil,
-                           locationResponse: LocationAnswer? = nil) -> Response {
+                           locationResponse: LocationAnswer? = nil,
+                           timeResponse: TimeAnswer? = nil) -> Response {
     let response = Response()
     response.questionIdentifier = questionIdentifier
     response.questionPrompt = questionPrompt
@@ -43,6 +44,7 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
     response.numericResponse = numericResponse
     response.textResponses = textResponses
     response.locationResponse = locationResponse
+    response.timeResponse = timeResponse
     return response
 }
 
@@ -175,6 +177,97 @@ private func makeResponse(questionIdentifier: String? = nil, questionPrompt: Str
     }
     #expect(points.count == 1)
     #expect(average == 4.0)
+}
+
+// MARK: - timePoints (plan 28)
+
+@Test func timePointsSortsChronologicallyWithClampedMinutes() {
+    let question = makeQuestion(id: "q-time", prompt: "Last ate?", type: .time)
+    let day1 = Date(timeIntervalSince1970: 1_000_000)
+    let day2 = Date(timeIntervalSince1970: 2_000_000)
+    let day3 = Date(timeIntervalSince1970: 3_000_000)
+    let reports = [
+        makeReport(date: day3, responses: [makeResponse(questionIdentifier: "q-time", timeResponse: TimeAnswer(minutesSinceMidnight: 600))]),
+        makeReport(date: day1, responses: [makeResponse(questionIdentifier: "q-time", timeResponse: TimeAnswer(minutesSinceMidnight: 480))]),
+        makeReport(date: day2, responses: [makeResponse(questionIdentifier: "q-time", timeResponse: TimeAnswer(minutesSinceMidnight: 540))]),
+    ]
+
+    let result = VisualizationData.build(for: question, reports: reports)
+    guard case .timePoints(let points, let average) = result else {
+        Issue.record("expected .timePoints, got \(result)")
+        return
+    }
+    #expect(points.map(\.date) == [day1, day2, day3])
+    #expect(points.map(\.minutes) == [480, 540, 600])
+    #expect(average == 540)
+}
+
+@Test func timePointsShiftsDateNotMinutesForYesterday() {
+    let question = makeQuestion(id: "q-time-y", prompt: "Last ate?", type: .time)
+    let reportDate = Date(timeIntervalSince1970: 2_000_000)
+    let reports = [
+        makeReport(date: reportDate, responses: [makeResponse(questionIdentifier: "q-time-y", timeResponse: TimeAnswer(minutesSinceMidnight: 1350, dayOffset: -1))]),
+    ]
+    let result = VisualizationData.build(for: question, reports: reports)
+    guard case .timePoints(let points, _) = result else {
+        Issue.record("expected .timePoints, got \(result)")
+        return
+    }
+    #expect(points.count == 1)
+    #expect(points[0].date == reportDate.addingTimeInterval(-86_400))
+    #expect(points[0].minutes == 1350) // wall-clock minute untouched
+}
+
+@Test func timePointsCircularAverageWrapsAroundMidnight() {
+    let question = makeQuestion(id: "q-time-c", prompt: "Bedtime?", type: .time)
+    let reports = [
+        makeReport(date: Date(timeIntervalSince1970: 1), responses: [makeResponse(questionIdentifier: "q-time-c", timeResponse: TimeAnswer(minutesSinceMidnight: 1410))]), // 23:30
+        makeReport(date: Date(timeIntervalSince1970: 2), responses: [makeResponse(questionIdentifier: "q-time-c", timeResponse: TimeAnswer(minutesSinceMidnight: 30))]),   // 00:30
+    ]
+    let result = VisualizationData.build(for: question, reports: reports)
+    guard case .timePoints(_, let average) = result else {
+        Issue.record("expected .timePoints, got \(result)")
+        return
+    }
+    #expect(average == 0) // circular mean → midnight, not 720
+}
+
+@Test func timePointsCircularAverageForClusteredMorningTimes() {
+    let question = makeQuestion(id: "q-time-m", prompt: "Woke?", type: .time)
+    let reports = [
+        makeReport(date: Date(timeIntervalSince1970: 1), responses: [makeResponse(questionIdentifier: "q-time-m", timeResponse: TimeAnswer(minutesSinceMidnight: 480))]),
+        makeReport(date: Date(timeIntervalSince1970: 2), responses: [makeResponse(questionIdentifier: "q-time-m", timeResponse: TimeAnswer(minutesSinceMidnight: 540))]),
+        makeReport(date: Date(timeIntervalSince1970: 3), responses: [makeResponse(questionIdentifier: "q-time-m", timeResponse: TimeAnswer(minutesSinceMidnight: 600))]),
+    ]
+    let result = VisualizationData.build(for: question, reports: reports)
+    guard case .timePoints(_, let average) = result else {
+        Issue.record("expected .timePoints, got \(result)")
+        return
+    }
+    #expect(average == 540)
+}
+
+@Test func timePointsDegenerateOppositePairFallsBackToArithmeticMean() {
+    let question = makeQuestion(id: "q-time-o", prompt: "When?", type: .time)
+    let reports = [
+        makeReport(date: Date(timeIntervalSince1970: 1), responses: [makeResponse(questionIdentifier: "q-time-o", timeResponse: TimeAnswer(minutesSinceMidnight: 360))]),  // 06:00
+        makeReport(date: Date(timeIntervalSince1970: 2), responses: [makeResponse(questionIdentifier: "q-time-o", timeResponse: TimeAnswer(minutesSinceMidnight: 1080))]), // 18:00
+    ]
+    let result = VisualizationData.build(for: question, reports: reports)
+    guard case .timePoints(_, let average) = result else {
+        Issue.record("expected .timePoints, got \(result)")
+        return
+    }
+    #expect(average == 720) // zero resultant vector → arithmetic mean
+}
+
+@Test func timePointsEmptyWhenNoTimeAnswers() {
+    let question = makeQuestion(id: "q-time-e", prompt: "When?", type: .time)
+    let reports = [
+        makeReport(responses: [makeResponse(questionIdentifier: "q-time-e", timeResponse: nil)]),
+        makeReport(responses: [makeResponse(questionIdentifier: "q-time-e", numericResponse: "5")]), // wrong variant ignored
+    ]
+    #expect(VisualizationData.build(for: question, reports: reports) == .empty)
 }
 
 // MARK: - frequency (tokens + people)

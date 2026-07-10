@@ -18,6 +18,7 @@ public enum AnswerValue: Equatable, Sendable {
     case number(String)
     case note(String)
     case location(text: String)
+    case time(TimeAnswer)
     case skipped
 }
 
@@ -102,6 +103,8 @@ public enum ReportBuilder {
                 answer.text = text
                 answer.location = report.location
                 response.locationResponse = answer
+            case .time(let answer):
+                response.timeResponse = answer
             case .skipped:
                 break
             }

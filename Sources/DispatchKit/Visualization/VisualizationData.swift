@@ -19,6 +19,9 @@ public enum QuestionVisualization: Equatable, Sendable {
     case places([(name: String, count: Int)])
     /// Note questions: newest first, top 20.
     case recentNotes([(date: Date, text: String)])
+    /// Time questions (plan 28): each report a point at its answered wall-clock
+    /// minute; average is the CIRCULAR mean (23:30 + 00:30 → midnight).
+    case timePoints(points: [(date: Date, minutes: Int)], averageMinutes: Int)
     /// No answered responses for this question.
     case empty
 
@@ -34,6 +37,8 @@ public enum QuestionVisualization: Equatable, Sendable {
             l.count == r.count && zip(l, r).allSatisfy { $0.name == $1.name && $0.count == $1.count }
         case (.recentNotes(let l), .recentNotes(let r)):
             l.count == r.count && zip(l, r).allSatisfy { $0.date == $1.date && $0.text == $1.text }
+        case (.timePoints(let lp, let la), .timePoints(let rp, let ra)):
+            lp.count == rp.count && zip(lp, rp).allSatisfy { $0.date == $1.date && $0.minutes == $1.minutes } && la == ra
         case (.empty, .empty):
             true
         default:
@@ -84,6 +89,8 @@ public enum VisualizationData {
             return buildPlaces(responses: responses)
         case .note:
             return buildRecentNotes(responses: responses, reports: reports)
+        case .time:
+            return buildTimePoints(responses: responses, reports: reports)
         }
     }
 
@@ -228,6 +235,39 @@ public enum VisualizationData {
             .prefix(topLimit)
             .map { (name: $0.value.text, count: $0.value.count) }
         return .places(Array(items))
+    }
+
+    private static func buildTimePoints(responses: [Response], reports: [Report]) -> QuestionVisualization {
+        let responseToReport = Dictionary(uniqueKeysWithValues: reports.flatMap { report in
+            (report.responses ?? []).map { (ObjectIdentifier($0), report) }
+        })
+        var points: [(date: Date, minutes: Int)] = []
+        for response in responses {
+            guard let time = response.timeResponse,
+                  let report = responseToReport[ObjectIdentifier(response)] else { continue }
+            // dayOffset shifts the plotted DATE; the wall-clock minute is sacred.
+            let date = report.date.addingTimeInterval(TimeInterval(time.dayOffset) * 86_400)
+            points.append((date: date, minutes: time.clampedMinutes))
+        }
+        guard !points.isEmpty else { return .empty }
+        points.sort { $0.date < $1.date }
+        return .timePoints(points: points, averageMinutes: circularMeanMinutes(points.map(\.minutes)))
+    }
+
+    /// Circular (vector) mean of minutes-of-day: times clustering around
+    /// midnight average correctly (23:30 & 00:30 → 00:00). A near-zero
+    /// resultant vector (perfectly opposed times) has no meaningful circular
+    /// mean — fall back to the arithmetic mean for determinism.
+    private static func circularMeanMinutes(_ minutes: [Int]) -> Int {
+        let angles = minutes.map { Double($0) / 1440 * 2 * .pi }
+        let x = angles.reduce(0) { $0 + cos($1) } / Double(angles.count)
+        let y = angles.reduce(0) { $0 + sin($1) } / Double(angles.count)
+        guard x * x + y * y > 1e-9 else {
+            return minutes.reduce(0, +) / minutes.count
+        }
+        var angle = atan2(y, x)
+        if angle < 0 { angle += 2 * .pi }
+        return Int((angle / (2 * .pi) * 1440).rounded()) % 1440
     }
 
     private static func buildRecentNotes(responses: [Response], reports: [Report]) -> QuestionVisualization {

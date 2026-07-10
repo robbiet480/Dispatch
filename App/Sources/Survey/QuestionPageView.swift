@@ -119,6 +119,13 @@ struct QuestionPageView: View {
                 flushRegistry: flushRegistry,
                 focus: focus,
                 focusID: page.id)
+        case .time:
+            // Wheel time-of-day input (plan 28). No keyboard, so no flush
+            // registration — the answer commits on interaction (Now, the wheel,
+            // or the Yesterday chip), matching the non-text number controls.
+            TimeInput(
+                value: { if case .time(let time) = value { time } else { nil } }(),
+                onAnswer: { onAnswer(.time($0)) })
         }
     }
 

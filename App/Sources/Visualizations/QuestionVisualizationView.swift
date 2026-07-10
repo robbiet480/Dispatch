@@ -46,6 +46,8 @@ struct QuestionVisualizationView: View {
             RankedRowsView(rows: items.map { ($0.name, $0.count) })
         case .recentNotes(let notes):
             RecentNotesView(notes: notes)
+        case .timePoints(let points, let averageMinutes):
+            TimePointsView(points: points, averageMinutes: averageMinutes, theme: theme)
         case .empty:
             emptyState
         }
@@ -251,6 +253,87 @@ struct NumericSeriesView: View {
         }
         return "\(points.count) entries, from \(short(minValue)) to \(short(maxValue)), "
             + "latest \(short(latest)), average \(formattedAverage)"
+    }
+}
+
+/// Time questions (plan 28): an hour-of-day scatter — each report a dot at its
+/// answered wall-clock minute, the circular-mean average drawn as a rule. The
+/// y-axis spans a full day (0…1440 minutes) with locale short-time gridlines so
+/// a glance reads the daily rhythm; `dayOffset` already shifted a dot's date.
+struct TimePointsView: View {
+    let points: [(date: Date, minutes: Int)]
+    let averageMinutes: Int
+    let theme: Theme
+
+    /// Gridline anchors every 6 hours (plus end-of-day) — labeled as short times.
+    private let axisMinutes = [0, 360, 720, 1080, 1440]
+
+    var body: some View {
+        Chart {
+            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                PointMark(
+                    x: .value("Date", point.date),
+                    y: .value("Minutes", point.minutes)
+                )
+                .foregroundStyle(.white)
+                .symbolSize(60)
+            }
+            RuleMark(y: .value("Average", averageMinutes))
+                .foregroundStyle(.white.opacity(0.4))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .annotation(position: .top, alignment: .trailing) {
+                    Text("AVERAGE \(TimeAnswer(minutesSinceMidnight: averageMinutes).displayText())")
+                        .font(.caption2.weight(.semibold))
+                        .kerning(0.5)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(.trailing, 4)
+                }
+        }
+        .chartYScale(domain: 0...1440)
+        .chartYAxis {
+            AxisMarks(values: axisMinutes) { value in
+                AxisGridLine().foregroundStyle(.white.opacity(0.12))
+                AxisValueLabel {
+                    if let minutes = value.as(Int.self) {
+                        Text(Self.shortTimeLabel(for: minutes))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic) {
+                AxisValueLabel()
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Times of day")
+        .accessibilityValue(accessibilitySummary)
+        .accessibilityIdentifier("viz-time-points")
+    }
+
+    /// A minute-of-day rendered as a locale short time ("12 AM", "6 AM", …).
+    /// 1440 (end of day) reads as midnight.
+    private static func shortTimeLabel(for minutes: Int) -> String {
+        let clamped = min(max(minutes, 0), 1439)
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        let date = Calendar.current.date(bySettingHour: clamped / 60, minute: clamped % 60,
+                                         second: 0, of: Date()) ?? Date()
+        return formatter.string(from: date)
+    }
+
+    private var accessibilitySummary: String {
+        guard let earliest = points.map(\.minutes).min(),
+              let latest = points.map(\.minutes).max() else {
+            return "No data"
+        }
+        func label(_ minutes: Int) -> String {
+            TimeAnswer(minutesSinceMidnight: minutes).displayText()
+        }
+        return "\(points.count) entries, from \(label(earliest)) to \(label(latest)), "
+            + "average \(label(averageMinutes))"
     }
 }
 

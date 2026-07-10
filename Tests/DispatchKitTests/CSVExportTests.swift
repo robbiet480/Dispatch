@@ -32,6 +32,78 @@ import Testing
     #expect(snap1Row2.contains(#""Commas, and ""quotes"" happen""#))
 }
 
+/// Plan 28: a time question grows a "(day offset)" companion column immediately
+/// after its prompt column. Time answers render "HH:mm" + numeric offset; both
+/// columns are empty when unanswered; non-time columns are untouched.
+@Test func csvTimeQuestionAddsDayOffsetCompanionColumn() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+
+    let eat = Question()
+    eat.uniqueIdentifier = "q-eat"
+    eat.prompt = "What time did you last eat?"
+    eat.type = .time
+    eat.sortOrder = 0
+    let doing = Question()
+    doing.uniqueIdentifier = "q-doing"
+    doing.prompt = "Doing?"
+    doing.type = .tokens
+    doing.sortOrder = 1
+    context.insert(eat)
+    context.insert(doing)
+
+    func report(_ id: String, at date: Date, time: TimeAnswer?, doing text: String?) {
+        let report = Report()
+        report.uniqueIdentifier = id
+        report.date = date
+        var responses: [Response] = []
+        if let time {
+            let r = Response()
+            r.questionPrompt = "What time did you last eat?"
+            r.questionIdentifier = "q-eat"
+            r.timeResponse = time
+            responses.append(r)
+        }
+        if let text {
+            let r = Response()
+            r.questionPrompt = "Doing?"
+            r.questionIdentifier = "q-doing"
+            r.tokens = [TokenValue(text: text)]
+            responses.append(r)
+        }
+        report.responses = responses
+        for r in responses { r.report = report }
+        context.insert(report)
+    }
+
+    let base = Date(timeIntervalSince1970: 1_700_000_000)
+    report("r-1", at: base, time: TimeAnswer(minutesSinceMidnight: 555), doing: "Working")           // 09:15, offset 0
+    report("r-2", at: base.addingTimeInterval(60), time: TimeAnswer(minutesSinceMidnight: 1410, dayOffset: -1), doing: "Sleeping") // 23:30, -1
+    report("r-3", at: base.addingTimeInterval(120), time: nil, doing: "Idle")                          // unanswered
+    try context.save()
+
+    let csv = try CSVExporter.exportCSV(from: context)
+    let lines = csv.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    let header = lines[0].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+
+    let eatIndex = try #require(header.firstIndex(of: "What time did you last eat?"))
+    #expect(header[eatIndex + 1] == "What time did you last eat? (day offset)")
+    #expect(header.contains("Doing?"))
+
+    let r1 = lines[1].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+    #expect(r1[eatIndex] == "09:15")
+    #expect(r1[eatIndex + 1] == "0")
+    let r2 = lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+    #expect(r2[eatIndex] == "23:30")
+    #expect(r2[eatIndex + 1] == "-1")
+    let r3 = lines[3].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+    #expect(r3[eatIndex] == "")
+    #expect(r3[eatIndex + 1] == "")
+    // Non-time column stays intact.
+    let doingIndex = try #require(header.firstIndex(of: "Doing?"))
+    #expect(r1[doingIndex] == "Working")
+}
+
 @Test func escapesCSVFields() {
     #expect(CSVExporter.escape(#"say "hi", ok"#) == #""say ""hi"", ok""#)
     #expect(CSVExporter.escape("plain") == "plain")
