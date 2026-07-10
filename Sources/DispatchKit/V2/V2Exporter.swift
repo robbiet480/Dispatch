@@ -72,6 +72,16 @@ public enum V2Exporter {
                           isEnabled: g.isEnabled, sortOrder: g.sortOrder)
         }
         export.promptGroups = groupDTOs.isEmpty ? nil : groupDTOs
+
+        // Person registry (plan 22): identity fields only — usage counts are
+        // derived data the importer's next vocabulary rebuild recomputes.
+        let people = try context.fetch(FetchDescriptor<PersonEntity>())
+            .sorted { ($0.text, $0.uniqueIdentifier) < ($1.text, $1.uniqueIdentifier) }
+        let personDTOs = people.map { p in
+            V2Person(uniqueIdentifier: p.uniqueIdentifier, displayName: p.text,
+                     alternateNames: p.alternateNames.isEmpty ? nil : p.alternateNames)
+        }
+        export.people = personDTOs.isEmpty ? nil : personDTOs
         return export
     }
 

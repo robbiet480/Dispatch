@@ -9,7 +9,24 @@ public struct V2Export: Codable {
     /// Prompt groups (plan 12). Optional and omitted when nil/empty so
     /// pre-group v2 exports stay byte-identical; import tolerates absence.
     public var promptGroups: [V2PromptGroup]?
+    /// Person registry (plan 22). Optional and omitted when nil/empty so
+    /// pre-registry v2 exports stay byte-identical; import tolerates absence
+    /// (falls back to rebuild-derived vocabulary entries).
+    public var people: [V2Person]?
     public init() {}
+}
+
+public struct V2Person: Codable {
+    public var uniqueIdentifier: String
+    public var displayName: String
+    /// Omitted from JSON when nil/empty per the plan-11 nil-omission contract.
+    public var alternateNames: [String]?
+
+    public init(uniqueIdentifier: String, displayName: String, alternateNames: [String]? = nil) {
+        self.uniqueIdentifier = uniqueIdentifier
+        self.displayName = displayName
+        self.alternateNames = alternateNames
+    }
 }
 
 public struct V2PromptGroup: Codable {

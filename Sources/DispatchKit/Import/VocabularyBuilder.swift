@@ -26,7 +26,6 @@ public enum VocabularyBuilder {
         }
 
         try context.delete(model: TokenEntity.self)
-        try context.delete(model: PersonEntity.self)
         for (text, tally) in tokenTally {
             let entity = TokenEntity()
             entity.text = text
@@ -34,7 +33,39 @@ public enum VocabularyBuilder {
             entity.questionCount = tally.prompts.count
             context.insert(entity)
         }
-        for (text, tally) in personTally {
+
+        // People are the person REGISTRY (plan 22): registry fields
+        // (uniqueIdentifier, alternateNames) must survive a rebuild, so
+        // instead of delete-all-recreate we match existing entities by text
+        // OR alternate names and update counts in place. Only entities that
+        // match no current usage AND carry no alternate names are deleted —
+        // registry entries with aliases survive even at zero usage.
+        let existingPeople = try context.fetch(FetchDescriptor<PersonEntity>())
+            .sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
+        var tallies: [ObjectIdentifier: Tally] = [:]
+        var unmatched: [(text: String, tally: Tally)] = []
+        for (text, tally) in personTally.sorted(by: { $0.key < $1.key }) {
+            if let person = PersonResolver.person(matching: text, in: existingPeople) {
+                var merged = tallies[ObjectIdentifier(person)] ?? Tally()
+                merged.uses += tally.uses
+                merged.prompts.formUnion(tally.prompts)
+                tallies[ObjectIdentifier(person)] = merged
+            } else {
+                unmatched.append((text, tally))
+            }
+        }
+        for person in existingPeople {
+            if let tally = tallies[ObjectIdentifier(person)] {
+                person.usageCount = tally.uses
+                person.questionCount = tally.prompts.count
+            } else if person.alternateNames.isEmpty {
+                context.delete(person)
+            } else {
+                person.usageCount = 0
+                person.questionCount = 0
+            }
+        }
+        for (text, tally) in unmatched {
             let entity = PersonEntity()
             entity.text = text
             entity.usageCount = tally.uses

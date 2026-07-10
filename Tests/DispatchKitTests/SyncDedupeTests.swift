@@ -136,6 +136,39 @@ private func makeQuestion(id: String, prompt: String, in context: ModelContext) 
     #expect(people.first?.usageCount == 6)
 }
 
+@Test func personMergeUnionsAlternateNamesDeterministically() throws {
+    // Regardless of insertion order, duplicate people converge on the same
+    // sorted, case-insensitively deduped alternate-name union.
+    for names in [["Bobby", "Bob"], ["Bob", "Bobby"]] {
+        let context = try makeContext()
+        let first = PersonEntity()
+        first.text = "Robert"
+        first.usageCount = 2
+        first.alternateNames = [names[0], "robert"] // self-collision dropped
+        context.insert(first)
+        let second = PersonEntity()
+        second.text = "Robert"
+        second.usageCount = 3
+        second.alternateNames = [names[1], "BOB"] // cross-dup collapses
+        context.insert(second)
+        try context.save()
+
+        let summary = try SyncDedupe.run(in: context)
+
+        #expect(summary.peopleRemoved == 1)
+        let people = try context.fetch(FetchDescriptor<PersonEntity>())
+        #expect(people.count == 1)
+        #expect(people.first?.usageCount == 5)
+        let alternates = try #require(people.first?.alternateNames)
+        #expect(alternates.count == 2)
+        #expect(alternates.map { $0.lowercased() }.sorted() == ["bob", "bobby"])
+        #expect(alternates == alternates.sorted())
+
+        // Second pass converged.
+        #expect(try SyncDedupe.run(in: context).totalRemoved == 0)
+    }
+}
+
 @Test func survivorChoiceIsDeterministic() throws {
     // The survivor is a deterministic function of the store contents: the
     // duplicate with the lowest encoded persistent identifier. (Insertion
