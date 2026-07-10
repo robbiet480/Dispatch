@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
       # Cache keys are prefixed with the selected Xcode's build version so a
       # runner-image toolchain bump can't serve module caches built by an
       # older compiler (stale exact-key hits are never re-saved and would
@@ -38,16 +38,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.0.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
-      - name: Install iOS platform
-        # Xcode 26 ships the iOS simulator platform as a separate download,
-        # and CI images may omit it. The download is occasionally flaky on
-        # runners (transient exit 70), so retry with backoff and skip when
-        # a runtime is already present.
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+      - name: Ensure iOS platform
+        # macos-26 images now pre-install the iOS SDK + simulator runtimes
+        # (see actions/runner-images macos-26-arm64 readme), so this is a
+        # no-op check in the common case. The download path survives as a
+        # fallback because the generic-simulator build below needs the
+        # iphonesimulator SDK, and image regressions here have happened
+        # before (downloadPlatform is flaky on runners — transient exit 70 —
+        # hence the retries).
         run: |
-          # No pre-check: `simctl runtime list | grep iOS` false-positives on
-          # unusable/pre-baked runtimes. downloadPlatform is quick when the
-          # platform is already current, so always run it, with retries.
+          if xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator; then
+            echo "iOS simulator SDK pre-installed; skipping download"
+            exit 0
+          fi
           for i in 1 2 3; do
             sudo xcodebuild -downloadPlatform iOS && exit 0
             echo "downloadPlatform attempt $i failed; retrying in 30s"
