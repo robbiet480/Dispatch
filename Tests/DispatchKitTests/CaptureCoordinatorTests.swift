@@ -34,18 +34,23 @@ private func testSettings() -> SensorSettings {
 }
 
 @Test func capturesAllProvidersConcurrently() async {
+    // Delays are deliberately LARGE so the assertion measures concurrency,
+    // not scheduler overhead: serial execution needs ≥ 2.0s, concurrent
+    // ≈ 1.0s + overhead. A loaded CI runner once added ~0.9s of pure
+    // overhead to a 10ms-delay version of this test and flaked its 500ms
+    // bound; with 1s delays that same overhead still passes, while a true
+    // serialization regression overshoots the bound by a full second.
     let providers: [any SensorProvider] = [
-        StubProvider(kind: .battery, delay: .milliseconds(10), result: .success(.battery(0.5))),
-        StubProvider(kind: .audio, delay: .milliseconds(10), result: .success(.audio(AudioSample(avg: -40, peak: -20)))),
+        StubProvider(kind: .battery, delay: .seconds(1), result: .success(.battery(0.5))),
+        StubProvider(kind: .audio, delay: .seconds(1), result: .success(.audio(AudioSample(avg: -40, peak: -20)))),
     ]
     let start = ContinuousClock.now
     let outcomes = await collect(CaptureCoordinator.capture(
-        providers: providers, settings: testSettings(), timeout: .seconds(1)))
+        providers: providers, settings: testSettings(), timeout: .seconds(5)))
     #expect(outcomes.count == 2)
     guard case .captured(.battery(let level)) = outcomes[.battery] else { Issue.record("battery missing"); return }
     #expect(level == 0.5)
-    // Concurrent, not serial: two 10ms providers well under 500ms total.
-    #expect(ContinuousClock.now - start < .milliseconds(500))
+    #expect(ContinuousClock.now - start < .milliseconds(1900))
 }
 
 @Test func timeoutYieldsUnavailable() async {
