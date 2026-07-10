@@ -166,7 +166,14 @@ struct ReportsListView: View {
         // A zero-size, accessibility-hidden button is the cheapest shortcut
         // anchor that doesn't add visible UI.
         .background {
-            Button("") { isSearchFocused = true }
+            Button("") {
+                // Task-5 contract: no shortcut fires while the survey is
+                // presented — on iPad the sheet leaves the presenting view
+                // in the responder chain, and cmd-F mid-answer would steal
+                // focus to the background search field.
+                guard surveyPresenter.request == nil else { return }
+                isSearchFocused = true
+            }
                 .keyboardShortcut("f", modifiers: .command)
                 .opacity(0)
                 .frame(width: 0, height: 0)
@@ -212,6 +219,10 @@ struct ReportsListView: View {
             } label: {
                 ReportRowView(report: report)
             }
+            // Button rows lost List(selection:)'s implicit selection
+            // semantics — restore them for VoiceOver alongside the tinted
+            // row background.
+            .accessibilityAddTraits(selection.wrappedValue == report.uniqueIdentifier ? .isSelected : [])
         } else {
             NavigationLink(destination: ReportDetailView(report: report)) {
                 ReportRowView(report: report)
