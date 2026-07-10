@@ -13,6 +13,12 @@ struct ReportsListView: View {
 
     private var theme: Theme { themeStore.theme }
 
+    /// Plan 27: when non-nil (the iPad split view's sidebar), rows are
+    /// selection-based (`List(selection:)` tagged with the report's
+    /// `uniqueIdentifier`) and the detail column renders the selection.
+    /// When nil (iPhone), rows keep the existing `NavigationLink` push.
+    var selection: Binding<String?>? = nil
+
     @State private var searchQuery = ""
     @State private var showingBackfillSheet = false
     @State private var backfillDate = Date()
@@ -144,29 +150,19 @@ struct ReportsListView: View {
 
     // MARK: - List
 
+    @ViewBuilder
     private var reportsList: some View {
-        List {
-            ForEach(sections) { section in
-                Section {
-                    ForEach(section.reports, id: \.uniqueIdentifier) { report in
-                        NavigationLink(destination: ReportDetailView(report: report)) {
-                            ReportRowView(report: report)
-                        }
-                        .listRowBackground(Color.white.opacity(0.12))
-                        .accessibilityIdentifier("report-row")
-                    }
-                    .onDelete { offsets in
-                        delete(at: offsets, in: section)
-                    }
-                } header: {
-                    HStack {
-                        Text(section.weekday)
-                        Spacer()
-                        Text(section.dateLabel)
-                    }
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white.opacity(0.8))
+        Group {
+            if let selection {
+                // iPad sidebar: selection drives the split view's detail
+                // column (see RootNavigationView), so rows are tagged, not
+                // pushed. Same row content and identifiers as the push mode.
+                List(selection: selection) {
+                    listSections(selectable: true)
+                }
+            } else {
+                List {
+                    listSections(selectable: false)
                 }
             }
         }
@@ -174,6 +170,39 @@ struct ReportsListView: View {
         .scrollContentBackground(.hidden)
         .searchable(text: $searchQuery, prompt: "Search reports")
         .accessibilityIdentifier("reports-list")
+    }
+
+    private func listSections(selectable: Bool) -> some View {
+        ForEach(sections) { section in
+            Section {
+                ForEach(section.reports, id: \.uniqueIdentifier) { report in
+                    Group {
+                        if selectable {
+                            ReportRowView(report: report)
+                                .tag(report.uniqueIdentifier)
+                        } else {
+                            NavigationLink(destination: ReportDetailView(report: report)) {
+                                ReportRowView(report: report)
+                            }
+                        }
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+                    .accessibilityIdentifier("report-row")
+                }
+                .onDelete { offsets in
+                    delete(at: offsets, in: section)
+                }
+            } header: {
+                HStack {
+                    Text(section.weekday)
+                    Spacer()
+                    Text(section.dateLabel)
+                }
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white.opacity(0.8))
+            }
+        }
     }
 
     private func delete(at offsets: IndexSet, in section: DaySection) {

@@ -19,6 +19,15 @@ struct HomeView: View {
     @State private var visualizations: [String: QuestionVisualization] = [:]
     @State private var selectedQuestionID: String?
 
+    /// Plan 27: when embedded as the detail-column root of the iPad
+    /// `NavigationSplitView` (see `RootNavigationView`), the surrounding
+    /// stack belongs to the split view's detail column — rendering our own
+    /// `NavigationStack` there would nest stacks and break pushes.
+    var isEmbedded: Bool = false
+    /// Plan 27: on iPad the reports button toggles the split view's sidebar
+    /// (same `reports-list-button` identifier) instead of pushing the list.
+    var toggleSidebar: (() -> Void)? = nil
+
     private var theme: Theme { themeStore.theme }
 
     private var visibleQuestions: [Question] {
@@ -90,7 +99,16 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        if isEmbedded {
+            dashboard
+        } else {
+            NavigationStack {
+                dashboard
+            }
+        }
+    }
+
+    private var dashboard: some View {
             ZStack {
                 Color.themeBackground(theme)
                     .ignoresSafeArea()
@@ -130,7 +148,6 @@ struct HomeView: View {
                     filterStore: filterStore
                 )
             }
-        }
     }
 
     private var filterPill: some View {
@@ -192,12 +209,23 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack {
-            NavigationLink(destination: ReportsListView()) {
-                Image(systemName: "list.bullet")
-                    .font(.title2)
-                    .foregroundStyle(.white)
+            // Same identifier either way — "show me the reports list" just
+            // means "toggle the sidebar" inside the iPad split view.
+            if let toggleSidebar {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "list.bullet")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                }
+                .accessibilityIdentifier("reports-list-button")
+            } else {
+                NavigationLink(destination: ReportsListView()) {
+                    Image(systemName: "list.bullet")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                }
+                .accessibilityIdentifier("reports-list-button")
             }
-            .accessibilityIdentifier("reports-list-button")
 
             Spacer()
 
