@@ -80,13 +80,14 @@
     <array>
         <string>spotify</string>
     </array>
-    <!-- Plan 26 Spotify config (config, not code constants). PASTE the client
-         ID from the Spotify developer dashboard app registration over the
-         placeholder; the redirect URI must be registered there verbatim.
-         While the placeholder is present, SpotifySettingsView shows a
-         "not configured" state and the reader never runs. -->
+    <!-- Plan 26 Spotify config (config, not code constants): the client ID
+         of the Dispatch app registration on the Spotify developer dashboard.
+         The redirect URI below must be registered there verbatim. If the ID
+         is ever reverted to the SPOTIFY_CLIENT_ID_PLACEHOLDER sentinel,
+         SpotifySettingsView shows a "not configured" state and the reader
+         never runs. -->
     <key>SpotifyClientID</key>
-    <string>SPOTIFY_CLIENT_ID_PLACEHOLDER</string>
+    <string>d88e22135e5647bda6df2cdea61adf5c</string>
     <key>SpotifyRedirectURI</key>
     <string>dispatch-spotify://callback</string>
 </dict>
