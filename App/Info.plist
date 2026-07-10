@@ -19,6 +19,22 @@
          entitlements. -->
     <key>UIFileSharingEnabled</key>
     <true/>
+    <!-- Plan 25 iCloud Drive backups: make the ubiquity container's Documents
+         scope a visible "Dispatch" folder in iCloud Drive (Files/Finder).
+         Apple caches container visibility aggressively — if the folder
+         doesn't appear on device, bump the build number and/or reboot. -->
+    <key>NSUbiquitousContainers</key>
+    <dict>
+        <key>iCloud.io.robbie.Dispatch</key>
+        <dict>
+            <key>NSUbiquitousContainerIsDocumentScopePublic</key>
+            <true/>
+            <key>NSUbiquitousContainerName</key>
+            <string>Dispatch</string>
+            <key>NSUbiquitousContainerSupportedFolderLevels</key>
+            <string>Any</string>
+        </dict>
+    </dict>
     <!-- dispatch:// deep links — scoped to WIDGET TAPS only (widgetURL/Link
          from the home/lock screen widgets). Per Apple's widget docs
          ("Respond to user interactions"), tap-to-open-app from a widget is

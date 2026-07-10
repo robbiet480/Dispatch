@@ -164,6 +164,21 @@ struct DataSettingsView: View {
             .foregroundStyle(.white)
             .accessibilityIdentifier("backup-enabled")
 
+            // Plan 25: where backups go. iCloud Drive writes fall back to
+            // local when iCloud is unavailable (footer explains), so the
+            // choice stays pickable and simply takes effect when it can.
+            Picker("Destination", selection: Binding(
+                get: { backupManager.destination },
+                set: { backupManager.destination = $0 }
+            )) {
+                ForEach(BackupDestination.allCases) { destination in
+                    Text(destination.label).tag(destination)
+                }
+            }
+            .tint(.white.opacity(0.7))
+            .foregroundStyle(.white)
+            .accessibilityIdentifier("backup-destination")
+
             Button {
                 backupManager.backUpNow()
             } label: {
@@ -199,9 +214,36 @@ struct DataSettingsView: View {
         }
         let count = backupManager.backupCount
         lines.append(count == 1 ? "1 backup kept." : "\(count) backups kept (newest 14).")
-        lines.append("Daily JSON exports in the Files app under On My iPhone → Dispatch → Backups. "
+        // Destination status (plan 25): unavailable/failed states first, then
+        // the "Open in Files" hint matching where the files actually land.
+        switch backupManager.iCloudAvailability {
+        case .some(false) where backupManager.destination != .local:
+            lines.append("iCloud Drive unavailable — backups stay on this device.")
+        case .some(true) where backupManager.lastICloudBackupFailed:
+            lines.append("Last iCloud Drive backup failed (check your iCloud storage) — the local copy is unaffected.")
+        default:
+            break
+        }
+        lines.append("Daily JSON exports in the Files app: \(filesHint) "
             + "iCloud sync is not a backup — sync propagates deletions; backups let you rewind.")
         return lines.joined(separator: " ")
+    }
+
+    /// Where to find the backups in the Files app, matching the effective
+    /// destination (iCloud paths only advertised when iCloud resolved).
+    private var filesHint: String {
+        let iCloudAvailable = backupManager.iCloudAvailability == true
+        let local = "On My iPhone → Dispatch → Backups"
+        let cloud = "iCloud Drive → Dispatch → Backups"
+        let destination = backupManager.destination
+        if destination.writesLocal(iCloudAvailable: iCloudAvailable),
+           destination.writesICloud(iCloudAvailable: iCloudAvailable) {
+            return "\(local), synced to \(cloud)."
+        }
+        if destination.writesICloud(iCloudAvailable: iCloudAvailable) {
+            return "\(cloud)."
+        }
+        return "\(local)."
     }
 
     // MARK: - Delete All Data (review-readiness blocker #2)
