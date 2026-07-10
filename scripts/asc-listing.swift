@@ -432,7 +432,10 @@ for appInfoID in appInfoIDs {
             "violenceRealistic": "NONE",
             "violenceRealisticProlongedGraphicOrSadistic": "NONE",
         ]],
-    ], describe: "Set age-rating declarations (all None/false per listing.md; expected 4+)")
+    ], tolerateFailure: true,
+       describe: "Set age-rating declarations (all None/false per listing.md; expected 4+; "
+        + "tolerated: ASC may require the newer questionnaire attributes — ageAssurance, "
+        + "messagingAndChat, advertising, etc. — which need human answers in ASC)")
     if apply { break } // editable appInfo handled; don't touch the second copy
 }
 
