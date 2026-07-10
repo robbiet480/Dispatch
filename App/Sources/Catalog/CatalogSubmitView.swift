@@ -95,6 +95,11 @@ struct CatalogSubmitView: View {
                 Text("Submissions are anonymous unless you add a credit name. No account details are shared.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.6))
+                    // Footers don't inherit the rows' listRowBackground; without
+                    // an explicit clear background this falls through to the
+                    // system background — invisible in light mode, a black band
+                    // in dark mode (user-reported, build 16).
+                    .listRowBackground(Color.clear)
             }
 
             if let errorMessage {
