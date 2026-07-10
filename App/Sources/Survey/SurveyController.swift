@@ -55,6 +55,7 @@ final class SurveyController {
             WeatherProvider(store: fixStore),
             BatteryProvider(), ConnectionProvider(), AudioProvider(),
             PhotosProvider(since: since), FocusProvider(),
+            MediaProvider(spotify: SpotifyReaderFactory.current()),
             HealthMetricProvider(kind: .healthSteps, reader: health, since: since),
             HealthMetricProvider(kind: .healthFlights, reader: health, since: since),
             HealthMetricProvider(kind: .healthHeart, reader: health, since: since),
@@ -130,6 +131,7 @@ enum MockProviders {
         Mock(kind: .altitude, payload: .altitude(63)),
         Mock(kind: .connection, payload: .connection(1)),
         Mock(kind: .healthSteps, payload: .health([HealthReading(type: "steps", value: 27851, unit: "count")])),
+        Mock(kind: .media, payload: .media(MediaSample(source: .spotify, title: "Song 2", artist: "Blur"))),
     ]
 
     struct Mock: SensorProvider {

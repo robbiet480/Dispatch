@@ -4,6 +4,7 @@ import CoreMotion
 import DispatchKit
 import Foundation
 import Intents
+import MediaPlayer
 import os
 import Photos
 import SwiftUI
@@ -34,6 +35,12 @@ final class PermissionCascade {
     /// `runUpgradeTopUpIfNeeded()` (existing installs that completed
     /// onboarding before these steps existed).
     static let motionMedicationsRequestedKey = "permissions.motionMedicationsRequested"
+
+    /// Defaults flag marking that the media-library cascade step (plan 26)
+    /// has been requested at least once — same full-cascade/top-up pairing
+    /// as `motionMedicationsRequestedKey`, independently keyed so installs
+    /// that already got the motion top-up still get this one.
+    static let mediaLibraryRequestedKey = "permissions.mediaLibraryRequested"
 
     let isTestEnvironment: Bool
     private let locationRequester: CascadeLocationRequester
@@ -79,6 +86,7 @@ final class PermissionCascade {
         // run (crash tolerance, cf. runUpgradeTopUpIfNeeded): if a step traps
         // mid-cascade the next launch must not retry into the same crash.
         defaults.set(true, forKey: Self.motionMedicationsRequestedKey)
+        defaults.set(true, forKey: Self.mediaLibraryRequestedKey)
 
         await requestLocation()
         await requestHealth()
@@ -86,6 +94,7 @@ final class PermissionCascade {
         await requestMotion()
         await requestMicrophone()
         await requestPhotos()
+        await requestMediaLibrary()
         await requestFocus()
         requestNotifications()
     }
@@ -100,6 +109,11 @@ final class PermissionCascade {
     /// `requestAll()` and skip this entirely. No-op in test mode.
     func runUpgradeTopUpIfNeeded() async {
         guard !isTestEnvironment else { return }
+        await runMotionMedicationsTopUpIfNeeded()
+        await runMediaLibraryTopUpIfNeeded()
+    }
+
+    private func runMotionMedicationsTopUpIfNeeded() async {
         guard !defaults.bool(forKey: Self.motionMedicationsRequestedKey) else { return }
         guard !isRequesting else { return }
         isRequesting = true
@@ -115,6 +129,22 @@ final class PermissionCascade {
 
         await requestMotion()
         await requestMedications()
+    }
+
+    /// Media-library top-up (plan 26), independently keyed: installs that
+    /// onboarded (or got the motion/medications top-up) before the media
+    /// sensor existed still need this ONE dialog.
+    private func runMediaLibraryTopUpIfNeeded() async {
+        guard !defaults.bool(forKey: Self.mediaLibraryRequestedKey) else { return }
+        guard !isRequesting else { return }
+        isRequesting = true
+        defer { isRequesting = false }
+
+        // Same flag-written-BEFORE-steps crash tolerance as the
+        // motion/medications top-up above.
+        defaults.set(true, forKey: Self.mediaLibraryRequestedKey)
+
+        await requestMediaLibrary()
     }
 
     private func requestLocation() async {
@@ -175,6 +205,20 @@ final class PermissionCascade {
 
     private func requestPhotos() async {
         _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+    }
+
+    /// Media library (plan 26): standard callback-based request, joining the
+    /// sequence between Photos and Focus. Same one-shot defense as
+    /// requestMotion/requestFocus — this also runs on the launch path (via
+    /// the top-up), where a double-fired completion handler would trap.
+    private func requestMediaLibrary() async {
+        guard MPMediaLibrary.authorizationStatus() == .notDetermined else { return }
+        let resumeGate = OneShotResumeGuard()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            MPMediaLibrary.requestAuthorization { _ in
+                if resumeGate.claim() { continuation.resume() }
+            }
+        }
     }
 
     private func requestFocus() async {

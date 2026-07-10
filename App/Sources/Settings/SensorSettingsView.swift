@@ -205,6 +205,7 @@ extension SensorKind {
         case .healthCaffeine: "Caffeine"
         case .healthMedications: "Medications"
         case .healthActivityRings: "Activity Rings"
+        case .media: "Media"
         }
     }
 }

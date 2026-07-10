@@ -74,6 +74,8 @@ targets:
         # Split View/Slide Over multitasking available.
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        # Plan 26 media sensor. Purpose string only, NOT an entitlement.
+        INFOPLIST_KEY_NSAppleMusicUsageDescription: "Dispatch notes what's playing (song, artist, album — never any audio) when you file a report."
         # Plan 16 backups: expose Documents (→ Backups/) in the Files app
         # ("On My iPhone → Dispatch") and Finder. Plain Info.plist key, NOT
         # an entitlement — no provisioning-profile impact. Its companion
