@@ -110,7 +110,7 @@ public enum DeleteAllData {
     /// - "focusFilterState" — mirrors the device's live Focus, delivered by
     ///   the system; it is device state, not report data, and clearing it
     ///   would un-mute prompts while a Focus is genuinely active.
-    /// - Preference keys (alertsPerDay, distribution, nag*, digestEnabled,
+    /// - Preference keys (alertsPerDay, distribution, nag*, digestSchedules,
     ///   scheduledTimes, theme/units/sensor toggles, backup.enabled,
     ///   iCloudSyncEnabled, privacy.appLockEnabled, awake.isAwake) — user
     ///   settings, not user data.

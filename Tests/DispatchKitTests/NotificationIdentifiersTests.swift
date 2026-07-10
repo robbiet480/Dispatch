@@ -81,7 +81,10 @@ private func components(hour: Int, minute: Int) -> DateComponents {
     for identifier in [
         "nag-20260710-0930-1",
         "nag-1B9D6BCD-BBFD-4B2D-9B5D-AB8DFBBD4BED-20260710-0930-2",
-        NotificationIdentifiers.digestWeeklyIdentifier,
+        // Old pre-plan-40 request (still exists in the wild) …
+        "digest-weekly",
+        // … and the plan-40 per-schedule scheme — both stay NON-prompts.
+        "digest-\(UUID().uuidString)",
         "webhook-failed-some-report-id",
         "something-else-entirely",
     ] {
