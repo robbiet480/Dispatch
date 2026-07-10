@@ -10,6 +10,7 @@ struct DataSettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeStore.self) private var themeStore
     @Environment(BackupManager.self) private var backupManager
+    @Environment(WebhookManager.self) private var webhookManager
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(\.notificationPrefs) private var notificationPrefs
@@ -352,6 +353,9 @@ struct DataSettingsView: View {
         // Runtime defaults keyed to the deleted data — the kit-side lists
         // document every cleared AND retained key.
         DeleteAllData.clearRuntimeDefaults(appDefaults)
+        // Webhook secret (plan 24, PR #12 review): a credential in the
+        // Keychain, outside both defaults suites — wipe it here explicitly.
+        webhookManager.clearSecretForDataWipe()
         if isTestEnvironment {
             // Tests run everything against the single isolated suite.
             DeleteAllData.clearAppGroupDefaults(appDefaults)

@@ -86,6 +86,12 @@ import Testing
     // And the python-produced envelope decrypts back to the plaintext.
     let decrypted = try WebhookCrypto.decrypt(envelope: envelope, secret: "test-secret")
     #expect(decrypted == plaintext)
+
+    // Encrypt-then-MAC, full-signature check (PR #12 review nit 5): the
+    // header over THIS deterministic envelope matches a python3 hmac
+    // reference computed over the same bytes.
+    #expect(WebhookSigner.signatureHeader(body: envelope, secret: "test-secret")
+        == "sha256=227f96e67f64a854ada18b83ede21df4dd7b29866b934acd920470c6133edb8c")
 }
 
 @Test func webhookEncryptionRoundTripsWithRandomNonceAndRejectsWrongSecret() throws {
@@ -95,9 +101,14 @@ import Testing
     #expect(throws: (any Error).self) {
         try WebhookCrypto.decrypt(envelope: envelope, secret: "wrong")
     }
-    // Encrypt-then-MAC: the signature covers the envelope bytes as sent.
+    // Encrypt-then-MAC: the signature covers the (random-nonce) envelope
+    // bytes as sent — assert FULL correctness by recomputing the MAC
+    // independently of WebhookSigner's formatting (PR #12 review nit 5).
     let header = WebhookSigner.signatureHeader(body: envelope, secret: "hunter2")
-    #expect(header.hasPrefix("sha256="))
+    let mac = HMAC<SHA256>.authenticationCode(
+        for: envelope, using: SymmetricKey(data: Data("hunter2".utf8)))
+    let expected = "sha256=" + mac.map { String(format: "%02x", $0) }.joined()
+    #expect(header == expected)
 }
 
 // MARK: - URL rules

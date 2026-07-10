@@ -83,6 +83,14 @@ public struct WebhookQueueEntry: Codable, Equatable, Sendable {
 /// EVERY save path can enqueue — including the widget-extension process
 /// (which enqueues only, never delivers; same marker pattern as
 /// `WidgetQuickAnswerMarker`). The app process drains.
+///
+/// ACCEPTED (PR #12 review nit 2): the read-modify-write pairs below are
+/// not atomic across processes — a widget enqueue racing an app-side drain
+/// write can, in a narrow window, lose the widget's entry. Fail-safe
+/// direction mirrors the quick-answer marker's accepted window: a lost
+/// entry means one missed webhook delivery (recoverable via Send All),
+/// never a duplicate or a crash. cross-process locking (file coordination)
+/// is not worth the complexity for v1.
 public enum WebhookQueue {
     /// JSON-encoded `[WebhookQueueEntry]`, FIFO (oldest first).
     public static let queueKey = "webhook.queue"
