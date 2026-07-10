@@ -10,25 +10,26 @@ struct QuestionVisualizationView: View {
     let theme: Theme
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             Text(question.prompt)
-                .font(.title2)
-                .fontWeight(.semibold)
+                .textCase(.uppercase)
+                .font(.footnote.weight(.bold))
+                .kerning(1.2)
                 .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
+                // XCUI + VoiceOver read the label, not the rendered glyphs:
+                // keep the original casing so NavigationUITests' staticTexts
+                // ["Are you working?"] queries still match (plan 29).
+                .accessibilityLabel(question.prompt)
 
             content
-                .padding(.horizontal, 20)
-                // The paged TabView OVERLAYS its index dots inside the page's own
-                // bounds rather than reserving space for them, so every page must
-                // keep its bottom clear: 34pt covers the UIPageControl strip
-                // (~26pt pill + inset), plus the original 12pt breathing room.
-                // Without this, bottom-anchored content (option-share bar labels,
-                // a line chart's 0-gridline) renders behind the dots.
-                .padding(.bottom, 46)
+                .padding(.horizontal, 8)
+                // Dots no longer overlay pages (plan 29 reserved strip) —
+                // just breathing room above the toolbar.
+                .padding(.bottom, 8)
         }
     }
 
