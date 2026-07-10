@@ -201,3 +201,29 @@ secret) and serve the same page as a static asset, behind Cloudflare Access.
 > minutes after mutations. `approve` is safe against this: it verifies the
 > submission with a strongly-consistent fetch before creating anything, so
 > acting on a stale entry fails cleanly rather than duplicating.
+
+## The moderator security role (REQUIRED — discovered the hard way, 2026-07-09)
+
+Server-to-server keys are **not superusers**: they execute as a regular user
+identity and are bound by the security-role matrix. With `CatalogQuestion`
+locked to no-create for all default roles (correct!), the key itself is locked
+out too — `approve` fails with `ACCESS_DENIED: CREATE operation not permitted`.
+
+Fix, once per environment:
+
+1. `swift run dispatch-mod whoami` — prints the key's user record name (a
+   `_hex` string). Note: this identity may DIFFER per environment — run it
+   with `--env production` after deploying and repeat these steps there.
+2. Console → Schema → Security Roles → ＋ → role `moderator` with grants:
+   `CatalogQuestion` Create+Write · `SubmittedQuestion` Read+Write ·
+   `QuestionFlag` Read+Write. (Reads of others' submissions worked without
+   the role in our testing, but grant them anyway — observed behavior, not
+   documented contract.)
+3. Assign the `moderator` role to the key's user record.
+4. Role DEFINITIONS deploy with the schema; the user ASSIGNMENT is
+   environment-specific — re-assign in Production after deploying.
+
+Verify: `swift run dispatch-mod approve` of a test submission succeeds AND
+`swift run dispatch-mod catalog` / `lookup <id>` shows the created entry.
+(The tool verifies per-record results since 76f24e4 — an unverified success
+once deleted a submission after a silently failed create.)
