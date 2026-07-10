@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Reporter home-screen visual parity (plan 29): structural assertions that
@@ -5,6 +6,15 @@ import XCTest
 /// filter row, reserved bottom strip (REPORT / plain dots / AWAKE pill), and
 /// stacked proportional option blocks.
 final class HomeParityUITests: XCTestCase {
+    /// Full-screen iPad sims run the home at REGULAR width, where plan 27's
+    /// grid replaces the pager — pager dots are compact-only chrome, so the
+    /// dot assertions branch on the runner's idiom. (A compact-width iPad —
+    /// Split View/Slide Over — degrades to the pager WITH dots, but XCUITest
+    /// can't drive multitasking, so full-screen regular is what iPad sims
+    /// exercise here.)
+    @MainActor
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
     @MainActor
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
@@ -38,8 +48,18 @@ final class HomeParityUITests: XCTestCase {
         XCTAssertTrue(awakeToggle.waitForExistence(timeout: 15))
         XCTAssertTrue(awakeToggle.label == "AWAKE" || awakeToggle.label == "ASLEEP")
 
-        XCTAssertTrue(app.otherElements["page-dots"].exists || app.images["page-dots"].exists,
-                      "expected the plain page-dots strip in the bottom toolbar")
+        if isPad {
+            // Regular width (plan 27): the grid shows every page at once —
+            // nothing to page through, so no dots; REPORT/AWAKE keep the strip.
+            XCTAssertTrue(app.otherElements["viz-grid"].waitForExistence(timeout: 10)
+                          || app.scrollViews["viz-grid"].waitForExistence(timeout: 10),
+                          "expected the regular-width visualization grid on iPad")
+            XCTAssertFalse(app.otherElements["page-dots"].exists,
+                           "pager dots must not render in the regular-width grid")
+        } else {
+            XCTAssertTrue(app.otherElements["page-dots"].exists || app.images["page-dots"].exists,
+                          "expected the plain page-dots strip in the bottom toolbar")
+        }
 
         // First demo page is multiple-choice: its stacked blocks must end
         // above the reserved strip (never overlap the REPORT button's row).
@@ -79,6 +99,8 @@ final class HomeParityUITests: XCTestCase {
 
     /// PR #41 review: 15 pages of dots (tiered shrink) must fit inside the
     /// bottom strip without colliding with the REPORT/AWAKE neighbors.
+    /// On iPad (regular width) the same fixture must render the grid with
+    /// no dots at all — the correct many-question expectation there.
     @MainActor
     func testFifteenPageDotsFitBetweenStripNeighbors() throws {
         let app = XCUIApplication()
@@ -86,14 +108,23 @@ final class HomeParityUITests: XCTestCase {
                                "--demo-data", "--demo-many-questions"]
         app.launch()
 
+        let report = app.buttons["report-button"]
+        let awake = app.buttons["awake-toggle"]
+        XCTAssertTrue(report.waitForExistence(timeout: 15))
+        XCTAssertTrue(awake.waitForExistence(timeout: 10))
+
+        if isPad {
+            XCTAssertTrue(app.otherElements["viz-grid"].waitForExistence(timeout: 10)
+                          || app.scrollViews["viz-grid"].waitForExistence(timeout: 10),
+                          "expected the regular-width visualization grid on iPad")
+            XCTAssertFalse(app.otherElements["page-dots"].exists,
+                           "pager dots must not render in the regular-width grid")
+            return
+        }
+
         let dots = app.otherElements["page-dots"]
         XCTAssertTrue(dots.waitForExistence(timeout: 15))
         XCTAssertEqual(dots.label, "Page 1 of 15", "fixture should yield 15 pages")
-
-        let report = app.buttons["report-button"]
-        let awake = app.buttons["awake-toggle"]
-        XCTAssertTrue(report.waitForExistence(timeout: 10))
-        XCTAssertTrue(awake.waitForExistence(timeout: 10))
         XCTAssertGreaterThanOrEqual(dots.frame.minX, report.frame.maxX,
                                     "dots must not collide with REPORT")
         XCTAssertLessThanOrEqual(dots.frame.maxX, awake.frame.minX,
