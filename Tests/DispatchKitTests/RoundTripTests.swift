@@ -134,6 +134,59 @@ import Testing
     #expect(groups.first?.questionIDs == [migratedID, "custom-question"])
 }
 
+/// v2 person registry (plan 22): people round-trip with identity intact,
+/// exports without people import fine (absence tolerance), and stores with
+/// no PersonEntity rows omit the key entirely (nil-omission).
+@Test func v2PeopleRoundTripAbsenceToleranceAndNilOmission() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+    let person = PersonEntity()
+    person.text = "Robert"
+    person.alternateNames = ["Bob"]
+    person.usageCount = 5
+    contextA.insert(person)
+    let plain = PersonEntity()
+    plain.text = "Alex"
+    contextA.insert(plain)
+    try contextA.save()
+    let exportA = try V2Exporter.exportData(from: contextA)
+
+    // Round trip: identity + alternates survive; nil-omission for empty alternates.
+    let decoded = try JSONDecoder.v2.decode(V2Export.self, from: exportA)
+    let people = try #require(decoded.people)
+    #expect(people.map(\.displayName) == ["Alex", "Robert"])
+    #expect(people.first { $0.displayName == "Robert" }?.alternateNames == ["Bob"])
+    #expect(people.first { $0.displayName == "Alex" }?.alternateNames == nil)
+    #expect(!exportA.isEmpty)
+    let json = String(decoding: exportA, as: UTF8.self)
+    #expect(json.contains("\"people\""))
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(exportA, into: contextB)
+    let imported = try contextB.fetch(FetchDescriptor<PersonEntity>())
+    #expect(imported.count == 2)
+    let robert = try #require(imported.first { $0.text == "Robert" })
+    #expect(robert.uniqueIdentifier == person.uniqueIdentifier)
+    #expect(robert.alternateNames == ["Bob"])
+    // Re-import is idempotent (upsert by uniqueIdentifier).
+    _ = try V2Importer.importExport(exportA, into: contextB)
+    #expect(try contextB.fetchCount(FetchDescriptor<PersonEntity>()) == 2)
+    // Byte-identical re-export.
+    #expect(try V2Exporter.exportData(from: contextB) == exportA)
+
+    // Absence tolerance + nil-omission: a store without people omits the key,
+    // and importing such an export is a people no-op.
+    let containerC = try DispatchStore.inMemoryContainer()
+    let contextC = ModelContext(containerC)
+    let exportC = try V2Exporter.exportData(from: contextC)
+    #expect(!String(decoding: exportC, as: UTF8.self).contains("\"people\""))
+    let containerD = try DispatchStore.inMemoryContainer()
+    let contextD = ModelContext(containerD)
+    _ = try V2Importer.importExport(exportC, into: contextD)
+    #expect(try contextD.fetchCount(FetchDescriptor<PersonEntity>()) == 0)
+}
+
 @Test func realExportRoundTripsIfPresent() throws {
     guard let path = ProcessInfo.processInfo.environment["DISPATCH_V1_EXPORT"] else { return }
     let containerA = try DispatchStore.inMemoryContainer()

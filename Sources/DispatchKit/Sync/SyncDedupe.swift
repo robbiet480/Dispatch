@@ -37,7 +37,7 @@ public enum SyncDedupe {
         summary.promptGroupsRemoved = try deleteDuplicates(PromptGroup.self, in: context) { $0.uniqueIdentifier }
         summary.reportsRemoved = try deleteDuplicates(Report.self, in: context) { $0.uniqueIdentifier }
         summary.tokensRemoved = try mergeVocabulary(TokenEntity.self, in: context)
-        summary.peopleRemoved = try mergeVocabulary(PersonEntity.self, in: context)
+        summary.peopleRemoved = try mergePeople(in: context)
         if summary.totalRemoved > 0 {
             try context.save()
         }
@@ -78,6 +78,36 @@ public enum SyncDedupe {
                 context.delete(extra)
                 removed += 1
             }
+        }
+        return removed
+    }
+
+    /// Person merge (plan 22): the vocabulary merge plus registry semantics —
+    /// the survivor absorbs the extras' alternate names. The resulting
+    /// alternate list is sorted and deduped case/diacritic-insensitively so
+    /// the outcome is deterministic regardless of arrival order.
+    private static func mergePeople(in context: ModelContext) throws -> Int {
+        var removed = 0
+        for group in try duplicateGroups(PersonEntity.self, in: context, key: { $0.text }) {
+            guard let survivor = group.first else { continue }
+            var alternates = survivor.alternateNames
+            for extra in group.dropFirst() {
+                survivor.usageCount += extra.usageCount
+                survivor.questionCount = max(survivor.questionCount, extra.questionCount)
+                alternates.append(contentsOf: extra.alternateNames)
+                context.delete(extra)
+                removed += 1
+            }
+            let survivorKey = PersonResolver.normalize(survivor.text)
+            var seen: Set<String> = [survivorKey]
+            var union: [String] = []
+            for name in alternates.sorted() {
+                let key = PersonResolver.normalize(name)
+                guard !key.isEmpty, !seen.contains(key) else { continue }
+                seen.insert(key)
+                union.append(name)
+            }
+            survivor.alternateNames = union
         }
         return removed
     }

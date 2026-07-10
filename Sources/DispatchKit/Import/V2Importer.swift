@@ -129,6 +129,23 @@ public enum V2Importer {
             summary.promptGroupsImported += 1
         }
 
+        // Person registry (plan 22): upsert by uniqueIdentifier. Absent in
+        // older exports → no-op (vocabulary rebuild derives plain entries).
+        for dto in export.people ?? [] {
+            let id = dto.uniqueIdentifier
+            var descriptor = FetchDescriptor<PersonEntity>(
+                predicate: #Predicate { $0.uniqueIdentifier == id })
+            descriptor.fetchLimit = 1
+            let person = try context.fetch(descriptor).first ?? {
+                let p = PersonEntity()
+                p.uniqueIdentifier = id
+                context.insert(p)
+                return p
+            }()
+            person.text = dto.displayName
+            person.alternateNames = dto.alternateNames ?? []
+        }
+
         try context.save()
         return summary
     }
