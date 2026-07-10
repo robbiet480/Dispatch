@@ -34,6 +34,11 @@ struct HomeView: View {
 
     private var theme: Theme { themeStore.theme }
 
+    /// Compact (iPhone / narrow iPad multitasking) pulls the chrome to the
+    /// screen extremes like the original Reporter — the iPad grid keeps its
+    /// roomier spacing.
+    private var isCompact: Bool { horizontalSizeClass != .regular }
+
     private var visibleQuestions: [Question] {
         questions.filter { $0.isEnabled && filterStore.isVisible($0.uniqueIdentifier) }
     }
@@ -117,7 +122,9 @@ struct HomeView: View {
                 Color.themeBackground(theme)
                     .ignoresSafeArea()
 
-                VStack {
+                // Compact collapses the inter-chrome spacing to 0 (Reporter
+                // parity: chrome hugs the extremes, charts own the middle).
+                VStack(spacing: isCompact ? 0 : 8) {
                     topBar
                     if reports.isEmpty {
                         Spacer()
@@ -189,7 +196,7 @@ struct HomeView: View {
                 .fill(Color.white.opacity(0.25))
                 .frame(height: 0.5)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, isCompact ? 0 : 4)
     }
 
     @ViewBuilder
@@ -307,7 +314,10 @@ struct HomeView: View {
             .accessibilityIdentifier("settings-button")
         }
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        // Compact: snug under the status bar — the safe-area inset already
+        // clears it, so only a hairline of breathing room is added.
+        .padding(.top, isCompact ? 2 : 8)
+        .padding(.bottom, isCompact ? 4 : 8)
     }
 
     @ViewBuilder
@@ -375,8 +385,10 @@ struct HomeView: View {
         }
         .padding(.horizontal)
         // The reserved strip: minHeight (not a hard frame) so accessibility
-        // text sizes can grow the controls instead of clipping them.
-        .frame(minHeight: 52)
+        // text sizes can grow the controls instead of clipping them. Compact
+        // shrinks to the 44pt tap-target floor — the strip still bottoms out
+        // at the safe-area edge, keeping the home-indicator region clean.
+        .frame(minHeight: isCompact ? 44 : 52)
     }
 }
 
