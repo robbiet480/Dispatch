@@ -169,7 +169,12 @@ struct DispatchApp: App {
             container: container,
             isTestEnvironment: isTestEnvironment,
             isSyncActive: cloudKitActive
-        ) {
+        ) { recentReportDates in
+            // Synced-report nag reconciliation (plan 19) BEFORE the replan,
+            // so the replan reads the updated lastActedAt — a report filed
+            // on the watch (or another phone) quiets past-due nag chains
+            // exactly as an in-app save would.
+            scheduler.syncedReportsArrived(reportDates: recentReportDates)
             scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
             workoutObserver.refresh()
             madeVisitObserver.refresh()

@@ -45,6 +45,14 @@ struct DispatchWatchApp: App {
         (container, _) = WatchStoreBootstrap.makeContainer(
             syncEnabled: shouldSync, inMemory: isTestEnvironment
         )
+
+        // TEST HARNESS ONLY: production watch installs never seed (questions
+        // arrive via sync — see the type doc above); a test launch gets the
+        // deterministic default set so watch UI flows have rows to exercise
+        // against the in-memory store.
+        if isTestEnvironment {
+            _ = try? DefaultQuestions.seedIfEmpty(into: ModelContext(container))
+        }
     }
 
     var body: some Scene {
