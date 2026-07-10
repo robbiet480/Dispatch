@@ -33,6 +33,11 @@ struct QuestionPageView: View {
     let value: AnswerValue
     let onAnswer: (AnswerValue) -> Void
     let flushRegistry: PendingFlushRegistry
+    /// Survey-wide shared focus, keyed by page id (see `SurveyFlowView.
+    /// focusedPage`). Each keyboard-driven input binds itself to its own
+    /// page id so the parent can hand the keyboard from page to page
+    /// without a dismiss/re-present bounce.
+    let focus: SwiftUI.FocusState<String?>.Binding
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -61,7 +66,9 @@ struct QuestionPageView: View {
                            isPeople: page.question.type == .people,
                            identifier: "\(page.id)-token-field",
                            onChange: { onAnswer(.tokens($0)) },
-                           flushRegistry: flushRegistry)
+                           flushRegistry: flushRegistry,
+                           focus: focus,
+                           focusID: page.id)
         case .number:
             // Input styles (plan 21): every control writes the same
             // numericResponse string through `onAnswer` that the text field
@@ -76,7 +83,9 @@ struct QuestionPageView: View {
                     identifier: "\(page.id)-number-field",
                     accessibilityIdentifier: "number-field",
                     style: .field(keyboard: .decimalPad),
-                    flushRegistry: flushRegistry)
+                    flushRegistry: flushRegistry,
+                    focus: focus,
+                    focusID: page.id)
             case .slider:
                 SliderInput(value: numberBinding, config: page.inputConfig)
             case .stepper:
@@ -96,7 +105,9 @@ struct QuestionPageView: View {
                 identifier: "\(page.id)-note-editor",
                 accessibilityIdentifier: "note-editor",
                 style: .editor,
-                flushRegistry: flushRegistry)
+                flushRegistry: flushRegistry,
+                focus: focus,
+                focusID: page.id)
         case .location:
             LocalTextEditorField(
                 initialText: { if case .location(let text) = value { text } else { "" } }(),
@@ -105,7 +116,9 @@ struct QuestionPageView: View {
                 identifier: "\(page.id)-location-field",
                 accessibilityIdentifier: "location-field",
                 style: .field(keyboard: .default),
-                flushRegistry: flushRegistry)
+                flushRegistry: flushRegistry,
+                focus: focus,
+                focusID: page.id)
         }
     }
 
@@ -167,6 +180,11 @@ private struct LocalTextEditorField: View {
     let accessibilityIdentifier: String
     let style: Style
     let flushRegistry: PendingFlushRegistry
+    /// Survey-wide shared focus (keyed by page id) + this field's key.
+    /// Bound so the parent can focus this field on page arrival and hand
+    /// the keyboard over from the previous page without a bounce.
+    let focus: SwiftUI.FocusState<String?>.Binding
+    let focusID: String
 
     static let debounceInterval: Duration = .milliseconds(300)
 
@@ -190,6 +208,7 @@ private struct LocalTextEditorField: View {
                     .scrollContentBackground(.hidden)
             }
         }
+        .focused(focus, equals: focusID)
         .accessibilityIdentifier(accessibilityIdentifier)
         .onAppear {
             flushRegistry.register(identifier, flush: flush)
@@ -287,10 +306,14 @@ struct TokenEntryView: View {
     let identifier: String
     let onChange: ([String]) -> Void
     let flushRegistry: PendingFlushRegistry
+    /// Survey-wide shared focus (keyed by page id) + this field's key.
+    /// Parent-driven so the field is focused the moment its page becomes
+    /// current — never gated on any local work this view does on appear.
+    let focus: SwiftUI.FocusState<String?>.Binding
+    let focusID: String
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appDefaults) private var appDefaults
-    @SwiftUI.FocusState private var fieldFocused: Bool
     /// Live keystrokes stay in this local `@State`; suggestions are computed
     /// purely from local state per render — never writing to any observable
     /// per keystroke (see `LocalTextEditorField`'s doc comment for the
@@ -312,6 +335,8 @@ struct TokenEntryView: View {
         appDefaults.bool(forKey: ContactSuggestions.enabledKey)
     }
 
+    private var fieldFocused: Bool { focus.wrappedValue == focusID }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if !tokens.isEmpty {
@@ -321,7 +346,7 @@ struct TokenEntryView: View {
             }
             TextField(placeholder, text: $draft)
                 .font(.title3)
-                .focused($fieldFocused)
+                .focused(focus, equals: focusID)
                 .onSubmit(commitDraft)
                 .accessibilityIdentifier("token-field")
             if fieldFocused, !suggestions.isEmpty {
@@ -333,6 +358,12 @@ struct TokenEntryView: View {
         }
         .padding()
         .task {
+            // Deferred one runloop hop: the vocabulary fetch is main-actor
+            // SwiftData work, and running it synchronously at appear could
+            // gate the first-responder handoff that focuses this field on
+            // page arrival. Yielding lets focus/keyboard land first —
+            // suggestions can populate a beat later.
+            await Task.yield()
             loadCandidates()
             if isPeople {
                 showsContactsOffer = !contactsEnabled

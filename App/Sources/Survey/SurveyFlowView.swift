@@ -24,6 +24,29 @@ struct SurveyFlowView: View {
     /// Cancelled/superseded by any newer tap; a page-index guard inside the
     /// task makes it a no-op if the user already navigated manually.
     @State private var autoAdvanceTask: Task<Void, Never>?
+    /// Single shared focus state for every text input in the survey, keyed
+    /// by page id. One shared state (instead of per-field `@FocusState`
+    /// booleans) is what lets the keyboard hand off between consecutive
+    /// text-entry pages without a resign/re-present bounce: when the current
+    /// page changes, writing the next page's id here moves first responder
+    /// directly from the old field to the new one in a single transaction —
+    /// the keyboard never gets a "nobody is focused" gap to dismiss into.
+    /// nil (choice/slider/… pages) dismisses the keyboard.
+    @SwiftUI.FocusState private var focusedPage: String?
+    /// The pager's scroll position (page id), mirroring
+    /// `survey.currentIndex`. The pager is a paging `ScrollView` rather
+    /// than a page-style `TabView` because programmatic advances (NEXT,
+    /// yes/no auto-advance) must slide like a swipe — and page-style
+    /// TabView ignores animation on programmatic selection changes
+    /// (verified frame-by-frame in the simulator on iOS 26: `withAnimation`
+    /// around the model write, a selection-keyed `.animation` modifier, and
+    /// `withAnimation` on a plain `@State` mirror all hard-jump).
+    /// `withAnimation` on a `scrollPosition(id:)` write animates properly.
+    /// Model → mirror sync happens in `onChange(of: currentIndex)` inside
+    /// `withAnimation`; mirror → model sync (user swipes) happens in
+    /// `onChange(of: scrolledPageID)`. Both writes are same-value no-ops in
+    /// the echo direction, so the two can't loop.
+    @State private var scrolledPageID: String?
     let kind: ReportKind
     let trigger: ReportTrigger
     var overrideDate: Date? = nil
@@ -73,47 +96,96 @@ struct SurveyFlowView: View {
                 .padding()
                 .accessibilityIdentifier("survey-progress")
 
-            TabView(selection: Binding(
-                get: { controller.survey.currentIndex },
-                set: { newIndex in
-                    flushRegistry.flushAll()
-                    controller.survey.select(newIndex)
-                })) {
-                ForEach(Array(controller.survey.pages.enumerated()), id: \.element.id) { index, page in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
-                            if index == 0 {
-                                if controller.isBackdated {
-                                    backdatedNote
-                                        .padding(.top)
-                                } else {
-                                    CaptureChecklistView(outcomes: controller.outcomes)
-                                        .padding(.top)
+            // Paging ScrollView, not page-style TabView — see
+            // `scrolledPageID` for why (programmatic slide animation).
+            // Non-lazy HStack: every page stays alive for the whole survey,
+            // matching the old TabView's behavior that the flush-on-
+            // disappear and focus-handoff contracts were built on.
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(Array(controller.survey.pages.enumerated()), id: \.element.id) { index, page in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 24) {
+                                if index == 0 {
+                                    if controller.isBackdated {
+                                        backdatedNote
+                                            .padding(.top)
+                                    } else {
+                                        CaptureChecklistView(outcomes: controller.outcomes)
+                                            .padding(.top)
+                                    }
                                 }
+                                QuestionPageView(page: page,
+                                                 value: controller.survey.answerValue(for: page.id),
+                                                 onAnswer: { value in
+                                                     controller.survey.answer(value, for: page.id)
+                                                     // Yes/No auto-advance (Reporter
+                                                     // parity): a selection — not a
+                                                     // deselect — moves on by itself.
+                                                     if page.question.type == .yesNo,
+                                                        case .options(let options) = value,
+                                                        !options.isEmpty {
+                                                         scheduleAutoAdvance(controller)
+                                                     }
+                                                 },
+                                                 flushRegistry: flushRegistry,
+                                                 focus: $focusedPage)
                             }
-                            QuestionPageView(page: page,
-                                             value: controller.survey.answerValue(for: page.id),
-                                             onAnswer: { value in
-                                                 controller.survey.answer(value, for: page.id)
-                                                 // Yes/No auto-advance (Reporter
-                                                 // parity): a selection — not a
-                                                 // deselect — moves on by itself.
-                                                 if page.question.type == .yesNo,
-                                                    case .options(let options) = value,
-                                                    !options.isEmpty {
-                                                     scheduleAutoAdvance(controller)
-                                                 }
-                                             },
-                                             flushRegistry: flushRegistry)
+                            // Plan 27: readable column so wide layouts (iPad
+                            // sheet/landscape) don't stretch inputs edge-to-edge.
+                            .readableColumn()
                         }
-                        // Plan 27: readable column so wide layouts (iPad
-                        // sheet/landscape) don't stretch inputs edge-to-edge.
-                        .readableColumn()
+                        // Each page fills exactly one pager width so
+                        // `.paging` snaps page-per-swipe like the TabView did.
+                        .containerRelativeFrame(.horizontal)
+                        // Unlike page-style TabView, a ScrollView keeps
+                        // offscreen pages in the accessibility tree — hide
+                        // them so VoiceOver (and UI-test `exists` checks)
+                        // only ever see the current page, exactly like the
+                        // old TabView behaved.
+                        .accessibilityHidden(index != controller.survey.currentIndex)
+                        .id(page.id)
                     }
-                    .tag(index)
                 }
+                .scrollTargetLayout()
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrolledPageID)
+            // Mirror → model: a user swipe moved the pager; flush pending
+            // keystrokes and record the new page in the survey model.
+            .onChange(of: scrolledPageID) { _, newID in
+                guard let newID,
+                      let newIndex = controller.survey.pages.firstIndex(where: { $0.id == newID }),
+                      newIndex != controller.survey.currentIndex else { return }
+                flushRegistry.flushAll()
+                controller.survey.select(newIndex)
+            }
+            // Model → mirror: a programmatic advance (NEXT, yes/no
+            // auto-advance) moved the survey; animate the pager to it so
+            // it slides left exactly like a swipe instead of jumping.
+            //
+            // Focus also follows the page here, for every navigation path:
+            // a keyboard question grabs focus the moment it becomes current
+            // — the user never has to tap the field — and a non-keyboard
+            // question drops focus, dismissing the keyboard. Setting focus
+            // in the same update that changes the page is also what keeps
+            // the keyboard up across text-entry → text-entry advances (see
+            // `focusedPage`).
+            .onChange(of: controller.survey.currentIndex) { _, newIndex in
+                guard controller.survey.pages.indices.contains(newIndex) else { return }
+                let newID = controller.survey.pages[newIndex].id
+                if scrolledPageID != newID {
+                    withAnimation { scrolledPageID = newID }
+                }
+                focusedPage = keyboardPageID(at: newIndex, controller)
+            }
+            .onAppear {
+                if controller.survey.pages.indices.contains(controller.survey.currentIndex) {
+                    scrolledPageID = controller.survey.pages[controller.survey.currentIndex].id
+                }
+                focusedPage = keyboardPageID(at: controller.survey.currentIndex, controller)
+            }
 
             HStack {
                 Button("CANCEL") { isShowingDiscardConfirmation = true }
@@ -129,7 +201,9 @@ struct SurveyFlowView: View {
                     if controller.survey.isLastPage {
                         completeSurvey(controller)
                     } else {
-                        controller.survey.advance()
+                        // Animated so a programmatic advance slides left
+                        // exactly like a forward swipe — no page jump.
+                        withAnimation { controller.survey.advance() }
                     }
                 }
                 .accessibilityIdentifier("survey-next")
@@ -172,8 +246,25 @@ struct SurveyFlowView: View {
             if controller.survey.isLastPage {
                 completeSurvey(controller)
             } else {
-                controller.survey.advance()
+                // Same slide-left as a swipe/NEXT (see the NEXT button).
+                withAnimation { controller.survey.advance() }
             }
+        }
+    }
+
+    /// The page id to focus when `index` becomes the current page, or nil
+    /// when that page has no keyboard-driven input (choice lists and the
+    /// non-text number styles), which dismisses any showing keyboard.
+    private func keyboardPageID(at index: Int, _ controller: SurveyController) -> String? {
+        guard controller.survey.pages.indices.contains(index) else { return nil }
+        let page = controller.survey.pages[index]
+        switch page.question.type {
+        case .tokens, .people, .note, .location:
+            return page.id
+        case .number:
+            return page.inputStyle == .textField ? page.id : nil
+        case .yesNo, .multipleChoice:
+            return nil
         }
     }
 

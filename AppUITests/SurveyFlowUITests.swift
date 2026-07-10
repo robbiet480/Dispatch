@@ -280,6 +280,41 @@ final class SurveyFlowUITests: XCTestCase {
                       "token '\(tokenText)' was not found in the saved report — draft was dropped by NEXT/DONE")
     }
 
+    /// Keyboard timing + persistence: a token/people page must bring the
+    /// keyboard up on its own — focus is requested on page arrival, not on
+    /// a field tap — and advancing from one text-entry question to the next
+    /// (tokens → location here) must keep the keyboard up: focus hands off
+    /// across the page transition instead of resigning into a dismiss/
+    /// re-present bounce.
+    @MainActor
+    func testKeyboardAutoAppearsOnTokenPageAndPersistsAcrossTextPages() throws {
+        let app = XCUIApplication()
+        _ = openSurvey(app)
+
+        let next = app.buttons["survey-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+
+        // Navigate to the tokens question ("What are you doing?").
+        let tokenField = app.textFields["token-field"]
+        while !tokenField.exists && next.label == "NEXT" {
+            next.tap()
+        }
+        XCTAssertTrue(tokenField.waitForExistence(timeout: 10))
+
+        // Deliberately NO tap on the field: arriving on the page alone must
+        // summon the keyboard, within a tight bound.
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 3),
+                      "keyboard did not auto-appear on the token page")
+
+        // Tokens → location is text-entry → text-entry: the keyboard must
+        // survive the programmatic advance.
+        next.tap()
+        XCTAssertTrue(app.textFields["location-field"].waitForExistence(timeout: 5),
+                      "location question did not follow the tokens question")
+        XCTAssertTrue(app.keyboards.element.exists,
+                      "keyboard dismissed while advancing between text questions")
+    }
+
     /// Plan 21 (number input styles): create a number question, switch its
     /// input style to Slider in the editor, run a survey, move the slider,
     /// and assert the numeric answer lands in the saved report's detail —
