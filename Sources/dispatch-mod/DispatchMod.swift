@@ -22,6 +22,12 @@ struct DispatchMod {
                                (--dry-run to validate and preview only; prompts
                                already in the catalog are skipped, so re-runs
                                are safe — see docs/catalog/README.md)
+      setup                    Bootstrap a CloudKit environment: import the
+                               repo-canonical schema.ckdb via `xcrun cktool`
+                               (types, indexes, roles), verify with probes,
+                               print remaining manual steps
+                               (--export to snapshot the live schema instead;
+                               see `dispatch-mod setup --help`)
       help                     Show this help
 
     OPTIONS:
@@ -120,6 +126,15 @@ struct DispatchMod {
                     let raw = try client.rawLookup(recordName: recordName)
                     print(raw)
                 }
+            case "setup":
+                if arguments.contains("--help") || arguments.contains("-h") {
+                    print(Setup.helpText)
+                    return
+                }
+                try Setup.run(
+                    environmentOverride: envOverride,
+                    export: flag("--export", in: &arguments)
+                )
             case "import":
                 let dryRun = flag("--dry-run", in: &arguments)
                 guard let path = arguments.first else {

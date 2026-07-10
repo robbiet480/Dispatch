@@ -16,18 +16,24 @@ import Foundation
 ///     `~/.dispatch-mod/eckey.pem`.
 struct ModConfig {
     static let defaultContainer = "iCloud.io.robbie.Dispatch"
+    /// Apple Developer team that owns the container — only used by `setup`
+    /// for `cktool` schema import/export (`DISPATCH_MOD_TEAM_ID` / "teamID"
+    /// in config.json override).
+    static let defaultTeamID = "UTQFCBPQRF"
     static let configDirectory = ("~/.dispatch-mod" as NSString).expandingTildeInPath
 
     var keyID: String
     var keyPath: String
     var container: String
     var environment: String
+    var teamID: String
 
     struct ConfigFile: Decodable {
         var keyID: String?
         var keyPath: String?
         var container: String?
         var environment: String?
+        var teamID: String?
     }
 
     enum ConfigError: Error, CustomStringConvertible {
@@ -88,7 +94,8 @@ struct ModConfig {
             keyID: keyID,
             keyPath: keyPath,
             container: env["DISPATCH_MOD_CONTAINER"] ?? file.container ?? defaultContainer,
-            environment: environment
+            environment: environment,
+            teamID: env["DISPATCH_MOD_TEAM_ID"] ?? file.teamID ?? defaultTeamID
         )
     }
 
