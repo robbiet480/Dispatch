@@ -155,7 +155,7 @@ Control Center, prompt groups, digests, visualizations, backups.
 
 ### 2.7 Accounts & data deletion — 5.1.1(v) — RESOLVED (delete-all shipped)
 
-> **Resolved:** Settings → Data → "Delete All Data…" shipped (commit on `main`, see
+> **Resolved:** Settings → Data → "Delete All Data…" shipped (commit `2c196fb` on `main`, see
 > risk register). Two gates (scope alert with optional also-delete-backups + type-DELETE
 > confirmation), single-save background wipe of every model so CloudKit mirroring
 > propagates the deletions to the private database (no direct zone purge — mirroring
@@ -198,7 +198,7 @@ higher-rating path since the app provides no medical advice. Answer sheet in Tas
 | Guideline | Finding | Severity | Mitigation | Owner |
 |---|---|---|---|---|
 | 5.1.3(ii) | HealthKit readings incl. medication names sync to iCloud via default-on CloudKit mirroring | **Blocker** | Option A: local-only health sidecar (2–4 d) | robbiet480 |
-| 5.1.1 / privacy | No delete-all-data affordance; CloudKit copy survives app deletion | **Resolved** | Shipped: Settings → Data → Delete All Data (mirroring-propagated iCloud erase), commit `feat: delete all data` | robbiet480 |
+| 5.1.1 / privacy | No delete-all-data affordance; CloudKit copy survives app deletion | **Resolved** | Shipped: Settings → Data → Delete All Data (mirroring-propagated iCloud erase), commit `2c196fb` | robbiet480 |
 | Privacy labels | Labels must reflect post-mitigation data flows; CloudKit private DB = "linked to you" | High | Task 4 answer sheet drafted **after** 5.1.3 fix | robbiet480 |
 | 2.5.1 | Health integration must be stated in App Store description | Medium | Task 4 listing copy | robbiet480 |
 | 2.3.1 | Reviewer notes need specific permission walkthrough; verify `aps-environment=production` in archive | Medium | Task 4 review-notes.md; archive check | robbiet480 |
@@ -211,7 +211,7 @@ higher-rating path since the app provides no medical advice. Answer sheet in Tas
 1. **5.1.3(ii) — health readings in iCloud.** Gates everything. Implement mitigation A
    before submission; privacy policy/labels/reviewer notes all depend on its outcome.
 2. **No delete-all-data affordance** — **RESOLVED** (Settings → Data → "Delete All
-   Data…", commit `feat: delete all data`; see §2.7). Deletions propagate to the iCloud
+   Data…", commit `2c196fb`; see §2.7). Deletions propagate to the iCloud
    copy via CloudKit mirroring while sync runs; sync-off honesty text included.
 3. **Privacy-label / policy / code three-way consistency** — cannot be finalized until
    (1) lands; submitting labels that declare health "not collected" while the current
