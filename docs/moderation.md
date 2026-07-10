@@ -117,6 +117,15 @@ Console → Schema → Indexes (Development):
 | `SubmittedQuestion` | `submittedAt` | Sortable *(mod tool list order)* |
 | `QuestionFlag` | `recordName` | Queryable *(mod tool queries)* |
 | `QuestionFlag` | `flaggedAt` | Sortable *(mod tool list order)* |
+| `SubmittedQuestion` | `createdBy` | Queryable *(see below)* |
+| `QuestionFlag` | `createdBy` | Queryable *(see below)* |
+
+**Why `createdBy`:** once §3a's Creator-scoped read permissions are applied,
+CloudKit injects an implicit creator filter into queries against those record
+types, and that implicit filter requires the `createdBy` metadata field to be
+Queryable — queries fail with `BAD_REQUEST: Field 'createdBy' is not marked
+queryable` otherwise (found empirically during the first live bootstrap,
+2026-07-09). `CatalogQuestion` keeps World read, so it does not need this.
 
 Search in the app is client-side over loaded entries, so **no** SEARCHABLE
 index on `prompt` is needed.
