@@ -1,6 +1,7 @@
 import DispatchKit
 import SwiftData
 import SwiftUI
+import UserNotifications
 import WatchKit
 
 /// The independent (companion-style) watch app (plan 19): quick answers and
@@ -20,7 +21,11 @@ import WatchKit
 ///   phone-synced store shows an empty list and still works once sync runs).
 @main
 struct DispatchWatchApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     let container: ModelContainer
+    /// Strong reference — UNUserNotificationCenter.delegate is weak/unowned.
+    let notificationDelegate: WatchNotificationDelegate
     private let isTestEnvironment: Bool
 
     init() {
@@ -53,11 +58,27 @@ struct DispatchWatchApp: App {
         if isTestEnvironment {
             _ = try? DefaultQuestions.seedIfEmpty(into: ModelContext(container))
         }
+
+        // Forwarded-notification action handling (plan 19 Task 5). Setting
+        // the delegate is NOT scheduling: the watch never calls add()/
+        // requestAuthorization()/setNotificationCategories() — scheduling
+        // authority stays 100% phone-side (see WatchNotificationDelegate).
+        let delegate = WatchNotificationDelegate(container: container)
+        notificationDelegate = delegate
+        UNUserNotificationCenter.current().delegate = delegate
     }
 
     var body: some Scene {
         WindowGroup {
             WatchHomeView()
+                .onChange(of: scenePhase) { _, newPhase in
+                    // Foreground poke (plan 19 Task 5): sync may have
+                    // changed the shared store while the complications had
+                    // no reason to refresh — same pattern as the phone.
+                    if newPhase == .active {
+                        WatchWidgetRefresher.reload()
+                    }
+                }
         }
         .modelContainer(container)
     }

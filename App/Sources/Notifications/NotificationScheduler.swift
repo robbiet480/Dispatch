@@ -794,6 +794,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     ) {
         let actionIdentifier = response.actionIdentifier
         let requestIdentifier = response.notification.request.identifier
+        // Probe (plan 19 Task 5, mandatory — uncited platform behavior):
+        // pairs with the watch delegate's identical line; capturing both
+        // devices' logs answers which process receives `didReceive` for
+        // actions tapped on a notification FORWARDED to the watch. Kept
+        // permanently — one line per response, documents the routing
+        // contract the watch's action handling depends on.
+        notificationLog.info("didReceive in process \(ProcessInfo.processInfo.processName, privacy: .public) action \(actionIdentifier, privacy: .public) request \(requestIdentifier, privacy: .public)")
         let promptGroupID = response.notification.request.content
             .userInfo[NotificationIdentifiers.promptGroupIDKey] as? String
         let triggeringWorkoutID = response.notification.request.content
