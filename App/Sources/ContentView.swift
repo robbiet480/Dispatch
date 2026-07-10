@@ -59,12 +59,12 @@ struct ContentView: View {
         // @Observable state, so the handoff re-evaluates on its own.
         .sheet(isPresented: Binding(
             get: {
-                notificationScheduler.pendingDigestOpen && !appLockStore.isLocked
+                notificationScheduler.pendingDigestPeriod != nil && !appLockStore.isLocked
                     && surveyPresenter.request == nil
             },
-            set: { notificationScheduler.pendingDigestOpen = $0 })) {
+            set: { if !$0 { notificationScheduler.pendingDigestPeriod = nil } })) {
             NavigationStack {
-                WeeklyDigestView()
+                WeeklyDigestView(period: notificationScheduler.pendingDigestPeriod ?? .week)
             }
             .onAppear { isDigestSheetPresented = true }
             .onDisappear { isDigestSheetPresented = false }

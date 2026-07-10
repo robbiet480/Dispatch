@@ -21,10 +21,15 @@ public enum NotificationIdentifiers {
     /// Group prompts: `gprompt-<groupID>-<yyyyMMdd-HHmm>` (plan 12). Their
     /// nags reuse `nag-` with the `<groupID>-<stamp>` parent stamp embedded.
     public static let groupPromptPrefix = "gprompt-"
-    /// Weekly digest reminder (plan 14). One repeating request,
-    /// `digest-weekly`; removals join the prompt-/gprompt-/nag- batch.
+    /// Digest reminders (plan 14, reworked plan 40): one request per schedule,
+    /// `digest-<uuid>`; removals join the prompt-/gprompt-/nag- batch. Excluded
+    /// from `promptSource` by fall-through — pinned by test. Stale pre-plan-40
+    /// `digest-weekly` requests are swept by the same prefix batch on first
+    /// replan.
     public static let digestPrefix = "digest-"
-    public static let digestWeeklyIdentifier = "digest-weekly"
+    /// userInfo key carrying the digest's `DigestPeriod.rawValue`, so a tap
+    /// opens the digest scoped to the schedule's period (week/month/quarter).
+    public static let digestPeriodKey = "digestPeriod"
     /// Webhook delivery-failure notice (plan 24): `webhook-failed-<reportID>`,
     /// posted by WebhookManager on a report's 3rd failed attempt. Joins the
     /// standard removal-batch prefix discipline (replan batch + the

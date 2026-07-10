@@ -84,6 +84,10 @@ public final class NotificationPrefs: @unchecked Sendable {
     /// Weekly digest notification (Sunday 19:00 local, `digest-weekly`).
     /// Default OFF — the digest screen is always reachable from Settings;
     /// this only controls the reminder.
+    ///
+    /// Superseded by `digestSchedules` (plan 40): the key is abandoned in
+    /// place, read exactly once by `migrateDigestSchedulesIfNeeded()` and
+    /// never again.
     public var digestEnabled: Bool {
         get {
             defaults.bool(forKey: "digestEnabled") // default false
@@ -91,6 +95,35 @@ public final class NotificationPrefs: @unchecked Sendable {
         set {
             defaults.set(newValue, forKey: "digestEnabled")
         }
+    }
+
+    /// Configurable digest reminders (plan 40). Stored as JSON `Data` under
+    /// `digestSchedules` — the `scheduledTimes` storage pattern verbatim,
+    /// including silent decode/encode failure.
+    public var digestSchedules: [DigestSchedule] {
+        get {
+            guard let jsonData = defaults.data(forKey: "digestSchedules") else {
+                return []
+            }
+            return (try? JSONDecoder().decode([DigestSchedule].self, from: jsonData)) ?? []
+        }
+        set {
+            if let jsonData = try? JSONEncoder().encode(newValue) {
+                defaults.set(jsonData, forKey: "digestSchedules")
+            }
+        }
+    }
+
+    /// One-time plan-40 migration: `digestEnabled == true` becomes the exact
+    /// schedule plan 14 hardcoded (weekly, Sunday, 19:00); false becomes an
+    /// empty list. Writing the array (even empty) marks migration done — the
+    /// key's presence is the marker. `digestEnabled` is never read again.
+    public func migrateDigestSchedulesIfNeeded() {
+        guard defaults.data(forKey: "digestSchedules") == nil else { return }
+        digestSchedules = digestEnabled
+            ? [DigestSchedule(id: UUID(), cadence: .weekly(weekday: 1),
+                              hour: 19, minute: 0, isEnabled: true)]
+            : []
     }
 
     /// When the user last acted on a prompt (quick answer, snooze,

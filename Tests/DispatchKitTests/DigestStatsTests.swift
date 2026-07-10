@@ -107,7 +107,7 @@ private var fixturePriorWeek: [Report] {
                                     questions: fixtureQuestions,
                                     weekEnding: weekEnding, calendar: utcCalendar)
     #expect(stats.reportCount == 3)
-    #expect(stats.priorWeekReportCount == 2)
+    #expect(stats.priorPeriodReportCount == 2)
 }
 
 @Test func computeExcludesDraftsAndOutOfWindowReports() {
@@ -117,7 +117,7 @@ private var fixturePriorWeek: [Report] {
                                     questions: fixtureQuestions,
                                     weekEnding: weekEnding, calendar: utcCalendar)
     #expect(stats.reportCount == 3)
-    #expect(stats.priorWeekReportCount == 0)
+    #expect(stats.priorPeriodReportCount == 0)
 }
 
 @Test func computeRanksTokensPeopleAndPlaces() {
@@ -181,4 +181,74 @@ private var fixturePriorWeek: [Report] {
     let stats = DigestStats.compute(reports: [], questions: [],
                                     weekEnding: weekEnding, calendar: utcCalendar)
     #expect(stats.templateSummary == "You filed 0 reports this week, the same as the week before.")
+}
+
+// MARK: - Period generalization (plan 40)
+
+@Test func monthPeriodIncludesReportsBeyondTheWeekWindow() {
+    // A report ~15 days before `weekEnding` is outside the 7-day week window
+    // but inside the trailing 1-month window.
+    let recent = makeReport(date: day(3))
+    let midMonth = makeReport(date: day(15))
+    let priorMonth = makeReport(date: day(40))
+
+    let month = DigestStats.compute(reports: [recent, midMonth, priorMonth],
+                                    questions: fixtureQuestions,
+                                    period: .month, ending: weekEnding, calendar: utcCalendar)
+    #expect(month.period == .month)
+    #expect(month.reportCount == 2)          // recent + midMonth in-window
+    #expect(month.priorPeriodReportCount == 1) // priorMonth in the month before
+
+    let week = DigestStats.compute(reports: [recent, midMonth, priorMonth],
+                                   questions: fixtureQuestions,
+                                   weekEnding: weekEnding, calendar: utcCalendar)
+    #expect(week.reportCount == 1)           // week excludes the 15-days-ago report
+}
+
+@Test func quarterPeriodSpansThreeMonths() {
+    let inQuarter = makeReport(date: day(75))
+    let priorQuarter = makeReport(date: day(120))
+    let stats = DigestStats.compute(reports: [inQuarter, priorQuarter],
+                                    questions: fixtureQuestions,
+                                    period: .quarter, ending: weekEnding, calendar: utcCalendar)
+    #expect(stats.period == .quarter)
+    #expect(stats.reportCount == 1)
+    #expect(stats.priorPeriodReportCount == 1)
+}
+
+@Test func weekEntryPointsAgree() {
+    // The kept `weekEnding:` wrapper and the explicit `.week` period must
+    // produce byte-identical stats — the weekly contract.
+    let viaWrapper = DigestStats.compute(reports: fixtureWeek + fixturePriorWeek,
+                                         questions: fixtureQuestions,
+                                         weekEnding: weekEnding, calendar: utcCalendar)
+    let viaPeriod = DigestStats.compute(reports: fixtureWeek + fixturePriorWeek,
+                                        questions: fixtureQuestions,
+                                        period: .week, ending: weekEnding, calendar: utcCalendar)
+    #expect(viaWrapper == viaPeriod)
+    #expect(viaWrapper.period == .week)
+}
+
+@Test func templateSummaryUsesPeriodNouns() {
+    // A report in the prior-month window makes the delta clause read
+    // "…than the month before" rather than the first-reports opener.
+    let priorMonth = makeReport(date: day(40),
+                                responses: [makeResponse(question: "q-doing", tokens: ["X"])])
+    let monthStats = DigestStats.compute(reports: fixtureWeek + fixturePriorWeek + [priorMonth],
+                                         questions: fixtureQuestions,
+                                         period: .month, ending: weekEnding, calendar: utcCalendar)
+    #expect(monthStats.templateSummary.contains("this month"))
+    #expect(monthStats.templateSummary.contains("the month before"))
+    #expect(!monthStats.templateSummary.contains("this week"))
+}
+
+@Test func periodBoundaryFieldsPopulated() {
+    for period in DigestPeriod.allCases {
+        let stats = DigestStats.compute(reports: fixtureWeek, questions: fixtureQuestions,
+                                        period: period, ending: weekEnding, calendar: utcCalendar)
+        let expected = period.interval(ending: weekEnding, calendar: utcCalendar)
+        #expect(stats.periodStart == expected.start)
+        #expect(stats.periodEnd == expected.end)
+        #expect(stats.period == period)
+    }
 }

@@ -35,7 +35,7 @@ enum DigestGenerator {
             let started = Date()
             do {
                 let session = LanguageModelSession(instructions: """
-                You write a short weekly reflection for the user of a personal \
+                You write a short \(stats.period.noun)ly reflection for the user of a personal \
                 self-reporting app, addressed to them in the second person. \
                 Use ONLY the statistics provided in the prompt. Do not invent \
                 events, numbers, people, places, moods, or any detail that is \
@@ -82,7 +82,8 @@ enum DigestGenerator {
     /// the model prompt contains.
     static func facts(for stats: DigestStats) -> String {
         var lines: [String] = []
-        lines.append("- Reports filed this week: \(stats.reportCount) (prior week: \(stats.priorWeekReportCount))")
+        let noun = stats.period.noun
+        lines.append("- Reports filed this \(noun): \(stats.reportCount) (prior \(noun): \(stats.priorPeriodReportCount))")
         if !stats.topTokens.isEmpty {
             lines.append("- Most frequent answers: \(ranked(stats.topTokens))")
         }
@@ -93,7 +94,7 @@ enum DigestGenerator {
             lines.append("- Places visited most: \(ranked(stats.topPlaces))")
         }
         for average in stats.numericAverages {
-            lines.append("- \"\(average.prompt)\" weekly average: \(String(format: "%.1f", average.average)) over \(average.sampleCount) answers")
+            lines.append("- \"\(average.prompt)\" \(noun)ly average: \(String(format: "%.1f", average.average)) over \(average.sampleCount) answers")
         }
         if let valence = stats.valenceAverage {
             var moodLine = "- Mood valence average: \(String(format: "%.2f", valence)) on a -1 (negative) to +1 (positive) scale"
