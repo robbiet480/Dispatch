@@ -3,7 +3,10 @@ import PackageDescription
 
 let package = Package(
     name: "DispatchKit",
-    platforms: [.iOS(.v26), .macOS(.v26)],
+    // watchOS (plan 19): the kit is the watch app's shared brain; its imports
+    // (Foundation/SwiftData/os/Observation/CryptoKit/SwiftUI) are all
+    // watchOS-available.
+    platforms: [.iOS(.v26), .macOS(.v26), .watchOS(.v26)],
     products: [
         .library(name: "DispatchKit", targets: ["DispatchKit"]),
         // Moderation tool for the community question catalog (plan 20).

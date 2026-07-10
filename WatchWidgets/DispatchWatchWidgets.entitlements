@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Watch widget extension (complications): App Group only, mirroring the
+         phone widget entitlements — the extension reads the WATCH'S shared
+         store read-only. Per-device container; nothing crosses devices here. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.io.robbie.Dispatch</string>
+    </array>
+</dict>
+</plist>
