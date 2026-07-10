@@ -140,6 +140,11 @@ struct HomeView: View {
                     }
                     bottomBar
                 }
+                // iOS 26 Safari-style toolbar depth (compact only): the chrome
+                // column sinks through the bottom safe area so the strip's
+                // controls sit just above the physical edge, with the home
+                // indicator floating over the strip's background.
+                .ignoresSafeArea(.container, edges: isCompact ? .bottom : [])
             }
             .navigationBarHidden(true)
             // Gated on the lock, mirroring ContentView's survey-cover pattern: if the
@@ -357,6 +362,10 @@ struct HomeView: View {
             }
             .font(.headline)
             .foregroundStyle(.white)
+            // Sunk strip: keep a >=44pt hit target extending upward, away
+            // from the home indicator (the indicator overlaps background only).
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
             // Plan 27: new report from a hardware keyboard (iPad).
             .keyboardShortcut("n", modifiers: .command)
             .accessibilityIdentifier("report-button")
@@ -382,13 +391,18 @@ struct HomeView: View {
                 scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
                 surveyPresenter.request = SurveyRequest(kind: kind, trigger: .manual)
             }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .padding(.horizontal)
         // The reserved strip: minHeight (not a hard frame) so accessibility
         // text sizes can grow the controls instead of clipping them. Compact
-        // shrinks to the 44pt tap-target floor — the strip still bottoms out
-        // at the safe-area edge, keeping the home-indicator region clean.
+        // shrinks to the 44pt tap-target floor and — iOS 26 toolbar style —
+        // sinks into the home-indicator zone: the dashboard column ignores the
+        // bottom safe area, so this 10pt pad is measured from the physical
+        // screen edge and the indicator floats over the strip's background.
         .frame(minHeight: isCompact ? 44 : 52)
+        .padding(.bottom, isCompact ? 10 : 0)
     }
 }
 
