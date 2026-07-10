@@ -1,0 +1,142 @@
+# Dispatch Privacy Policy
+
+*Effective 2026-07-09. Applies to the Dispatch iOS app (bundle
+`io.robbie.Dispatch`), published by Robbie Trencheny.*
+
+Dispatch is a self-tracking app. Your data is the entire point of the
+app, so this policy is blunt about exactly where it lives.
+
+## The short version
+
+- Everything you record stays **on your device** and, if you leave
+  iCloud Sync on (it is on by default), in **your own private iCloud
+  database**. There is no Dispatch server.
+- **No analytics, no ads, no tracking, no third-party SDKs.** The app
+  makes no network connections except to Apple services (iCloud,
+  Apple's weather service, push notifications) and — only if you
+  explicitly submit a question set — the shared community catalog.
+- **No account.** Nothing to sign up for; we never see your email or
+  name.
+- You can **export** everything (JSON/CSV), and **Delete All Data**
+  (Settings → Data) erases every record, including the iCloud copy
+  while sync is on.
+
+## What Dispatch stores
+
+When you file a report, Dispatch stores your answers plus the sensor
+context you have granted access to:
+
+- **Answers** — your responses to your questions, including free-text
+  notes and the people/things/places you type.
+- **Location** — coordinates and a reverse-geocoded place name at the
+  moment of the report (if you allow location access).
+- **Health data** — snapshot readings from Apple Health at the moment
+  of the report: steps, flights climbed, heart rate, HRV, resting
+  heart rate, sleep, caffeine, workouts, Activity ring progress, and —
+  if you grant the separate medications permission — medication dose
+  events you logged in Apple Health (including the medication name). If you mark
+  a question to log State of Mind, Dispatch also *writes* State of
+  Mind entries to Apple Health.
+- **Weather** — current conditions fetched from Apple's weather
+  service (see below).
+- **Ambient sound level** — a single decibel number. The microphone is
+  sampled for loudness only; **no audio is ever recorded or stored**.
+- **Photo activity** — a count of photos taken since your last report
+  and basic metadata (dimensions, timestamps, location) of those
+  photos. The photos themselves are never copied or uploaded.
+- **Device context** — battery level, connectivity type, altitude,
+  stairs descended (motion coprocessor), and whether a Focus was
+  active (with the name you gave the Focus filter).
+
+All of this is stored in a local database on your device.
+
+## iCloud sync
+
+If iCloud Sync is on (Settings → Data → iCloud; **default: on**),
+Dispatch mirrors your reports, questions, prompt groups, and
+vocabulary to the **private CloudKit database** of your own iCloud
+account. That includes the Health readings attached to your reports —
+we say this explicitly because it matters: **with sync on, snapshots
+of your health data (including medication names, if you enabled that
+sensor) are stored in your private iCloud database.** They are
+encrypted in transit and at rest by Apple, visible to no one but your
+signed-in iCloud account, and never touch any server of ours.
+
+If you prefer your health data (or anything else) never to leave the
+device, turn iCloud Sync off. The app is fully functional without it.
+
+## Apple services
+
+- **Weather** — to attach weather to a report, your current coordinates
+  are sent to Apple's weather service (WeatherKit). Apple's handling is
+  described in Apple's own privacy documentation; Dispatch sends
+  nothing else.
+- **Apple Health** — read and written only with your permission, on
+  device, through HealthKit. Dispatch never transmits Health data to
+  any third party. Health data appears in iCloud only via the sync
+  described above.
+- **Push notifications** — Dispatch uses silent CloudKit change
+  notifications to keep devices in sync. No notification content is
+  ever sent through any non-Apple service.
+
+## The community question catalog
+
+Browsing the catalog reads from a shared public CloudKit database. If
+you **submit** a question set to the catalog, the questions you chose
+to share (never your answers or reports) are uploaded to that public
+database, where — after moderation — they are visible to all Dispatch
+users. Submissions carry an opaque, per-app CloudKit identifier used
+for moderation (rate limits, takedowns); it is not your name, email,
+or Apple ID, and it is never displayed. Don't put personal information
+in a submitted question set; submissions are public.
+
+## What Dispatch does NOT do
+
+- No analytics or telemetry of any kind. Not even crash reporting
+  beyond Apple's own opt-in system diagnostics.
+- No advertising, no tracking, no fingerprinting, no data sales.
+- No third-party services or SDKs. The dependency list is empty.
+- No accounts, and Contacts are never accessed — "people" in Dispatch
+  are names you type yourself.
+
+## Your data, your controls
+
+- **Export** — Settings → Data exports everything as JSON or CSV.
+- **Automatic backups** — daily rotating JSON backups are written to
+  the Files app on your device (on by default, can be disabled).
+- **Delete** — Settings → Data → Delete All Data erases every record
+  on the device and, while sync is on, propagates the erasure to your
+  private iCloud database. Note: if you delete the *app* without
+  running Delete All Data first, the iCloud copy survives (that is how
+  iCloud works); reinstalling restores it, or you can remove Dispatch
+  data in iOS Settings → your name → iCloud.
+- Every sensor is individually toggleable, and every iOS permission
+  can be denied or revoked at any time — reports simply omit that
+  context.
+
+## Children
+
+Dispatch is not directed at children and has no age gate; it collects
+nothing beyond what is described above in any case.
+
+## Changes
+
+Changes to this policy are published in this file's history in the
+public repository (github.com/robbiet480/Dispatch) and take effect
+when a build shipping them reaches the App Store.
+
+## Contact
+
+Questions: open an issue at github.com/robbiet480/Dispatch, or email
+the address listed on the App Store page.
+
+---
+
+### Hosting note (not part of the policy)
+
+This file is served via GitHub Pages from the repository: repo
+**Settings → Pages → Source: Deploy from a branch → Branch: `main`,
+folder `/docs`**. GitHub renders the markdown at
+`https://robbiet480.github.io/Dispatch/privacy-policy`, which is the
+URL to enter in App Store Connect (App Privacy → Privacy Policy URL).
+One toggle, no build step; updates deploy on push to `main`.
