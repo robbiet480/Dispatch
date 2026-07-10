@@ -126,6 +126,8 @@ private struct OnboardingPageView: View {
                 Spacer()
                 Spacer()
             }
+            // Plan 27: readable text column on iPad; no-op at iPhone widths.
+            .readableColumn(maxWidth: 560)
         }
     }
 }

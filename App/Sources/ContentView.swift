@@ -94,15 +94,17 @@ struct ContentView: View {
         // itself once the sheet is gone. The digest flag survives (only the
         // sheet's dismiss setter clears it), so the digest re-presents after
         // the survey — neither presentation is ever lost, in either order.
-        .fullScreenCover(item: Binding(
+        // Plan 27: same serialized binding and content either way — only the
+        // presentation container differs by idiom. iPhone keeps the full-bleed
+        // cover; iPad presents the survey as a centered sheet (system form
+        // sheet) with interactive dismissal disabled so CANCEL + the discard
+        // confirmation remain the only exit, matching fullScreenCover
+        // semantics.
+        .modifier(SurveyPresentationModifier(request: Binding(
             get: {
                 appLockStore.isLocked || isDigestSheetPresented ? nil : surveyPresenter.request
             },
-            set: { surveyPresenter.request = $0 })) { request in
-            SurveyFlowView(kind: request.kind, trigger: request.trigger, overrideDate: request.overrideDate,
-                           promptGroupID: request.promptGroupID,
-                           triggeringWorkoutID: request.triggeringWorkoutID)
-        }
+            set: { surveyPresenter.request = $0 })))
         // NOTE: the lock surface itself now lives in a dedicated UIWindow
         // (`PrivacyCoverWindow`, driven from DispatchApp's scenePhase handler)
         // at `.alert + 1`, so it always wins over any SwiftUI presentation
@@ -111,5 +113,35 @@ struct ContentView: View {
         // above (and of ReportsListView's backfill sheet and HomeView's
         // visualization filter sheet) stays: while locked, presentations are
         // suppressed and re-present automatically once isLocked flips false.
+    }
+}
+
+/// Plan 27: idiom-gated survey presentation. The binding (with all its
+/// lock/digest serialization semantics) is constructed by ContentView and
+/// shared by both branches; the idiom is constant for the app's lifetime, so
+/// the branch never flips mid-presentation.
+private struct SurveyPresentationModifier: ViewModifier {
+    let request: Binding<SurveyRequest?>
+
+    func body(content: Content) -> some View {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            content.sheet(item: request) { request in
+                surveyFlow(request)
+                    // A drag-to-dismiss would silently discard in-flight
+                    // answers without the confirmation alert — keep CANCEL
+                    // as the only exit, like the iPhone cover.
+                    .interactiveDismissDisabled()
+            }
+        } else {
+            content.fullScreenCover(item: request) { request in
+                surveyFlow(request)
+            }
+        }
+    }
+
+    private func surveyFlow(_ request: SurveyRequest) -> some View {
+        SurveyFlowView(kind: request.kind, trigger: request.trigger, overrideDate: request.overrideDate,
+                       promptGroupID: request.promptGroupID,
+                       triggeringWorkoutID: request.triggeringWorkoutID)
     }
 }

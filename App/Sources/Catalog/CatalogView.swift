@@ -116,6 +116,8 @@ struct CatalogView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        // Plan 27: readable column on iPad; no-op at iPhone widths.
+        .readableColumn()
         .accessibilityIdentifier("question-catalog-list")
     }
 
@@ -224,6 +226,8 @@ struct CatalogDetailView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            // Plan 27: readable column on iPad; no-op at iPhone widths.
+            .readableColumn()
         }
         .navigationTitle("Catalog Question")
         .navigationBarTitleDisplayMode(.inline)

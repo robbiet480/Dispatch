@@ -159,5 +159,7 @@ struct InsightsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("insights-empty-state")
+        // Plan 27: readable column on iPad; no-op at iPhone widths.
+        .readableColumn()
     }
 }

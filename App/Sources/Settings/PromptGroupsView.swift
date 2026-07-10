@@ -52,6 +52,8 @@ struct PromptGroupsView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            // Plan 27: readable column on iPad; no-op at iPhone widths.
+            .readableColumn()
             .accessibilityIdentifier("prompt-groups")
         }
         .navigationTitle("Prompt Groups")
@@ -281,6 +283,8 @@ struct PromptGroupEditorView: View {
                 .listRowBackground(Color.white.opacity(0.12))
             }
             .scrollContentBackground(.hidden)
+            // Plan 27: readable column on iPad; no-op at iPhone widths.
+            .readableColumn()
         }
         .navigationTitle(group == nil ? "Add Group" : "Edit Group")
         .navigationBarTitleDisplayMode(.inline)

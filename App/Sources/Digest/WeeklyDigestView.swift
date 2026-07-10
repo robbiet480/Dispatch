@@ -39,6 +39,8 @@ struct WeeklyDigestView: View {
                     }
                 }
                 .padding()
+                // Plan 27: readable column on iPad; no-op at iPhone widths.
+                .readableColumn()
             }
         }
         .navigationTitle("Weekly Digest")
