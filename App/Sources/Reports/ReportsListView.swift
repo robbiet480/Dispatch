@@ -155,19 +155,8 @@ struct ReportsListView: View {
 
     @ViewBuilder
     private var reportsList: some View {
-        Group {
-            if let selection {
-                // iPad sidebar: selection drives the split view's detail
-                // column (see RootNavigationView), so rows are tagged, not
-                // pushed. Same row content and identifiers as the push mode.
-                List(selection: selection) {
-                    listSections(selectable: true)
-                }
-            } else {
-                List {
-                    listSections(selectable: false)
-                }
-            }
+        List {
+            listSections
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -186,22 +175,13 @@ struct ReportsListView: View {
         .accessibilityIdentifier("reports-list")
     }
 
-    private func listSections(selectable: Bool) -> some View {
+    private var listSections: some View {
         ForEach(sections) { section in
             Section {
                 ForEach(section.reports, id: \.uniqueIdentifier) { report in
-                    Group {
-                        if selectable {
-                            ReportRowView(report: report)
-                                .tag(report.uniqueIdentifier)
-                        } else {
-                            NavigationLink(destination: ReportDetailView(report: report)) {
-                                ReportRowView(report: report)
-                            }
-                        }
-                    }
-                    .listRowBackground(Color.white.opacity(0.12))
-                    .accessibilityIdentifier("report-row")
+                    row(for: report)
+                        .listRowBackground(rowBackground(for: report))
+                        .accessibilityIdentifier("report-row")
                 }
                 .onDelete { offsets in
                     delete(at: offsets, in: section)
@@ -217,6 +197,33 @@ struct ReportsListView: View {
                 .foregroundStyle(.white.opacity(0.8))
             }
         }
+    }
+
+    /// iPad sidebar rows are Buttons that drive the split view's selection
+    /// (see RootNavigationView) rather than `List(selection:)` tags: a
+    /// Button row surfaces to accessibility/UI tests as the same
+    /// `report-row` button element the iPhone's NavigationLink row does,
+    /// and tap-to-select behavior is identical.
+    @ViewBuilder
+    private func row(for report: Report) -> some View {
+        if let selection {
+            Button {
+                selection.wrappedValue = report.uniqueIdentifier
+            } label: {
+                ReportRowView(report: report)
+            }
+        } else {
+            NavigationLink(destination: ReportDetailView(report: report)) {
+                ReportRowView(report: report)
+            }
+        }
+    }
+
+    private func rowBackground(for report: Report) -> Color {
+        if let selection, selection.wrappedValue == report.uniqueIdentifier {
+            return Color.white.opacity(0.25)
+        }
+        return Color.white.opacity(0.12)
     }
 
     private func delete(at offsets: IndexSet, in section: DaySection) {
