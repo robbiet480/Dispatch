@@ -21,7 +21,7 @@ struct NotificationSettingsView: View {
     @State private var nagDelayMinutes: Int
     @State private var nagIntervalMinutes: Int
     @State private var nagMaxCount: Int
-    @State private var digestEnabled: Bool
+    @State private var digestSchedules: [DigestSchedule]
     /// What the "NEXT NOTIFICATION" hero shows. `.loading` renders the
     /// same layout as `.empty` with blank strings so the slot doesn't jump
     /// when the async pending-requests read lands.
@@ -37,6 +37,20 @@ struct NotificationSettingsView: View {
     @State private var isAddingTime = false
     @State private var newTimeSelection = Date()
 
+    /// Digest add-sheet selection (plan 40). The cadence kind drives which
+    /// day picker shows; weekday/dayOfMonth carry the chosen anchor.
+    private enum DigestCadenceKind: String, CaseIterable, Identifiable {
+        case weekly = "Weekly"
+        case monthly = "Monthly"
+        case quarterly = "Quarterly"
+        var id: String { rawValue }
+    }
+    @State private var isAddingDigest = false
+    @State private var newDigestCadence: DigestCadenceKind = .weekly
+    @State private var newDigestWeekday = 1
+    @State private var newDigestDayOfMonth = 1
+    @State private var newDigestTime = Date()
+
     private var theme: Theme { themeStore.theme }
 
     init(prefs: NotificationPrefs) {
@@ -47,7 +61,7 @@ struct NotificationSettingsView: View {
         _nagDelayMinutes = State(initialValue: prefs.nagDelayMinutes)
         _nagIntervalMinutes = State(initialValue: prefs.nagIntervalMinutes)
         _nagMaxCount = State(initialValue: prefs.nagMaxCount)
-        _digestEnabled = State(initialValue: prefs.digestEnabled)
+        _digestSchedules = State(initialValue: prefs.digestSchedules)
     }
 
     var body: some View {
@@ -81,6 +95,9 @@ struct NotificationSettingsView: View {
         }
         .sheet(isPresented: $isAddingTime) {
             addTimeSheet
+        }
+        .sheet(isPresented: $isAddingDigest) {
+            addDigestSheet
         }
     }
 
@@ -309,29 +326,109 @@ struct NotificationSettingsView: View {
 
     private var digestSection: some View {
         Section {
-            Toggle(isOn: Binding(
-                get: { digestEnabled },
-                set: { updateDigestEnabled($0) }
-            )) {
-                Text("Weekly Digest")
+            ForEach(sortedDigestSchedules) { schedule in
+                Toggle(isOn: digestEnabledBinding(for: schedule)) {
+                    Text(scheduleLabel(schedule))
+                        .foregroundStyle(.white)
+                }
+                .accessibilityIdentifier("digest-schedule-toggle-\(schedule.id.uuidString)")
+                .listRowBackground(Color.white.opacity(0.12))
+            }
+            .onDelete(perform: deleteDigestSchedules)
+
+            Button {
+                newDigestCadence = .weekly
+                newDigestWeekday = 1
+                newDigestDayOfMonth = 1
+                newDigestTime = Date()
+                isAddingDigest = true
+            } label: {
+                Text("Add a Digest…")
                     .foregroundStyle(.white)
             }
-            .accessibilityIdentifier("digest-enabled")
+            // Budget-honesty cap (plan 40): digests occupy the 64-request
+            // system cap too, so hold them to 8 to never crowd out prompts.
+            .disabled(digestSchedules.count >= 8)
+            .accessibilityIdentifier("digest-add-schedule")
             .listRowBackground(Color.white.opacity(0.12))
         } header: {
-            sectionHeader("WEEKLY DIGEST")
+            sectionHeader("DIGESTS")
         } footer: {
-            Text("A Sunday-evening notification that opens your weekly digest. The digest itself is always available from Settings.")
+            Text("Each digest is a notification that opens your digest for the period. Monthly and quarterly digests on short months fire on the month's last day. The weekly digest is always available from Settings.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
                 .listRowBackground(Color.clear)
         }
     }
 
-    private func updateDigestEnabled(_ value: Bool) {
-        digestEnabled = value
-        prefs.digestEnabled = value
-        replan()
+    private var addDigestSheet: some View {
+        NavigationStack {
+            ZStack {
+                Color.themeBackground(theme)
+                    .ignoresSafeArea()
+
+                Form {
+                    Picker("Cadence", selection: $newDigestCadence) {
+                        ForEach(DigestCadenceKind.allCases) { kind in
+                            Text(kind.rawValue).tag(kind)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("digest-cadence-picker")
+                    .listRowBackground(Color.white.opacity(0.12))
+
+                    if newDigestCadence == .weekly {
+                        Picker("Day", selection: $newDigestWeekday) {
+                            ForEach(1...7, id: \.self) { weekday in
+                                Text(Self.weekdaySymbols[weekday - 1]).tag(weekday)
+                            }
+                        }
+                        .accessibilityIdentifier("digest-day-picker")
+                        .listRowBackground(Color.white.opacity(0.12))
+                    } else {
+                        Picker("Day of Month", selection: $newDigestDayOfMonth) {
+                            ForEach(1...31, id: \.self) { day in
+                                Text("Day \(day)").tag(day)
+                            }
+                        }
+                        .accessibilityIdentifier("digest-day-picker")
+                        .listRowBackground(Color.white.opacity(0.12))
+                    }
+
+                    DatePicker("Time", selection: $newDigestTime,
+                               displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.wheel)
+                        .accessibilityIdentifier("digest-time-picker")
+                        .listRowBackground(Color.white.opacity(0.12))
+
+                    if newDigestCadence != .weekly {
+                        Text("Months shorter than your chosen day fire on their last day.")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .listRowBackground(Color.clear)
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .foregroundStyle(.white)
+                .colorScheme(.dark)
+            }
+            .navigationTitle("New Digest")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { isAddingDigest = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addDigestSchedule()
+                        isAddingDigest = false
+                    }
+                    .accessibilityIdentifier("digest-add-confirm")
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     private func nagStepperRow(
@@ -438,6 +535,50 @@ struct NotificationSettingsView: View {
         replan()
     }
 
+    // MARK: - Digest schedules (plan 40)
+
+    private func addDigestSchedule() {
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute], from: newDigestTime)
+        let cadence: DigestSchedule.Cadence = switch newDigestCadence {
+        case .weekly: .weekly(weekday: newDigestWeekday)
+        case .monthly: .monthly(dayOfMonth: newDigestDayOfMonth)
+        case .quarterly: .quarterly(dayOfMonth: newDigestDayOfMonth)
+        }
+        let schedule = DigestSchedule(id: UUID(), cadence: cadence,
+                                      hour: time.hour ?? 0, minute: time.minute ?? 0,
+                                      isEnabled: true)
+        var updated = digestSchedules
+        updated.append(schedule)
+        commitDigestSchedules(updated)
+    }
+
+    private func deleteDigestSchedules(at offsets: IndexSet) {
+        // Offsets index into the SORTED rows — map them back to identities
+        // before mutating the unsorted store (the deleteScheduledTimes trap).
+        let sorted = sortedDigestSchedules
+        let idsToRemove = Set(offsets.map { sorted[$0].id })
+        commitDigestSchedules(digestSchedules.filter { !idsToRemove.contains($0.id) })
+    }
+
+    private func digestEnabledBinding(for schedule: DigestSchedule) -> Binding<Bool> {
+        Binding(
+            get: { digestSchedules.first { $0.id == schedule.id }?.isEnabled ?? false },
+            set: { newValue in
+                var updated = digestSchedules
+                guard let index = updated.firstIndex(where: { $0.id == schedule.id }) else { return }
+                updated[index].isEnabled = newValue
+                commitDigestSchedules(updated)
+            }
+        )
+    }
+
+    private func commitDigestSchedules(_ schedules: [DigestSchedule]) {
+        digestSchedules = schedules
+        prefs.digestSchedules = schedules
+        replan()
+    }
+
     private func updateNagEnabled(_ value: Bool) {
         nagEnabled = value
         prefs.nagEnabled = value
@@ -538,6 +679,74 @@ struct NotificationSettingsView: View {
     private func formattedTime(_ components: DateComponents) -> String {
         String(format: "%02d:%02d", components.hour ?? 0, components.minute ?? 0)
     }
+
+    // MARK: - Digest helpers (plan 40)
+
+    private static let weekdaySymbols: [String] = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = .current
+        return calendar.weekdaySymbols // index 0 = Sunday
+    }()
+
+    /// Rows sorted by cadence rank (weekly, monthly, quarterly) → day → time.
+    /// Stable, no reorder UI.
+    private var sortedDigestSchedules: [DigestSchedule] {
+        digestSchedules.sorted { lhs, rhs in
+            let lhsRank = cadenceRank(lhs.cadence)
+            let rhsRank = cadenceRank(rhs.cadence)
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            let lhsDay = cadenceDay(lhs.cadence)
+            let rhsDay = cadenceDay(rhs.cadence)
+            if lhsDay != rhsDay { return lhsDay < rhsDay }
+            return (lhs.hour * 60 + lhs.minute) < (rhs.hour * 60 + rhs.minute)
+        }
+    }
+
+    private func cadenceRank(_ cadence: DigestSchedule.Cadence) -> Int {
+        switch cadence {
+        case .weekly: return 0
+        case .monthly: return 1
+        case .quarterly: return 2
+        }
+    }
+
+    private func cadenceDay(_ cadence: DigestSchedule.Cadence) -> Int {
+        switch cadence {
+        case let .weekly(weekday): return weekday
+        case let .monthly(dayOfMonth), let .quarterly(dayOfMonth): return dayOfMonth
+        }
+    }
+
+    /// "Weekly · Sunday · 7:00 PM" / "Monthly · Day 31 · 9:00 AM".
+    private func scheduleLabel(_ schedule: DigestSchedule) -> String {
+        let cadenceWord: String
+        let dayWord: String
+        switch schedule.cadence {
+        case let .weekly(weekday):
+            cadenceWord = "Weekly"
+            dayWord = Self.weekdaySymbols[max(0, min(6, weekday - 1))]
+        case let .monthly(dayOfMonth):
+            cadenceWord = "Monthly"
+            dayWord = "Day \(dayOfMonth)"
+        case let .quarterly(dayOfMonth):
+            cadenceWord = "Quarterly"
+            dayWord = "Day \(dayOfMonth)"
+        }
+        var components = DateComponents()
+        components.hour = schedule.hour
+        components.minute = schedule.minute
+        let timeText = Calendar.current.date(from: components)
+            .map { Self.localizedTimeFormatter.string(from: $0) }
+            ?? String(format: "%02d:%02d", schedule.hour, schedule.minute)
+        return "\(cadenceWord) · \(dayWord) · \(timeText)"
+    }
+
+    private static let localizedTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter
+    }()
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
