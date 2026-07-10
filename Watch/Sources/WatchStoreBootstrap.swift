@@ -107,6 +107,13 @@ enum WatchStoreBootstrap {
     /// as the phone widgets, one device over. Falls back to the sandbox
     /// default location when the group container is unavailable (the watch
     /// widgets then render their placeholder; the app runs fine).
+    ///
+    /// Naming note: `StoreLocation.legacyURL()` is "legacy" only in the
+    /// PHONE'S history (the pre-plan-14 store path a phone install migrates
+    /// away from). On the watch there is no legacy store and no migration —
+    /// the function is reused purely as "the sandbox Application Support
+    /// default store URL", the never-fail-launch fallback for a
+    /// misprovisioned build without the App Group entitlement.
     private static func resolveStoreURL() -> URL {
         if let groupURL = StoreLocation.appGroupURL() {
             return groupURL
