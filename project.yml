@@ -51,6 +51,11 @@ targets:
         # identifiers and photos never leave the device.
         INFOPLIST_KEY_NSContactsUsageDescription: "Dispatch suggests names and photos from your Contacts when you answer people questions. Contact links stay on this device and are never synced."
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Dispatch uses Face ID to unlock the app."
+        # Plan 24 webhooks: delivering to a LAN host (http://192.168.x.x /
+        # .local) triggers iOS's local-network prompt — purpose string only,
+        # NOT an entitlement. Pairs with the scoped NSAllowsLocalNetworking
+        # ATS key in App/Info.plist.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Dispatch delivers report webhooks to servers on your network when you configure one."
         INFOPLIST_KEY_NSMotionUsageDescription: "Dispatch counts flights of stairs you walked down (via the motion coprocessor) to pair with the flights climbed from Health."
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         # Plan 16 backups: expose Documents (→ Backups/) in the Files app

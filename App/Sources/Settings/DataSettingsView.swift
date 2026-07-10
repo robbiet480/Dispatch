@@ -81,6 +81,8 @@ struct DataSettingsView: View {
 
                 backupsSection
 
+                advancedSection
+
                 deleteSection
             }
             .listStyle(.plain)
@@ -244,6 +246,22 @@ struct DataSettingsView: View {
             return "\(cloud)."
         }
         return "\(local)."
+    }
+
+    // MARK: - Advanced (plan 24)
+
+    /// Deliberately just a link — the webhook feature lives entirely in
+    /// WebhookSettingsView to keep this (plan-22-contended) file minimal.
+    private var advancedSection: some View {
+        Section {
+            NavigationLink(destination: WebhookSettingsView()) {
+                settingsLabel("Webhook")
+            }
+            .listRowBackground(Color.white.opacity(0.12))
+            .accessibilityIdentifier("webhook-settings-link")
+        } header: {
+            sectionHeader("ADVANCED")
+        }
     }
 
     // MARK: - Delete All Data (review-readiness blocker #2)

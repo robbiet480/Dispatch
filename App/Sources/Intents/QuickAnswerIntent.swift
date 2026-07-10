@@ -107,7 +107,7 @@ struct QuickAnswerIntent: AppIntent {
                 WidgetCenter.shared.reloadAllTimelines()
                 return .result()
             }
-            try QuickAnswerFiler.file(
+            let report = try QuickAnswerFiler.file(
                 question: question, choiceIndex: choiceIndex, trigger: .widget, in: context
             )
             // KNOWN WINDOW (accepted, build-14 review minor): a crash between
@@ -116,6 +116,11 @@ struct QuickAnswerIntent: AppIntent {
             // nag, self-healing), never a duplicate report.
             if let defaults = UserDefaults(suiteName: StoreLocation.appGroupID) {
                 WidgetQuickAnswerMarker.recordFiled(at: Date(), in: defaults)
+                // Webhook queue (plan 24): this EXTENSION process enqueues
+                // only — delivery is the app's job, drained at its next
+                // launch/foreground (right after the marker drain above is
+                // applied). Gated inside on the mirrored enabled flag.
+                WebhookQueue.enqueue(reportID: report.uniqueIdentifier, in: defaults)
             }
             quickAnswerLog.info("filed widget quick answer (choice \(choiceIndex)) for \(targetID, privacy: .public)")
         } catch {

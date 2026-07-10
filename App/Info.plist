@@ -19,6 +19,17 @@
          entitlements. -->
     <key>UIFileSharingEnabled</key>
     <true/>
+    <!-- Plan 24 webhooks: plain-HTTP deliveries are allowed ONLY to
+         local-network hosts (the Home Assistant case) via the SCOPED
+         NSAllowsLocalNetworking key — deliberately NOT
+         NSAllowsArbitraryLoads. Plain plist key, NOT an entitlement; the
+         kit-side URL rule additionally rejects non-local http URLs at
+         entry. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <!-- Plan 25 iCloud Drive backups: make the ubiquity container's Documents
          scope a visible "Dispatch" folder in iCloud Drive (Files/Finder).
          Apple caches container visibility aggressively — if the folder
