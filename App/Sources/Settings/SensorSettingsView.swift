@@ -7,12 +7,17 @@ struct SensorSettingsView: View {
     @State private var lengthUnit: LengthUnit
     @State private var enabledByKind: [SensorKind: Bool]
     @State private var isRequestingPermissions = false
+    @State private var contactSuggestionsEnabled: Bool
     @Environment(ThemeStore.self) private var themeStore
     @Environment(PermissionCascade.self) private var permissionCascade
 
     private var theme: Theme { themeStore.theme }
+    private let defaults: UserDefaults
 
     init(defaults: UserDefaults) {
+        self.defaults = defaults
+        _contactSuggestionsEnabled = State(
+            initialValue: defaults.bool(forKey: ContactSuggestions.enabledKey))
         let settings = SensorSettings(defaults: defaults)
         _settings = State(initialValue: settings)
         _temperatureUnit = State(initialValue: settings.temperatureUnit)
@@ -81,6 +86,30 @@ struct SensorSettingsView: View {
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 
+                // Contacts suggestions (plan 22): default OFF; enabling makes
+                // the one standard requestAccess call. Purpose string only,
+                // no entitlement. Full-vs-limited access is transparent.
+                Section {
+                    Toggle("Suggest from Contacts", isOn: contactsBinding)
+                        .tint(.white.opacity(0.4))
+                        .foregroundStyle(.white)
+                        .accessibilityIdentifier("contacts-suggestions-toggle")
+                } header: {
+                    sectionHeader("CONTACTS")
+                } footer: {
+                    if contactSuggestionsEnabled && ContactSuggestions.isDenied {
+                        Text("Contacts access is denied. Allow it in the Settings app to see contact suggestions.")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .accessibilityIdentifier("contacts-denied-hint")
+                    } else {
+                        Text("Shows names and photos from your Contacts when answering people questions. Contact links never leave this device.")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                }
+                .listRowBackground(Color.white.opacity(0.12))
+
                 Section {
                     Picker("Temperature", selection: $temperatureUnit) {
                         Text("Fahrenheit").tag(TemperatureUnit.fahrenheit)
@@ -115,6 +144,21 @@ struct SensorSettingsView: View {
         isRequestingPermissions = true
         await permissionCascade.requestAll()
         isRequestingPermissions = false
+    }
+
+    private var contactsBinding: Binding<Bool> {
+        Binding(
+            get: { contactSuggestionsEnabled },
+            set: { newValue in
+                contactSuggestionsEnabled = newValue
+                defaults.set(newValue, forKey: ContactSuggestions.enabledKey)
+                if newValue {
+                    // The single standard access request. Stubbed (no dialog)
+                    // under --mock-sensors/--ui-testing.
+                    Task { _ = await ContactSuggestions.makeProvider().requestAccess() }
+                }
+            }
+        )
     }
 
     private func enabledBinding(_ kind: SensorKind) -> Binding<Bool> {
