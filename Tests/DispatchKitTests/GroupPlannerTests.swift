@@ -96,7 +96,7 @@ private func group(schedule: GroupSchedule, id: String = "pg-test") -> PromptGro
     // CalendarEventPlanner path, never from the timer distribution machinery.
     #expect(GroupPlanner.plan(group: group(schedule: .calendarEventEnd(.allEvents)),
                               awakeStart: start, awakeEnd: end, seed: 1, calendar: calendar).isEmpty)
-    // Place/beacon groups (plan 43) are posted reactively by MonitorObserver
+    // Place/beacon groups (plan 45) are posted reactively by MonitorObserver
     // via CLMonitor, never from the timer distribution machinery.
     let place = PlaceTrigger(
         region: MonitorPlaceRegion(latitude: 1, longitude: 2, radius: 100),

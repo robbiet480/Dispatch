@@ -84,8 +84,24 @@ extension GroupSchedule {
             "When I arrive somewhere"
         case .calendarEventEnd:
             "When a calendar event ends"
+        case .placeTrigger(let trigger):
+            Self.monitorSummary(
+                verb: trigger.direction == .arrival ? "Arrive at" : "Leave",
+                subject: trigger.region.name?.isEmpty == false ? trigger.region.name! : "a place",
+                delayMinutes: trigger.delayMinutes)
+        case .beaconTrigger(let trigger):
+            Self.monitorSummary(
+                verb: trigger.direction == .arrival ? "Near" : "Leaving",
+                subject: trigger.beacon.name?.isEmpty == false ? trigger.beacon.name! : "a beacon",
+                delayMinutes: trigger.delayMinutes)
         case .disabled:
             "Unknown schedule"
         }
+    }
+
+    /// "Arrive at Office · +30m" / "Near Desk" (delay omitted when 0).
+    private static func monitorSummary(verb: String, subject: String, delayMinutes: Int) -> String {
+        let base = "\(verb) \(subject)"
+        return delayMinutes > 0 ? "\(base) · +\(delayMinutes)m" : base
     }
 }

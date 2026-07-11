@@ -27,7 +27,8 @@ struct PromptGroupsView: View {
                 if groups.isEmpty {
                     Text("Group questions together and give each group its own schedule — "
                         + "every few hours, a few times a day, at set times, when a workout ends, "
-                        + "when you arrive somewhere, or when a calendar event ends. "
+                        + "when you arrive somewhere, when a calendar event ends, "
+                        + "when you arrive at or leave a place, or when you're near a beacon. "
                         + "Ungrouped questions keep using the main notification schedule.")
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.8))
@@ -96,6 +97,7 @@ struct PromptGroupsView: View {
 
 struct PromptGroupRowView: View {
     @Environment(VisitObserver.self) private var visitObserver
+    @Environment(MonitorObserver.self) private var monitorObserver
     @Environment(CalendarEventObserver.self) private var calendarEventObserver
     let group: PromptGroup
     let onChange: () -> Void
@@ -128,6 +130,22 @@ struct PromptGroupRowView: View {
                             .foregroundStyle(.yellow)
                             .accessibilityIdentifier("group-row-needs-calendar")
                     }
+                    // Place/beacon groups need Always location; without it they
+                    // don't fire (plan 45), same as visit groups.
+                    if isMonitorGroup, !monitorObserver.hasAlwaysAuthorization {
+                        Text("Needs “Always” location — won't fire")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                            .accessibilityIdentifier("group-row-needs-always")
+                    }
+                    // Dropped past the ~20-condition CLMonitor budget.
+                    if isMonitorGroup,
+                       monitorObserver.droppedGroupIDs.contains(group.uniqueIdentifier) {
+                        Text("Not monitored — too many location/beacon groups")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                            .accessibilityIdentifier("group-row-over-budget")
+                    }
                 }
 
                 Spacer()
@@ -142,6 +160,13 @@ struct PromptGroupRowView: View {
     private var isCalendarGroup: Bool {
         if case .calendarEventEnd = group.schedule { return true }
         return false
+    }
+
+    private var isMonitorGroup: Bool {
+        switch group.schedule {
+        case .placeTrigger, .beaconTrigger: return true
+        default: return false
+        }
     }
 
     private var displayName: String {
@@ -167,7 +192,8 @@ struct PromptGroupRowView: View {
 }
 
 // GroupSchedule.summary moved to DispatchKit (QuestionDisplay.swift, plan 47)
-// so the iOS and macOS group lists share one definition.
+// so the iOS and macOS group lists share one definition. Place/beacon summary
+// cases (plan 45) live there too.
 
 // MARK: - Editor
 
@@ -176,6 +202,7 @@ struct PromptGroupRowView: View {
 /// timesPerDay and saving overwrites the unknown kind.
 private enum EditableScheduleKind: String, CaseIterable, Identifiable {
     case everyNHours, timesPerDay, dailyAt, workoutEnd, visitArrival, calendarEventEnd
+    case placeTrigger, beaconTrigger
     var id: String { rawValue }
 
     var displayName: String {
@@ -186,6 +213,8 @@ private enum EditableScheduleKind: String, CaseIterable, Identifiable {
         case .workoutEnd: "When a workout ends"
         case .visitArrival: "When I arrive somewhere"
         case .calendarEventEnd: "When a calendar event ends"
+        case .placeTrigger: "When I arrive at / leave a place"
+        case .beaconTrigger: "When I'm near a beacon"
         }
     }
 }
@@ -214,6 +243,7 @@ struct PromptGroupEditorView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(WorkoutEndObserver.self) private var workoutEndObserver
     @Environment(VisitObserver.self) private var visitObserver
+    @Environment(MonitorObserver.self) private var monitorObserver
     @Environment(CalendarEventObserver.self) private var calendarEventObserver
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
@@ -233,6 +263,18 @@ struct PromptGroupEditorView: View {
     @State private var calendarMatchKind: CalendarMatchKindDraft
     @State private var selectedCalendarIDs: [String]
     @State private var titleFilter: String
+    // Place/beacon trigger drafts (plan 45). Shared: direction/delay/cancel.
+    @State private var monitorDirection: MonitorDirection
+    @State private var monitorDelayMinutes: Int
+    @State private var monitorCancelOnContradiction: Bool
+    @State private var placeLatitude: String
+    @State private var placeLongitude: String
+    @State private var placeRadius: Double
+    @State private var placeName: String
+    @State private var beaconUUID: String
+    @State private var beaconMajor: String
+    @State private var beaconMinor: String
+    @State private var beaconName: String
     @State private var isEnabled: Bool
     @State private var newTime = Date()
 
@@ -252,6 +294,17 @@ struct PromptGroupEditorView: View {
         var matchKind = CalendarMatchKindDraft.allEvents
         var calendarIDs: [String] = []
         var title = ""
+        var direction = MonitorDirection.arrival
+        var delayMinutes = 0
+        var cancelOnContradiction = true
+        var latitude = ""
+        var longitude = ""
+        var radius = MonitorDelay.floorRadiusMeters
+        var placeNameDraft = ""
+        var uuid = ""
+        var major = ""
+        var minor = ""
+        var beaconNameDraft = ""
         switch group?.schedule {
         case .everyNHours(let n):
             kind = .everyNHours; hours = n
@@ -274,6 +327,24 @@ struct PromptGroupEditorView: View {
             case .titleContains(let filter):
                 matchKind = .titleContains; title = filter
             }
+        case .placeTrigger(let trigger):
+            kind = .placeTrigger
+            direction = trigger.direction
+            delayMinutes = trigger.delayMinutes
+            cancelOnContradiction = trigger.cancelOnContradiction
+            latitude = String(trigger.region.latitude)
+            longitude = String(trigger.region.longitude)
+            radius = trigger.region.radius
+            placeNameDraft = trigger.region.name ?? ""
+        case .beaconTrigger(let trigger):
+            kind = .beaconTrigger
+            direction = trigger.direction
+            delayMinutes = trigger.delayMinutes
+            cancelOnContradiction = trigger.cancelOnContradiction
+            uuid = trigger.beacon.uuid
+            major = trigger.beacon.major.map(String.init) ?? ""
+            minor = trigger.beacon.minor.map(String.init) ?? ""
+            beaconNameDraft = trigger.beacon.name ?? ""
         case .disabled, nil:
             break
         }
@@ -285,6 +356,17 @@ struct PromptGroupEditorView: View {
         _calendarMatchKind = State(initialValue: matchKind)
         _selectedCalendarIDs = State(initialValue: calendarIDs)
         _titleFilter = State(initialValue: title)
+        _monitorDirection = State(initialValue: direction)
+        _monitorDelayMinutes = State(initialValue: delayMinutes)
+        _monitorCancelOnContradiction = State(initialValue: cancelOnContradiction)
+        _placeLatitude = State(initialValue: latitude)
+        _placeLongitude = State(initialValue: longitude)
+        _placeRadius = State(initialValue: radius)
+        _placeName = State(initialValue: placeNameDraft)
+        _beaconUUID = State(initialValue: uuid)
+        _beaconMajor = State(initialValue: major)
+        _beaconMinor = State(initialValue: minor)
+        _beaconName = State(initialValue: beaconNameDraft)
     }
 
     var body: some View {
@@ -469,6 +551,59 @@ struct PromptGroupEditorView: View {
                 if !calendarEventObserver.hasFullAccess {
                     calendarAuthorizationHint
                 }
+            case .placeTrigger:
+                Text("Fires a prompt when you arrive at (or leave) a place — "
+                    + "e.g. “30 minutes after arriving at the office”. Needs "
+                    + "“Always” location access to work when Dispatch is closed.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                TextField("Latitude", text: $placeLatitude)
+                    .keyboardType(.numbersAndPunctuation)
+                    .foregroundStyle(.white).tint(.white)
+                    .accessibilityIdentifier("group-place-latitude")
+                TextField("Longitude", text: $placeLongitude)
+                    .keyboardType(.numbersAndPunctuation)
+                    .foregroundStyle(.white).tint(.white)
+                    .accessibilityIdentifier("group-place-longitude")
+                TextField("Place name (optional)", text: $placeName)
+                    .foregroundStyle(.white).tint(.white)
+                    .accessibilityIdentifier("group-place-name")
+                Stepper("Radius \(Int(placeRadius)) m",
+                        value: $placeRadius,
+                        in: MonitorDelay.floorRadiusMeters...5000, step: 50)
+                    .foregroundStyle(.white)
+                    .accessibilityIdentifier("group-place-radius")
+                monitorControls
+                if !monitorObserver.hasAlwaysAuthorization {
+                    monitorAuthorizationHint
+                }
+            case .beaconTrigger:
+                Text("Fires a prompt when you come into (or leave) range of an "
+                    + "iBeacon — finer-grained than a geofence, e.g. a beacon on "
+                    + "your desk or in your car. Cheap ESP32 or tile-style beacons "
+                    + "work. Needs “Always” location access.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                TextField("Beacon UUID", text: $beaconUUID)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.characters)
+                    .foregroundStyle(.white).tint(.white)
+                    .accessibilityIdentifier("group-beacon-uuid")
+                TextField("Major (optional)", text: $beaconMajor)
+                    .keyboardType(.numberPad)
+                    .foregroundStyle(.white).tint(.white)
+                    .accessibilityIdentifier("group-beacon-major")
+                TextField("Minor (optional)", text: $beaconMinor)
+                    .keyboardType(.numberPad)
+                    .foregroundStyle(.white).tint(.white)
+                    .accessibilityIdentifier("group-beacon-minor")
+                TextField("Beacon name (optional)", text: $beaconName)
+                    .foregroundStyle(.white).tint(.white)
+                    .accessibilityIdentifier("group-beacon-name")
+                monitorControls
+                if !monitorObserver.hasAlwaysAuthorization {
+                    monitorAuthorizationHint
+                }
             }
         } header: {
             sectionHeader("SCHEDULE")
@@ -485,6 +620,61 @@ struct PromptGroupEditorView: View {
             if newKind == .calendarEventEnd, !calendarEventObserver.hasFullAccess {
                 Task { await calendarEventObserver.requestFullAccess() }
             }
+            if (newKind == .placeTrigger || newKind == .beaconTrigger),
+               !monitorObserver.hasAlwaysAuthorization {
+                Task { await monitorObserver.requestAlwaysAuthorization() }
+            }
+        }
+    }
+
+    /// The shared direction / delay / cancel controls for place and beacon
+    /// triggers (plan 45) — identical semantics, so one control set.
+    @ViewBuilder
+    private var monitorControls: some View {
+        Picker("Direction", selection: $monitorDirection) {
+            Text("On arrival").tag(MonitorDirection.arrival)
+            Text("On departure").tag(MonitorDirection.departure)
+        }
+        .foregroundStyle(.white)
+        .tint(.white.opacity(0.7))
+        .accessibilityIdentifier("group-monitor-direction")
+
+        Picker("Delay", selection: $monitorDelayMinutes) {
+            ForEach(MonitorDelay.allowedMinutes, id: \.self) { minutes in
+                Text(minutes == 0 ? "Immediately" : "\(minutes) min").tag(minutes)
+            }
+        }
+        .foregroundStyle(.white)
+        .tint(.white.opacity(0.7))
+        .accessibilityIdentifier("group-monitor-delay")
+
+        Toggle("Cancel if I leave before the delay", isOn: $monitorCancelOnContradiction)
+            .foregroundStyle(.white)
+            .tint(.white)
+            .accessibilityIdentifier("group-monitor-cancel")
+    }
+
+    /// Inline "needs Always" state while a place/beacon schedule is selected —
+    /// the visit twin (denied/restricted points at Settings, else re-offers
+    /// the prompt).
+    @ViewBuilder
+    private var monitorAuthorizationHint: some View {
+        switch monitorObserver.authorizationStatus {
+        case .denied, .restricted:
+            Text("Location access is off — allow “Always” in Settings → Privacy "
+                + "& Security → Location Services → Dispatch, or this group won't fire.")
+                .font(.footnote)
+                .foregroundStyle(.yellow)
+                .accessibilityIdentifier("group-monitor-needs-always")
+        default:
+            Button {
+                Task { await monitorObserver.requestAlwaysAuthorization() }
+            } label: {
+                Text("Needs “Always” location — tap to allow")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.yellow)
+            }
+            .accessibilityIdentifier("group-monitor-needs-always")
         }
     }
 
@@ -615,6 +805,28 @@ struct PromptGroupEditorView: View {
             .visitArrival
         case .calendarEventEnd:
             .calendarEventEnd(draftCalendarRule)
+        case .placeTrigger:
+            .placeTrigger(PlaceTrigger(
+                region: MonitorPlaceRegion(
+                    latitude: Double(placeLatitude) ?? 0,
+                    longitude: Double(placeLongitude) ?? 0,
+                    radius: placeRadius,
+                    name: placeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? nil : placeName.trimmingCharacters(in: .whitespacesAndNewlines)),
+                direction: monitorDirection,
+                delayMinutes: monitorDelayMinutes,
+                cancelOnContradiction: monitorCancelOnContradiction))
+        case .beaconTrigger:
+            .beaconTrigger(BeaconTrigger(
+                beacon: MonitorBeaconIdentity(
+                    uuid: beaconUUID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+                    major: Int(beaconMajor),
+                    minor: Int(beaconMinor),
+                    name: beaconName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? nil : beaconName.trimmingCharacters(in: .whitespacesAndNewlines)),
+                direction: monitorDirection,
+                delayMinutes: monitorDelayMinutes,
+                cancelOnContradiction: monitorCancelOnContradiction))
         }
     }
 
@@ -649,6 +861,7 @@ struct PromptGroupEditorView: View {
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
         workoutEndObserver.refresh()
         visitObserver.refresh()
+        monitorObserver.refresh()
         calendarEventObserver.refresh()
         dismiss()
     }

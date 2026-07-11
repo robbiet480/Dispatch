@@ -56,7 +56,7 @@ public struct V2PromptGroup: Codable {
     public var calendarMatchKind: String?
     public var calendarIdentifiers: [String]?
     public var calendarTitleFilter: String?
-    /// CLMonitor place/beacon trigger (plan 43, placeTrigger/beaconTrigger
+    /// CLMonitor place/beacon trigger (plan 45, placeTrigger/beaconTrigger
     /// schedule kinds). All omitted when nil; import tolerates absence. The
     /// region/beacon are nested Codable structs; exactly one is present for a
     /// monitor group, both absent otherwise. Unknown direction raws import

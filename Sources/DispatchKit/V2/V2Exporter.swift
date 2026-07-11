@@ -73,7 +73,7 @@ public enum V2Exporter {
                               return ids.isEmpty ? nil : ids
                           }(),
                           calendarTitleFilter: g.calendarTitleFilter,
-                          // CLMonitor place/beacon trigger (plan 43): the
+                          // CLMonitor place/beacon trigger (plan 45): the
                           // scalars ride verbatim; the JSON payloads decode
                           // back to their structs (exactly one present for a
                           // monitor group, both nil otherwise).

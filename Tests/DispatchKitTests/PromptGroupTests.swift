@@ -419,7 +419,7 @@ import Testing
     #expect(try context.fetch(FetchDescriptor<PromptGroup>()).isEmpty)
 }
 
-// MARK: - Place / beacon trigger (plan 43)
+// MARK: - Place / beacon trigger (plan 45)
 
 @Test func promptGroupPlaceTriggerRoundTrips() throws {
     let group = PromptGroup()
@@ -520,7 +520,7 @@ import Testing
     #expect(exportA == exportB)
 }
 
-/// Monitor keys are absent for non-monitor groups — pre-plan-43 exports stay
+/// Monitor keys are absent for non-monitor groups — pre-plan-45 exports stay
 /// byte-identical.
 @Test func monitorKeysOmittedForNonMonitorGroups() throws {
     let container = try DispatchStore.inMemoryContainer()

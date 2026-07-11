@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared knobs for the two CLMonitor-backed trigger kinds (plan 43, issues
+/// Shared knobs for the two CLMonitor-backed trigger kinds (plan 45, issues
 /// #56 / #60). Kept in one place so places and beacons agree on the delay
 /// preset list and the honest-radius floor.
 public enum MonitorDelay {
