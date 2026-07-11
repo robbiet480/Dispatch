@@ -25,31 +25,25 @@ enum CatalogAccountStatus: Sendable {
 enum CatalogProviderError: LocalizedError {
     case network(underlying: String)
     case validation([CatalogValidationError])
-<<<<<<< HEAD
     /// Plan 38: the per-device submission throttle is exhausted. Thrown by
     /// `CatalogStore.submit` before the provider is touched, so scripted
     /// callers hit the same wall as the UI. Friction, not security — see
     /// `SubmissionThrottle`.
     case throttled(until: Date)
-=======
     /// Plan 42: the prompt matches an existing catalog entry (normalized
     /// identity). The submit form offers "Add to My Questions" instead.
     case duplicate(existing: CatalogQuestion)
     /// Plan 42: this device already submitted the same prompt.
     case alreadySubmitted
->>>>>>> ef64989 (feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47))
 
     var errorDescription: String? {
         switch self {
         case .network(let underlying): underlying
         case .validation(let errors): errors.map(\.message).joined(separator: " ")
-<<<<<<< HEAD
         case .throttled(let until):
             "Daily limit reached — try again after \(until.formatted(date: .omitted, time: .shortened))."
-=======
         case .duplicate: "This question is already in the catalog."
         case .alreadySubmitted: "You already submitted this question. It's waiting for moderation."
->>>>>>> ef64989 (feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47))
         }
     }
 }
