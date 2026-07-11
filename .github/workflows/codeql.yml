@@ -32,6 +32,18 @@ jobs:
         with:
           languages: swift
           build-mode: manual
+      - name: Ensure iOS platform
+        # Same guard + retry as ci.yml/ui-tests.yml — image regressions here
+        # have happened before, and a failed build skips the CodeQL upload.
+        run: |
+          if xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator; then
+            exit 0
+          fi
+          for i in 1 2 3; do
+            sudo xcodebuild -downloadPlatform iOS && exit 0
+            sleep 30
+          done
+          exit 1
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Build (traced)
