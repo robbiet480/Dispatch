@@ -476,15 +476,15 @@ public enum InsightsEngine {
 
                 let withValues = withSide.map { numeric.values[$0]! }
                 let withoutValues = withoutSide.map { numeric.values[$0]! }
-                let withMean = mean(withValues)
-                let withoutMean = mean(withoutValues)
+                let withMean = StatsMath.mean(withValues)
+                let withoutMean = StatsMath.mean(withoutValues)
                 let delta = withMean - withoutMean
                 // Combined-sample SD: both sides pooled into ONE sample (not
                 // the classic pooled-variance SD, which averages the per-side
                 // variances). It runs a bit larger when means differ, so the
                 // effect reads conservatively; `strength` divides by 2 to
                 // re-normalize — two combined-sample SDs = full strength.
-                let spread = standardDeviation(withValues + withoutValues)
+                let spread = StatsMath.standardDeviation(withValues + withoutValues)
                 guard spread > 1e-9 else { continue }
                 let effect = abs(delta) / spread
                 guard effect >= minimumMeanEffect else { continue }
@@ -577,20 +577,6 @@ public enum InsightsEngine {
         // Dictionary order is arbitrary; the caller's deterministic sort
         // restores a stable ranking.
         return bestByPair.values.map(\.insight)
-    }
-
-    // MARK: - Math
-
-    private static func mean(_ values: [Double]) -> Double {
-        values.reduce(0, +) / Double(values.count)
-    }
-
-    private static func standardDeviation(_ values: [Double]) -> Double {
-        guard values.count > 1 else { return 0 }
-        let average = mean(values)
-        let variance = values.reduce(0) { $0 + ($1 - average) * ($1 - average) }
-            / Double(values.count)
-        return variance.squareRoot()
     }
 
     // MARK: - Formatting (locale-pinned, deterministic)
