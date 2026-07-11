@@ -122,8 +122,19 @@ struct CloudKitWebClient {
         return fields
     }
 
-    func queryRecords(recordType: String, sortField: String) throws -> [(String, [String: CatalogFieldValue])] {
-        var records: [(String, [String: CatalogFieldValue])] = []
+    /// One record from a query response. `createdUserRecordName` is
+    /// CloudKit's own creator metadata (`created.userRecordName` — the same
+    /// dictionary `serverUserRecordName()` reads from a create response),
+    /// surfaced for moderation-side flood detection (plan 38). It never
+    /// leaves this tool: the app-side query paths don't use this client.
+    struct QueriedRecord {
+        let recordName: String
+        let fields: [String: CatalogFieldValue]
+        let createdUserRecordName: String?
+    }
+
+    func queryRecords(recordType: String, sortField: String) throws -> [QueriedRecord] {
+        var records: [QueriedRecord] = []
         var continuationMarker: String?
         repeat {
             var body: [String: Any] = [
@@ -141,7 +152,12 @@ struct CloudKitWebClient {
             for raw in rawRecords {
                 guard let recordName = raw["recordName"] as? String,
                       let fields = raw["fields"] as? [String: Any] else { continue }
-                records.append((recordName, Self.fieldValues(fields)))
+                let creator = (raw["created"] as? [String: Any])?["userRecordName"] as? String
+                records.append(QueriedRecord(
+                    recordName: recordName,
+                    fields: Self.fieldValues(fields),
+                    createdUserRecordName: creator
+                ))
             }
             continuationMarker = response["continuationMarker"] as? String
         } while continuationMarker != nil
@@ -152,18 +168,22 @@ struct CloudKitWebClient {
 
     func pendingSubmissions() throws -> [SubmittedQuestion] {
         try queryRecords(recordType: CatalogRecordType.submittedQuestion, sortField: "submittedAt")
-            .compactMap { SubmittedQuestion(recordName: $0.0, fields: $0.1) }
+            .compactMap { record in
+                var submission = SubmittedQuestion(recordName: record.recordName, fields: record.fields)
+                submission?.createdUserRecordName = record.createdUserRecordName
+                return submission
+            }
     }
 
     /// Published catalog entries, newest first (moderator visibility).
     func catalogEntries() throws -> [(recordName: String, fields: [String: CatalogFieldValue])] {
         try queryRecords(recordType: CatalogRecordType.catalogQuestion, sortField: "approvedAt")
-            .map { (recordName: $0.0, fields: $0.1) }
+            .map { (recordName: $0.recordName, fields: $0.fields) }
     }
 
     func flags() throws -> [QuestionFlag] {
         try queryRecords(recordType: CatalogRecordType.questionFlag, sortField: "flaggedAt")
-            .compactMap { QuestionFlag(recordName: $0.0, fields: $0.1) }
+            .compactMap { QuestionFlag(recordName: $0.recordName, fields: $0.fields) }
     }
 
     /// Diagnostic: learn the server key's user identity by creating (and

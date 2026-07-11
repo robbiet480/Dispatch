@@ -8,7 +8,7 @@ import Foundation
 extension CloudKitWebClient {
     func catalogQuestions() throws -> [CatalogQuestion] {
         try queryRecords(recordType: CatalogRecordType.catalogQuestion, sortField: "approvedAt")
-            .compactMap { CatalogQuestion(recordName: $0.0, fields: $0.1) }
+            .compactMap { CatalogQuestion(recordName: $0.recordName, fields: $0.fields) }
     }
 
     /// Batch-create catalog entries. `records/modify` caps at 200 operations

@@ -155,6 +155,31 @@ import Testing
     #expect(catalog.inputStep == 0.5)
 }
 
+// MARK: - Creator metadata (plan 38: moderation-side only)
+
+@Test func creatorMetadataDefaultsNilAndNeverWritesAField() {
+    let plain = SubmittedQuestion(
+        recordName: "sub-50", prompt: "Sleep well?", typeRaw: QuestionType.yesNo.rawValue,
+        choices: [], submittedAt: .now
+    )
+    #expect(plain.createdUserRecordName == nil)
+
+    // The creator identity is CloudKit's own metadata, read at moderation
+    // time — the app never stores it, so it must never appear in the field
+    // dictionary that becomes the record body.
+    let tagged = SubmittedQuestion(
+        recordName: "sub-51", prompt: "Sleep well?", typeRaw: QuestionType.yesNo.rawValue,
+        choices: [], submittedAt: .now, createdUserRecordName: "_abc123"
+    )
+    #expect(tagged.createdUserRecordName == "_abc123")
+    #expect(tagged.fields["createdUserRecordName"] == nil)
+    #expect(!tagged.fields.keys.contains { $0.lowercased().contains("created") })
+
+    // Round-tripping through fields drops the metadata (it isn't a field).
+    let restored = SubmittedQuestion(recordName: "sub-51", fields: tagged.fields)
+    #expect(restored?.createdUserRecordName == nil)
+}
+
 @Test func questionFlagFieldsRoundTrip() throws {
     let flaggedAt = Date(timeIntervalSince1970: 1_701_234_567)
     let original = QuestionFlag(
