@@ -1,0 +1,20 @@
+name: UI Tests
+# Companion to ui-tests.yml: docs-only PRs skip the heavy suites there, but
+# branch protection's required checks must still resolve — this workflow
+# reports the SAME job names as instant no-ops on the INVERSE paths.
+# Keep the paths lists mirrored with ui-tests.yml when editing.
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "**/*.md"
+      - ".superpowers/**"
+jobs:
+  ios-ui-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — iOS UI suite not required"
+  mac-ui-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — Mac smoke not required"
