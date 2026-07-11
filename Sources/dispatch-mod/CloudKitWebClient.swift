@@ -85,6 +85,7 @@ struct CloudKitWebClient {
             switch value {
             case .string(let string): ["value": string, "type": "STRING"]
             case .int(let int): ["value": int, "type": "INT64"]
+            case .double(let double): ["value": double, "type": "DOUBLE"]
             case .date(let date): ["value": Int(date.timeIntervalSince1970 * 1000), "type": "TIMESTAMP"]
             case .stringList(let list): ["value": list, "type": "STRING_LIST"]
             }

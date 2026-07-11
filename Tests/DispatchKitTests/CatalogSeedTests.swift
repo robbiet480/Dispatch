@@ -50,6 +50,47 @@ private func seedData(_ json: String) -> Data { Data(json.utf8) }
     #expect(drafts[0].tags == ["wake"])
 }
 
+// MARK: - Input configuration (plan 41)
+
+@Test func seedCarriesInputConfig() throws {
+    let json = """
+    {"questions": [
+      {"prompt": "How many cups?", "type": "number",
+       "inputStyle": "slider", "inputMin": 0, "inputMax": 100,
+       "defaultAnswer": "50", "placeholder": "0–100"}
+    ]}
+    """
+    let drafts = try CatalogSeed.parse(seedData(json))
+    #expect(drafts[0].inputStyle == "slider")
+    #expect(drafts[0].defaultAnswer == "50")
+    #expect(drafts[0].placeholder == "0–100")
+    #expect(drafts[0].inputMin == 0)
+    #expect(drafts[0].inputMax == 100)
+    #expect(drafts[0].inputStep == nil)
+
+    let question = drafts[0].catalogQuestion(recordName: "rec-41", approvedAt: .now)
+    #expect(question.inputStyle == "slider")
+    #expect(question.defaultAnswer == "50")
+    #expect(question.placeholder == "0–100")
+    #expect(question.inputMin == 0)
+    #expect(question.inputMax == 100)
+    #expect(question.inputStep == nil)
+}
+
+@Test func seedWithoutInputConfigStillParses() throws {
+    // Back-compat: older seed files never mention the plan-41 keys.
+    let json = """
+    {"questions": [{"prompt": "How many?", "type": "number"}]}
+    """
+    let drafts = try CatalogSeed.parse(seedData(json))
+    #expect(drafts[0].inputStyle == nil)
+    #expect(drafts[0].defaultAnswer == nil)
+    #expect(drafts[0].placeholder == nil)
+    #expect(drafts[0].inputMin == nil)
+    #expect(drafts[0].inputMax == nil)
+    #expect(drafts[0].inputStep == nil)
+}
+
 // MARK: - Problem collection
 
 @Test func seedCollectsAllProblemsAcrossEntries() {
