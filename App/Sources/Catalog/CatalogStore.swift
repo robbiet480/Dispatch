@@ -161,11 +161,9 @@ final class CatalogStore {
             placeholder: normalized.placeholder,
             inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
         )
-<<<<<<< HEAD
         let recorded = throttle.recording(now: now)
         submissionTimestamps = recorded.timestamps
         UserDefaults.standard.set(recorded.timestamps, forKey: Self.submissionTimestampsKey)
-=======
         Self.recordSubmittedFingerprint(fingerprint)
     }
 
@@ -194,7 +192,6 @@ final class CatalogStore {
             fingerprints.removeFirst(fingerprints.count - submittedFingerprintsCap)
         }
         defaults.set(fingerprints, forKey: submittedFingerprintsKey)
->>>>>>> ef64989 (feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47))
     }
 
     func flag(catalogRecordName: String, reason: String) async throws {
