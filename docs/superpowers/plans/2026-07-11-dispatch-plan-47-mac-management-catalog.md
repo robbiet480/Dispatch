@@ -186,7 +186,7 @@ next app-open replan. This is the trickiest bit and is TDD'd kit-side (Task 2).
 
 ### Task 1: Kit — shared display/config helpers move into DispatchKit (TDD)
 
-- [ ] **Files:** create `Sources/DispatchKit/Models/QuestionDisplay.swift`
+- [x] **Files:** create `Sources/DispatchKit/Models/QuestionDisplay.swift`
   (public `QuestionType.displayName`, `ReportKind.displayName`,
   `NumberInputStyle.displayName` / `.exposedConfigFields` / `.parseConfigText`,
   `GroupSchedule.summary`); edit `App/Sources/Settings/QuestionEditorView.swift`,
@@ -203,7 +203,7 @@ Verify: `swift test`. Commit `refactor(kit): share question display/config helpe
 
 ### Task 2: Kit — RemoteChangeImpact classifier (TDD)
 
-- [ ] **Files:** create `Sources/DispatchKit/Sync/RemoteChangeImpact.swift`
+- [x] **Files:** create `Sources/DispatchKit/Sync/RemoteChangeImpact.swift`
   (entity-name constants + `classify(changedEntityNames:)`), create
   `Tests/DispatchKitTests/RemoteChangeImpactTests.swift`; edit
   `App/Sources/Sync/RemoteChangeObserver.swift` to compute the changed-entity
@@ -223,7 +223,7 @@ Verify: `swift test`. Commit `feat(kit): remote-change replan classifier + obser
 
 ### Task 3: Kit — QuestionPortability CSV/JSON + import plan (TDD)
 
-- [ ] **Files:** create `Sources/DispatchKit/Export/QuestionPortability.swift`,
+- [x] **Files:** create `Sources/DispatchKit/Export/QuestionPortability.swift`,
   `Tests/DispatchKitTests/QuestionPortabilityTests.swift`.
 
 Failing tests first: `QuestionDefinition` <-> `Question` bridge preserves every
@@ -241,7 +241,7 @@ Verify: `swift test`. Commit `feat(kit): question definition CSV/JSON portabilit
 
 ### Task 4: Mac — question management UI + import/export plumbing
 
-- [ ] **Files:** create `Mac/Sources/MacQuestionsView.swift`,
+- [x] **Files:** create `Mac/Sources/MacQuestionsView.swift`,
   `Mac/Sources/MacQuestionEditorView.swift`,
   `Mac/Sources/MacQuestionImportSheet.swift`; edit
   `Mac/Sources/MacExportController.swift` (question CSV/JSON export via
@@ -259,7 +259,7 @@ Verify: `swift test` + Mac build + iOS generic build. Commit `feat(mac): questio
 
 ### Task 5: Mac — prompt group management
 
-- [ ] **Files:** create `Mac/Sources/MacPromptGroupsView.swift`,
+- [x] **Files:** create `Mac/Sources/MacPromptGroupsView.swift`,
   `Mac/Sources/MacPromptGroupEditorView.swift`.
 
 **Contract:** create/edit/enable/disable/delete groups; membership + ordering;
@@ -271,7 +271,7 @@ Verify: `swift test` + Mac build. Commit `feat(mac): prompt group management (pl
 
 ### Task 6: Mac — catalog access (browse, add, submit, flag)
 
-- [ ] **Files:** create `Mac/Sources/MacCatalogView.swift`,
+- [x] **Files:** create `Mac/Sources/MacCatalogView.swift`,
   `Mac/Sources/MacCatalogSubmitView.swift`.
 
 **Contract:** browse/search catalog, add-to-my-questions, submit (throttle +
@@ -282,8 +282,57 @@ Verify: `swift test` + Mac build + iOS generic build. Commit `feat(mac): questio
 
 ### Task 7: Wrap — README, plan completion notes, PR
 
-- [ ] **Files:** edit `README.md` (Mac management/catalog + question
+- [x] **Files:** edit `README.md` (Mac management/catalog + question
   import/export), this doc (completion notes). Rebase on main; open PR
   referencing #57 and #58; PR stays open for owner review (no merge).
 
 Verify: `swift test`; Mac + iOS generic builds green. Commit `docs: plan 47 wrap + README (plan 47)`.
+
+---
+
+## Completion notes (2026-07-11, implementation on this plan-doc branch)
+
+Tasks 1–7 implemented on branch `plan-47-mac-management-catalog` (the
+plan-doc branch is the feature branch, per house workflow).
+
+**Verification record:**
+- `swift test`: 649 tests green (627 baseline + 6 QuestionDisplay +
+  8 RemoteChangeImpact + 8 QuestionPortability), TDD red-first for each
+  new kit type.
+- `xcodegen generate` clean; `DispatchMac` builds for `platform=macOS`
+  and `DispatchApp` builds for `generic/platform=iOS`, both with
+  `CODE_SIGNING_ALLOWED=NO` (compile/link only — the app-sandbox + iCloud
+  entitlements refuse ad-hoc signing, same constraint as plan 36).
+- The shared-helper move (Task 1) is verified by the iOS generic build:
+  the iOS view files compile against the kit definitions with their
+  private copies removed.
+
+**Deviations / honest gaps:**
+- **Remote-edit replan (the issue #57 correctness requirement):** the iOS
+  `RemoteChangeObserver` already replanned on EVERY remote-change burst
+  (a safe superset that covers remote group/question edits). This plan
+  makes that trigger EXPLICIT and tested via `RemoteChangeImpact` and
+  routes the observer's replan/rebuild decisions through it. The
+  changed-entity set fed to `classify` is currently EMPTY (⇒ the `.all`
+  do-everything sentinel = the prior always-replan floor); extracting the
+  precise entity set from `NSPersistentHistory` is a documented future
+  refinement that needs a two-device runtime smoke I can't run headless.
+  Net: behavior is identical to before (always replans on remote edits),
+  now with a tested contract and a selectivity seam. The RUNTIME smoke —
+  edit a group on the Mac, watch the phone replan — is an owner step.
+- Mac management runtime UI verification (clicking through the panes,
+  editors, import preview) is DEFERRED to the owner / a later simulator
+  pass, consistent with plan 36's deferred-smoke honesty and to avoid
+  contending with other running agents. Verification here is kit tests +
+  compile checks. No `DispatchMacUITests` assertions were added.
+- Calendar `.calendars([ids])` groups are shown read-only on the Mac (it
+  can't enumerate the phone's calendars — issue #57 note); the Mac editor
+  offers all-events / title-contains and preserves a phone-set specific-
+  calendars rule unless the user changes the match type.
+
+**Owner steps:**
+1. Two-device smoke once signed: edit a prompt group / question on the
+   Mac, confirm the iPhone replans (watch `log stream --predicate
+   'category == "notif" || category == "sync"'`).
+2. Click-through smoke of the Questions/Groups/Catalog panes, the CSV/JSON
+   round-trip (export → import preview → commit), and catalog submit/flag.
