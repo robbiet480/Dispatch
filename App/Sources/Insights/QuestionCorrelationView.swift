@@ -52,8 +52,13 @@ struct QuestionCorrelationView: View {
                         } else {
                             ineligibleNotice
                         }
-                        disclaimer
                     }
+                    // The correlation-≠-causation disclaimer is an
+                    // unconditional part of the drill-in — it renders even
+                    // during the initial compute (result == nil) so the
+                    // "always present" contract holds through load, not only
+                    // after findings arrive.
+                    disclaimer
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)

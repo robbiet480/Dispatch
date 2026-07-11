@@ -97,35 +97,19 @@ struct InsightsView: View {
             // Plan 34: the drill-in list shares the fingerprint — report
             // count/newest/identity + question count + people already cover
             // its inputs.
+            // Engine returns eligible IDs WITH their answered counts from a
+            // single pass — no per-question re-scan of every report, and the
+            // caption count is exactly the count that decided eligibility.
             let byID = Dictionary(questions.map { ($0.uniqueIdentifier, $0) },
                                   uniquingKeysWith: { first, _ in first })
             correlationQuestions = CorrelationEngine
-                .eligibleQuestionIDs(reports: reports, questions: questions)
-                .compactMap { id in
-                    guard let question = byID[id] else { return nil }
-                    return (id: id, prompt: question.prompt,
-                            answeredCount: answeredCount(for: question))
+                .eligibleQuestions(reports: reports, questions: questions)
+                .compactMap { entry in
+                    guard let question = byID[entry.id] else { return nil }
+                    return (id: entry.id, prompt: question.prompt,
+                            answeredCount: entry.count)
                 }
         }
-    }
-
-    /// Filed reports carrying an answered response for this question — the
-    /// caption under each drill-in row.
-    private func answeredCount(for question: Question) -> Int {
-        reports.filter { report in
-            guard !report.isDraft else { return false }
-            return (report.responses ?? []).contains { response in
-                let matches = response.questionIdentifier == question.uniqueIdentifier
-                    || (response.questionIdentifier == nil
-                        && response.questionPrompt == question.prompt)
-                guard matches else { return false }
-                // Reuse the engine's single-source answered predicate so the
-                // caption count can never diverge from what `compute` treats
-                // as answered — notably, a number needs a Double-parseable
-                // payload, not merely a non-nil string.
-                return CorrelationEngine.isAnswered(response, type: question.type)
-            }
-        }.count
     }
 
     /// Plan 34: CORRELATIONS drill-in list. Hidden entirely when no question
