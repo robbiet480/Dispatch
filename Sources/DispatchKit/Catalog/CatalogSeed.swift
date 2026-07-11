@@ -178,14 +178,18 @@ public enum CatalogSeed {
             let credit = entry.credit ?? file.defaultCredit
             let errors = CatalogValidation.validate(
                 prompt: entry.prompt, typeRaw: type.rawValue,
-                choices: entry.choices, creditName: credit
+                choices: entry.choices, creditName: credit,
+                inputStyle: entry.inputStyle, defaultAnswer: entry.defaultAnswer,
+                placeholder: entry.placeholder
             )
             guard errors.isEmpty else {
                 problems.append("\(label): " + errors.map(\.message).joined(separator: " "))
                 continue
             }
             let normalized = CatalogValidation.normalized(
-                prompt: entry.prompt, choices: entry.choices, creditName: credit
+                prompt: entry.prompt, choices: entry.choices, creditName: credit,
+                inputStyle: entry.inputStyle, defaultAnswer: entry.defaultAnswer,
+                placeholder: entry.placeholder
             )
             if !seenPrompts.insert(normalized.prompt.lowercased()).inserted {
                 problems.append("\(label): duplicate prompt within the file")
@@ -196,8 +200,8 @@ public enum CatalogSeed {
                 choices: normalized.choices, credit: normalized.creditName,
                 tags: entry.tags.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty },
-                inputStyle: entry.inputStyle, defaultAnswer: entry.defaultAnswer,
-                placeholder: entry.placeholder, inputMin: entry.inputMin,
+                inputStyle: normalized.inputStyle, defaultAnswer: normalized.defaultAnswer,
+                placeholder: normalized.placeholder, inputMin: entry.inputMin,
                 inputMax: entry.inputMax, inputStep: entry.inputStep
             ))
         }
