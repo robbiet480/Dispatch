@@ -138,6 +138,11 @@ public struct V2Report: Codable {
     public var wasInBackground: Bool
     public var battery: Double?
     public var altitudeMeters: Double?
+    /// Location-fix-derived motion sensors (plan 43, #61).
+    public var speedMPS: Double?
+    public var courseDegrees: Double?
+    /// Magnetometer-derived compass heading (plan 43, #61), iPhone-only capture.
+    public var headingDegrees: Double?
     public var connection: Int?
     public var audio: AudioSample?
     public var location: LocationSnapshot?

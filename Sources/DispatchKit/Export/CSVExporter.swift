@@ -4,8 +4,8 @@ import SwiftData
 public enum CSVExporter {
     static let sensorColumns = [
         "date", "timeZone", "kind", "trigger", "latitude", "longitude", "place",
-        "weather", "tempF", "altitudeMeters", "audioAvg", "audioPeak",
-        "battery", "steps", "photoCount", "connection",
+        "weather", "tempF", "altitudeMeters", "speedMPS", "courseDegrees", "headingDegrees",
+        "audioAvg", "audioPeak", "battery", "steps", "photoCount", "connection",
     ]
 
     public static func exportCSV(from context: ModelContext) throws -> String {
@@ -41,6 +41,9 @@ public enum CSVExporter {
                 report.weather?.condition ?? "",
                 report.weather?.tempF.map { String($0) } ?? "",
                 report.altitudeMeters.map { String($0) } ?? "",
+                report.speedMPS.map { String($0) } ?? "",
+                report.courseDegrees.map { String($0) } ?? "",
+                report.headingDegrees.map { String($0) } ?? "",
                 report.audio.map { String($0.avg) } ?? "",
                 report.audio.map { String($0.peak) } ?? "",
                 report.battery.map { String($0) } ?? "",

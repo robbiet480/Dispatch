@@ -169,6 +169,15 @@ public enum DayOneExporter {
         if let meters = report.altitudeMeters {
             lines.append(String(format: "Altitude: %.0f m", meters))
         }
+        if let mps = report.speedMPS {
+            lines.append(String(format: "Speed: %.0f mph", MotionFormatting.mph(fromMPS: mps)))
+        }
+        if let degrees = report.courseDegrees {
+            lines.append("Course: \(Int(degrees.rounded()))° \(MotionFormatting.compassPoint(forDegrees: degrees))")
+        }
+        if let degrees = report.headingDegrees {
+            lines.append("Heading: \(Int(degrees.rounded()))° \(MotionFormatting.compassPoint(forDegrees: degrees))")
+        }
         if let audio = report.audio {
             lines.append(String(format: "Sound: %.1f dB avg", AudioLevel.displayValue(fromRaw: audio.avg)))
         }

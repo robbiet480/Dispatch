@@ -73,6 +73,15 @@ public enum MarkdownExporter {
         if let meters = report.altitudeMeters {
             lines.append("altitude_m: \(number(meters))")
         }
+        if let mps = report.speedMPS {
+            lines.append("speed_mps: \(number(mps))")
+        }
+        if let degrees = report.courseDegrees {
+            lines.append("course_degrees: \(number(degrees))")
+        }
+        if let degrees = report.headingDegrees {
+            lines.append("heading_degrees: \(number(degrees))")
+        }
         if let audio = report.audio {
             lines.append("audio_db: \(number(AudioLevel.displayValue(fromRaw: audio.avg)))")
         }
