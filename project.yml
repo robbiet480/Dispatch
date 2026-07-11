@@ -321,8 +321,6 @@ targets:
     sources:
       - path: AppTests
       - path: App/Sources/Visualizations/OptionBlockLayout.swift
-      # PLAN-39 TASK 0 PROBE — remove after measurement.
-      - path: App/Sources/Providers/SleepDeliveryProbe.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.apptests
