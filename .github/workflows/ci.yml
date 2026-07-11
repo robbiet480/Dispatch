@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
   pull_request:
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     # macOS 26 image required: DispatchKit links SwiftData symbols that only
