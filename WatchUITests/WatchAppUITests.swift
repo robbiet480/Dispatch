@@ -91,7 +91,10 @@ final class WatchAppUITests: XCTestCase {
             app.buttons["watch-quick-answer-yes"].waitForExistence(timeout: launchTimeout),
             "quick-answer Yes button should surface on the demo-seeded home"
         )
-        XCTAssertTrue(app.buttons["watch-quick-answer-no"].exists)
+        XCTAssertTrue(
+            app.buttons["watch-quick-answer-no"].waitForExistence(timeout: uiTimeout),
+            "quick-answer No button should surface alongside Yes"
+        )
 
         // The questions List container renders.
         // Single any-element-type query: watchOS may expose a SwiftUI List
