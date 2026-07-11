@@ -261,3 +261,53 @@ import Testing
     #expect(shares.first(where: { $0.option == "Yes" })?.share == 0.5)
     #expect(shares.first(where: { $0.option == "No" })?.share == 0.5)
 }
+
+/// Mac dashboard scope (MacDashboardView.filteredReports): the sidebar search
+/// (ReportSearch.filter) and the visualization-filter criteria (ReportFilter)
+/// COMPOSE — both applied together, search first. Pins that a report matching
+/// the search but failing a criterion is excluded, and vice-versa, using the
+/// same public kit APIs the view calls. ReportSearchTests and ReportFilterTests
+/// pin each stage alone; this pins their intersection.
+@Test func searchAndCriteriaComposeLikeMacDashboard() throws {
+    func makeReport(note: String, place: String) -> Report {
+        let report = Report()
+        report.date = Date()
+        let noteResponse = Response()
+        noteResponse.textResponses = [TokenValue(text: note)]
+        noteResponse.report = report
+        let placeResponse = Response()
+        var answer = LocationAnswer()
+        answer.text = place
+        placeResponse.locationResponse = answer
+        placeResponse.report = report
+        report.responses = [noteResponse, placeResponse]
+        return report
+    }
+
+    // Two axes: the note carries the search term "coffee"; the place carries
+    // the filter criterion .place("Office").
+    let both = makeReport(note: "Coffee run", place: "Office")       // search ✓ criterion ✓
+    let searchOnly = makeReport(note: "Coffee break", place: "Home") // search ✓ criterion ✗
+    let criterionOnly = makeReport(note: "Tea time", place: "Office")// search ✗ criterion ✓
+    let neither = makeReport(note: "Tea time", place: "Home")        // search ✗ criterion ✗
+    let reports = [both, searchOnly, criterionOnly, neither]
+
+    // Mirror filteredReports(): ReportSearch.filter, THEN ReportFilter.matches
+    // over the searched set with the dashboard's criteria.
+    let criteria: [ReportFilter.FilterCriterion] = [.place("Office")]
+    let searched = ReportSearch.filter(reports, query: "coffee")
+    #expect(searched.count == 2) // both + searchOnly
+
+    let composed = searched.filter {
+        ReportFilter.matches(report: $0, criteria: criteria)
+    }
+
+    // Only the report satisfying BOTH survives the composition.
+    #expect(composed.count == 1)
+    #expect(composed.first === both)
+    // A report matching the search but failing the criterion is excluded…
+    #expect(!composed.contains { $0 === searchOnly })
+    // …and one matching the criterion but not the search never reaches it.
+    #expect(!composed.contains { $0 === criterionOnly })
+    #expect(!composed.contains { $0 === neither })
+}
