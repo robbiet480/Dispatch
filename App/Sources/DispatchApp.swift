@@ -26,6 +26,7 @@ struct DispatchApp: App {
     let permissionCascade: PermissionCascade
     let workoutEndObserver: WorkoutEndObserver
     let awakeAutoController: AwakeAutoController
+    let sleepObserver: SleepObserver
     let visitObserver: VisitObserver
     let calendarEventObserver: CalendarEventObserver
     let backupManager: BackupManager
@@ -260,6 +261,15 @@ struct DispatchApp: App {
         )
         awakeAutoController = autoController
 
+        // Signal 2 (plan 39): HealthKit sleepAnalysis background delivery —
+        // the lagged, authoritative correction (measured ≈4h post-wake, one
+        // batch; see SleepObserver's type comment). Toggle-gated inside
+        // refresh(); test-gated internally like the workout observer.
+        sleepObserver = SleepObserver(
+            controller: autoController, prefs: notificationPrefs,
+            defaults: appDefaults, isTestEnvironment: isTestEnvironment
+        )
+
         seedDefaultQuestionsIfNeeded()
         // Screenshot fixture (plan 23): test-environment-gated like every
         // launch argument — the in-memory store guarantee above means this
@@ -343,6 +353,13 @@ struct DispatchApp: App {
         // and the no-groups case; the onAppear call stays for group edits.
         workoutEndObserver.refresh()
 
+        // Sleep observer launch registration (plan 39): the same
+        // headless-relaunch contract as the workout observer directly above —
+        // HealthKit background delivery relaunches a terminated app with no
+        // scene, so the HKObserverQuery must be re-registered here or the
+        // fire is missed and HealthKit throttles future deliveries.
+        sleepObserver.refresh()
+
         // Visit monitoring must likewise restart at LAUNCH: per Apple's
         // startMonitoringVisits() docs the system relaunches a terminated
         // app to deliver visit events, and "upon relaunch, recreate your
@@ -398,6 +415,7 @@ struct DispatchApp: App {
                 .environment(permissionCascade)
                 .environment(workoutEndObserver)
                 .environment(awakeAutoController)
+                .environment(sleepObserver)
                 .environment(visitObserver)
                 .environment(calendarEventObserver)
                 .environment(backupManager)
@@ -435,6 +453,7 @@ struct DispatchApp: App {
                     // Start (or stop) the event observers according to the
                     // current groups; test-gated internally.
                     workoutEndObserver.refresh()
+                    sleepObserver.refresh()
                     visitObserver.refresh()
                     calendarEventObserver.refresh()
                     // Cold launch with lock enabled (or the --enable-app-lock
