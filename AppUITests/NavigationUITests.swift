@@ -213,4 +213,78 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["When a calendar event ends – 1 question"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["group-row-needs-calendar"].exists)
     }
+
+    /// Plan 45 (#56): create a place-trigger group via the editor and assert
+    /// it lands in the list with its schedule summary and NO needs-Always
+    /// hint (under `--mock-sensors` the observer reads authorized). The
+    /// direction/delay/cancel semantics and the summary formatting are pinned
+    /// by the DispatchKit unit suite (MonitorTriggerEngineTests /
+    /// PromptGroupTests), so this only exercises the editor plumbing for the
+    /// place arm — the beacon arm is the same shared control set.
+    @MainActor
+    func testCreatePlaceTriggerGroupAppearsInList() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        let settingsButton = app.buttons["settings-button"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
+        settingsButton.tap()
+
+        let groupsLink = app.buttons["prompt-groups-link"]
+        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
+        groupsLink.tap()
+
+        let addButton = app.buttons["group-add"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+        var scrollsRemaining = 8
+        while !addButton.isHittable, scrollsRemaining > 0 {
+            app.swipeUp()
+            scrollsRemaining -= 1
+        }
+        addButton.tap()
+
+        let groupName = "Office \(Int(Date().timeIntervalSince1970) % 100_000)"
+        addTeardownBlock { @MainActor in
+            let row = app.staticTexts[groupName.uppercased()]
+            guard row.exists else { return }
+            row.swipeLeft()
+            let deleteButton = app.buttons["Delete"]
+            if deleteButton.waitForExistence(timeout: 5) {
+                deleteButton.tap()
+            }
+        }
+
+        let nameField = app.textFields["group-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
+        nameField.tap()
+        nameField.typeText(groupName)
+
+        let questionRow = app.buttons["Are you working?"]
+        XCTAssertTrue(questionRow.waitForExistence(timeout: 10))
+        questionRow.tap()
+
+        let schedulePicker = app.buttons["group-schedule-kind"]
+        XCTAssertTrue(schedulePicker.waitForExistence(timeout: 10))
+        schedulePicker.tap()
+        let placeOption = app.buttons["When I arrive at / leave a place"]
+        XCTAssertTrue(placeOption.waitForExistence(timeout: 10))
+        placeOption.tap()
+
+        // Full-access (Always) test posture: no needs-Always hint in editor.
+        let placeName = app.textFields["group-place-name"]
+        XCTAssertTrue(placeName.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["group-monitor-needs-always"].exists)
+        XCTAssertFalse(app.buttons["group-monitor-needs-always"].exists)
+        placeName.tap()
+        placeName.typeText("HQ")
+
+        app.buttons["group-save"].tap()
+
+        // Back on the list: the place group shows with its schedule summary
+        // ("Arrive at HQ", immediate) and NO needs-Always hint.
+        XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Arrive at HQ – 1 question"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["group-row-needs-always"].exists)
+    }
 }

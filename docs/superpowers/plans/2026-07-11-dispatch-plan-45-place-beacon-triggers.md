@@ -416,6 +416,45 @@ in sortOrder and reports which groups were dropped, so the editor/list can warn
 
 ---
 
-## Completion note
+## Completion note (2026-07-11)
 
-_(appended on ship)_
+Shipped on this branch as two commits after the plan doc: the kit commit
+(schedule kinds, `MonitorTriggerEngine`, `MonitorConditionBudget`, four
+`ReportTrigger`s, the `mprompt-` prefix, additive v2 fields) and the app
+commit (`MonitorObserver`, editor place+beacon arms, Beacons settings,
+`didReceive` mapping) — the app build was intentionally red between them
+until the editor/summary switches grew the new cases (the plan-31 adjacent-
+commit convention). A final commit adds the place-trigger UI test and this
+note.
+
+**Decision recorded:** ONE plan / ONE branch (see the "One-plan decision"
+section) — #56 and #60 differ only in the CLMonitor condition kind and share
+the observer, engine, budget, editor family, report triggers, and
+authorization.
+
+Suites at finish: **653 kit tests** green (627 before this plan — +26: 7
+MonitorTriggerEngine, 5 MonitorConditionBudget, 7 MonitorTrigger config, 6
+PromptGroup/V2, 1 GroupPlanner, 1 NotificationIdentifiers). App
+`xcodebuild build` and `build-for-testing` both succeed, warning-free in the
+touched files; the new UI test `testCreatePlaceTriggerGroupAppearsInList`
+compiles (full simulator UI suite deferred to CI to avoid contending with
+other running agents).
+
+NO new entitlements: the entitlements + project.yml diff is empty — the
+Always purpose string (`NSLocationAlwaysAndWhenInUseUsageDescription`) plan 16
+already added covers both geographic and beacon CLMonitor conditions. Kit
+imports no CoreLocation (grep-verified). v2 nil-omission of the five monitor
+fields pinned by test. The replan's remove-before-add batch is untouched and
+does NOT include `mprompt-` — pending delayed prompts survive replans by
+design, with MonitorObserver owning cancel-by-prefix and orphan sweeps.
+
+Divergences from the doc: (1) place coordinate entry is numeric lat/lon +
+name fields; a map picker / location-answer suggestion integration is
+deferred (noted in Task 3). (2) The condition budget is per registered
+group (identifier = group ID), not deduped by geometry — event→group mapping
+stays 1:1; the ~20 cap is enforced in sortOrder.
+
+Not simulatable, for the owner on device: real CLMonitor
+`.satisfied`/`.unsatisfied` delivery for a geofence and a beacon, the
+delay→fire and leave-before-delay→cancel timing, background/terminated wake,
+the Always dialog flow, and the Beacons in-range indicator updating live.
