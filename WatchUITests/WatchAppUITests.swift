@@ -1,9 +1,11 @@
 import XCTest
 
 /// Functional watch UI coverage — the wrist sibling of AppUITests. Unlike
-/// WatchScreenshotTests (SCREENSHOT_MODE-gated capture only), these run on
-/// every `xcodebuild test` and assert real behavior against the in-memory,
-/// demo-seeded store that a `--ui-testing` launch stands up.
+/// WatchScreenshotTests (SCREENSHOT_MODE-gated capture only), these assert
+/// real behavior against the in-memory, demo-seeded store that a
+/// `--ui-testing` launch stands up. They run when the watch UI-test bundle is
+/// executed — i.e. the DispatchWatch scheme (the dedicated watch-ui-tests CI
+/// job), not on an iOS-only `xcodebuild test`.
 ///
 /// Launch-arg contract (already supported by DispatchWatchApp, no plumbing
 /// added): `--ui-testing`/`--mock-sensors` route through
