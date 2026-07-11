@@ -81,33 +81,41 @@ let apps = request("GET", "/v1/apps?filter[bundleId]=\(bundleID)")["data"] as? [
 guard let appID = apps.first?["id"] as? String else { fail("app \(bundleID) not found") }
 
 print("waiting for build \(buildNumber) to appear and finish processing...")
-var buildID: String?
+// One build number can exist once PER PLATFORM (iOS + macOS since build 29),
+// so wait for every matching build and set notes on each.
+var buildIDs: [String] = []
 for attempt in 1...60 { // up to 30 minutes
-    let builds = request("GET", "/v1/builds?filter[app]=\(appID)&filter[version]=\(buildNumber)&sort=-uploadedDate&limit=1")["data"] as? [[String: Any]] ?? []
-    if let build = builds.first,
-       let attrs = build["attributes"] as? [String: Any],
-       let state = attrs["processingState"] as? String {
-        if state == "VALID" { buildID = build["id"] as? String; break }
-        if state == "FAILED" || state == "INVALID" { fail("build \(buildNumber) processing state: \(state)") }
-        print("  [\(attempt)] processing (\(state))...")
+    let builds = request("GET", "/v1/builds?filter[app]=\(appID)&filter[version]=\(buildNumber)&sort=-uploadedDate")["data"] as? [[String: Any]] ?? []
+    if !builds.isEmpty {
+        let states = builds.compactMap { ($0["attributes"] as? [String: Any])?["processingState"] as? String }
+        if states.contains(where: { $0 == "FAILED" || $0 == "INVALID" }) {
+            fail("build \(buildNumber) processing state: \(states.joined(separator: ","))")
+        }
+        if states.allSatisfy({ $0 == "VALID" }) {
+            buildIDs = builds.compactMap { $0["id"] as? String }
+            break
+        }
+        print("  [\(attempt)] \(builds.count) build(s): \(states.joined(separator: ","))...")
     } else {
         print("  [\(attempt)] not visible yet...")
     }
     Thread.sleep(forTimeInterval: 30)
 }
-guard let buildID else { fail("build \(buildNumber) never became VALID (30 min timeout)") }
+if buildIDs.isEmpty { fail("build \(buildNumber) never became VALID (30 min timeout)") }
 
-let locs = request("GET", "/v1/builds/\(buildID)/betaBuildLocalizations")["data"] as? [[String: Any]] ?? []
-let enLoc = locs.first { (($0["attributes"] as? [String: Any])?["locale"] as? String)?.hasPrefix("en") == true }
-if let locID = enLoc?["id"] as? String {
-    _ = request("PATCH", "/v1/betaBuildLocalizations/\(locID)", body: [
-        "data": ["type": "betaBuildLocalizations", "id": locID, "attributes": ["whatsNew": notes]]
-    ])
-} else {
-    _ = request("POST", "/v1/betaBuildLocalizations", body: [
-        "data": ["type": "betaBuildLocalizations",
-                 "attributes": ["locale": "en-US", "whatsNew": notes],
-                 "relationships": ["build": ["data": ["type": "builds", "id": buildID]]]]
-    ])
+for buildID in buildIDs {
+    let locs = request("GET", "/v1/builds/\(buildID)/betaBuildLocalizations")["data"] as? [[String: Any]] ?? []
+    let enLoc = locs.first { (($0["attributes"] as? [String: Any])?["locale"] as? String)?.hasPrefix("en") == true }
+    if let locID = enLoc?["id"] as? String {
+        _ = request("PATCH", "/v1/betaBuildLocalizations/\(locID)", body: [
+            "data": ["type": "betaBuildLocalizations", "id": locID, "attributes": ["whatsNew": notes]]
+        ])
+    } else {
+        _ = request("POST", "/v1/betaBuildLocalizations", body: [
+            "data": ["type": "betaBuildLocalizations",
+                     "attributes": ["locale": "en-US", "whatsNew": notes],
+                     "relationships": ["build": ["data": ["type": "builds", "id": buildID]]]]
+        ])
+    }
 }
-print("what-to-test notes set on build \(buildNumber).")
+print("what-to-test notes set on \(buildIDs.count) build(s) numbered \(buildNumber).")
