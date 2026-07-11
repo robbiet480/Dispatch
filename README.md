@@ -136,14 +136,23 @@ one.
   glue, sync policy, and intents.
 - **`Widgets/Sources/`** — the widget extension (`DispatchWidgets`),
   which reads the shared App Group store directly (read-only).
-- **`Mac/Sources/`** — the native macOS app (`DispatchMac`), a
-  review-and-analyze shell over the same kit: reports split view with
+- **`Mac/Sources/`** — the native macOS app (`DispatchMac`): a
+  review-and-analyze shell over the same kit (reports split view with
   search, the visualizations dashboard, insights, imports, and the
-  journaling-ecosystem exports (Day One JSON, Markdown/Obsidian). It
-  syncs through the same CloudKit container (its store lives in its own
+  journaling-ecosystem exports — Day One JSON, Markdown/Obsidian) PLUS
+  the setup surfaces the big-keyboard device is for — question
+  management (create/edit/reorder/enable/disable/delete + CSV/JSON
+  definition import & export), prompt-group management, and
+  community-catalog access (browse, add, submit, flag). Reachable from
+  the detail-pane switcher and the **Manage** menu (⌘1–⌘5). It syncs
+  through the same CloudKit container (its store lives in its own
   Application Support — CloudKit is the only data channel). Capture
-  stays on iPhone/Apple Watch by design: no sensors, notifications,
-  widgets, prompt scheduling, or app lock on the Mac.
+  still stays on iPhone/Apple Watch by design: no sensors, notifications,
+  widgets, or app lock on the Mac, and sensor-driven prompt schedules
+  (workout end, arrival, calendar-event end) are configurable on the Mac
+  but fire on your iPhone. A group or question edited on the Mac syncs
+  to the phone, whose `RemoteChangeObserver` replans notifications so
+  the edit takes effect without waiting for the next app open.
 - **`Sources/dispatch-mod/`** — a macOS-only executable target for
   moderating the community catalog via CloudKit Web Services. Never
   compiled into the iOS app.
