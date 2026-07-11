@@ -293,6 +293,13 @@ struct DispatchApp: App {
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
         }
+        // Plan 39 UI-test hook: stands in for a Sleep Focus activation so
+        // the source-honest hero caption is assertable without HealthKit or
+        // real Focus state. Test-environment-gated like every launch
+        // argument.
+        if isTestEnvironment, arguments.contains("--auto-asleep") {
+            awakeStore.setAwake(false, source: .focusFilter)
+        }
 
         scheduler.registerCategory()
 
