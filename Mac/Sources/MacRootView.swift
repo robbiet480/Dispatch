@@ -9,6 +9,7 @@ import SwiftUI
 struct MacRootView: View {
     @Query private var reports: [Report]
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(MacExportController.self) private var exportController
     @State private var selectedReportID: String?
     @State private var detailPane: MacDetailPane = .dashboard
 
@@ -41,6 +42,16 @@ struct MacRootView: View {
             if !reports.contains(where: { $0.uniqueIdentifier == selectedReportID }) {
                 self.selectedReportID = nil
             }
+        }
+        // Import/export results from the File menu land here (the main
+        // window); the Settings scene carries its own copy of this alert.
+        .alert("Dispatch", isPresented: Binding(
+            get: { exportController.isShowingMessage },
+            set: { exportController.isShowingMessage = $0 }
+        ), presenting: exportController.message) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
         }
     }
 
