@@ -226,6 +226,11 @@ targets:
       - path: App/Sources/Sync/RemoteChangeObserver.swift
       - path: App/Sources/ThemeColor.swift
       - path: App/Sources/AppDefaultsEnvironment.swift
+      # The highest-value share in the plan: Swift Charts renders the same
+      # chart marks on macOS; the color-blend helper is the file's only
+      # platform seam (#if canImport(UIKit)). OptionBlockLayout is pure math.
+      - path: App/Sources/Visualizations/QuestionVisualizationView.swift
+      - path: App/Sources/Visualizations/OptionBlockLayout.swift
       - path: Mac/Assets.xcassets
       - path: Mac/PrivacyInfo.xcprivacy
     dependencies:
