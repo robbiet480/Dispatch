@@ -178,6 +178,12 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
     public var inputMin: Double?
     public var inputMax: Double?
     public var inputStep: Double?
+    /// CloudKit's creator metadata (`created.userRecordName`), populated ONLY
+    /// by `dispatch-mod`'s queries for flood detection (plan 38). The app
+    /// never reads, stores, or displays it — it is metadata the server
+    /// attaches to every record, not a field we write (`fields` excludes it
+    /// by construction, and the fields-based init always leaves it nil).
+    public var createdUserRecordName: String?
 
     public var id: String { recordName }
 
@@ -187,7 +193,8 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
                 creditName: String? = nil, submittedAt: Date,
                 inputStyle: String? = nil, defaultAnswer: String? = nil,
                 placeholder: String? = nil, inputMin: Double? = nil,
-                inputMax: Double? = nil, inputStep: Double? = nil) {
+                inputMax: Double? = nil, inputStep: Double? = nil,
+                createdUserRecordName: String? = nil) {
         self.recordName = recordName
         self.prompt = prompt
         self.typeRaw = typeRaw
@@ -200,6 +207,7 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
         self.inputMin = inputMin
         self.inputMax = inputMax
         self.inputStep = inputStep
+        self.createdUserRecordName = createdUserRecordName
     }
 
     public var fields: [String: CatalogFieldValue] {

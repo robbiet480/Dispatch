@@ -122,6 +122,10 @@ struct Dashboard {
                     "choices": submission.choices.joined(separator: ", "),
                     "creditName": submission.creditName ?? "",
                     "submittedAt": CKWebServicesSigner.iso8601Date(submission.submittedAt),
+                    // Plan 38: CloudKit creator metadata for flood detection.
+                    // Untrusted output like every other field — the page only
+                    // ever esc()'s it or binds it via closures.
+                    "submitter": submission.createdUserRecordName ?? "",
                 ]
             }
             return ("200 OK", "application/json", jsonData(pending))
@@ -148,6 +152,19 @@ struct Dashboard {
             guard let id = query["id"] else { return badRequest("missing id") }
             try client.resolveFlag(recordName: id)
             return ("200 OK", "application/json", jsonData(["resolved": id]))
+        case ("POST", "/api/reject-user"):
+            // Plan 38 bulk cleanup: delete every pending submission from one
+            // creator, one by one with per-record verification (reject()
+            // verifies each modify response). Same session-token gate as the
+            // other mutating endpoints. Only ever touches SubmittedQuestion.
+            guard let user = query["user"], !user.isEmpty else { return badRequest("missing user") }
+            let targets = try client.pendingSubmissions()
+                .filter { $0.createdUserRecordName == user }
+            for submission in targets {
+                try client.reject(submissionRecordName: submission.recordName)
+            }
+            return ("200 OK", "application/json",
+                    jsonData(["rejectedUser": user, "count": targets.count] as [String: Any]))
         default:
             return ("404 Not Found", "application/json", jsonData(["error": "not found"]))
         }
@@ -208,12 +225,16 @@ struct Dashboard {
       button { padding: .3rem .8rem; margin-right: .4rem; border: 0; border-radius: 6px; cursor: pointer; }
       .approve { background: #2e7d32; color: #fff; } .reject { background: #b23b3b; color: #fff; }
       .muted { color: #888; } #status { margin: 1rem 0; color: #9ad; min-height: 1.2em; }
+      .flood { color: #f6b73c; font-weight: 600; }
+      code { font-size: .8rem; color: #bbb; }
     </style></head><body>
     <h1>Dispatch question moderation</h1>
     <div id="status"></div>
+    <h2>Submitters</h2>
+    <table id="submitters"><thead><tr><th>User</th><th>Pending</th><th></th><th></th></tr></thead><tbody></tbody></table>
     <h2>Pending submissions</h2>
     <table id="pending"><thead><tr><th>Prompt</th><th>Type</th><th>Choices</th>
-    <th>Credit</th><th>Submitted</th><th></th></tr></thead><tbody></tbody></table>
+    <th>Credit</th><th>Submitter</th><th>Submitted</th><th></th></tr></thead><tbody></tbody></table>
     <h2>Flags</h2>
     <table id="flags"><thead><tr><th>Catalog record</th><th>Reason</th><th>Flagged</th><th></th></tr></thead><tbody></tbody></table>
     <script>
@@ -241,13 +262,37 @@ struct Dashboard {
       status('Loading…');
       try {
         const [pending, flags] = await Promise.all([api('/api/pending'), api('/api/flags')]);
+        // Plan 38 flood detection: group pending by CloudKit creator
+        // metadata; >FLOOD_THRESHOLD from one user gets a loud marker and a
+        // one-click bulk reject. User record names are untrusted like every
+        // other value — esc()'d text and closure-bound data only.
+        const FLOOD_THRESHOLD = 10;
+        const bySubmitter = new Map();
+        pending.forEach(p => {
+          const key = p.submitter || '(unknown)';
+          bySubmitter.set(key, (bySubmitter.get(key) || 0) + 1);
+        });
+        const submitters = [...bySubmitter.entries()]
+          .map(([user, count]) => ({user, count}))
+          .sort((a, b) => b.count - a.count || a.user.localeCompare(b.user));
+        const submittersBody = document.querySelector('#submitters tbody');
+        submittersBody.innerHTML = submitters.map(s => `
+          <tr><td><code>${esc(s.user)}</code></td><td>${s.count}</td>
+          <td>${s.count > FLOOD_THRESHOLD ? '<span class=flood>⚠️ FLOOD</span>' : ''}</td>
+          <td><button class="reject">Reject all</button></td></tr>`
+        ).join('') || '<tr><td colspan=4 class=muted>No pending submitters.</td></tr>';
+        submitters.forEach((s, i) => {
+          submittersBody.rows[i].querySelector('button')
+            .addEventListener('click', () => rejectUser(s.user, s.count));
+        });
         const pendingBody = document.querySelector('#pending tbody');
         pendingBody.innerHTML = pending.map(p => `
           <tr><td>${esc(p.prompt)}</td><td>${esc(p.type)}</td><td>${esc(p.choices)}</td>
-          <td>${esc(p.creditName) || '<span class=muted>anonymous</span>'}</td><td>${esc(p.submittedAt)}</td>
+          <td>${esc(p.creditName) || '<span class=muted>anonymous</span>'}</td>
+          <td><code>${esc(p.submitter) || '<span class=muted>?</span>'}</code></td><td>${esc(p.submittedAt)}</td>
           <td><button class="approve">Approve</button>
           <button class="reject">Reject</button></td></tr>`
-        ).join('') || '<tr><td colspan=6 class=muted>Nothing pending.</td></tr>';
+        ).join('') || '<tr><td colspan=7 class=muted>Nothing pending.</td></tr>';
         bindActions(pendingBody, pending, [['approve', 'recordName'], ['reject', 'recordName']]);
         const flagsBody = document.querySelector('#flags tbody');
         flagsBody.innerHTML = flags.map(f => `
@@ -262,6 +307,15 @@ struct Dashboard {
       status(kind + '…');
       try { await api('/api/' + kind + '?id=' + encodeURIComponent(id), {method: 'POST'}); await refresh(); }
       catch (e) { status('Error: ' + e.message); }
+    }
+    async function rejectUser(user, count) {
+      if (!confirm(`Delete ALL ${count} pending submission(s) from ${user}? Approved catalog entries are untouched.`)) return;
+      status('reject-user…');
+      try {
+        const result = await api('/api/reject-user?user=' + encodeURIComponent(user), {method: 'POST'});
+        await refresh();
+        status(`Rejected ${result.count} submission(s) from ${user}.`);
+      } catch (e) { status('Error: ' + e.message); }
     }
     refresh();
     </script></body></html>

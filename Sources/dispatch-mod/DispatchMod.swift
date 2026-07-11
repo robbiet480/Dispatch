@@ -13,10 +13,16 @@ struct DispatchMod {
     USAGE: dispatch-mod <subcommand> [options]
 
     SUBCOMMANDS:
-      list                     Pending submissions and open flags
+      list                     Pending submissions and open flags, with a
+                               per-submitter summary (⚠️ FLOOD above the
+                               threshold — see --flood-threshold)
       approve <recordName>     Copy a submission into the catalog, then delete it
                                (--tags a,b to attach catalog tags)
       reject <recordName>      Delete a submission without publishing
+      reject-user <user>       Delete ALL pending submissions from one creator
+                               (userRecordName from `list`). Prints them and
+                               asks for confirmation; --yes to skip. Never
+                               touches approved catalog entries.
       serve                    Localhost dashboard (--port N, default 8787)
       import <seed.json>       Bulk-load a curated seed file into the catalog
                                (--dry-run to validate and preview only; prompts
@@ -36,6 +42,9 @@ struct DispatchMod {
       --tags a,b,c                   approve only: comma-separated tags
       --port N                       serve only: listen port (127.0.0.1 only)
       --dry-run                      import only: no network, no writes
+      --flood-threshold N            list only: pending submissions per creator
+                                     before the ⚠️ FLOOD marker (default 10)
+      --yes                          reject-user only: skip confirmation
 
     CONFIG (key NEVER lives in the repo — see docs/moderation.md):
       ~/.dispatch-mod/config.json    {"keyID": "...", "keyPath": "...",
@@ -58,6 +67,8 @@ struct DispatchMod {
         do {
             switch subcommand {
             case "list":
+                let floodThreshold = Int(optionValue("--flood-threshold", in: &arguments) ?? "")
+                    ?? defaultFloodThreshold
                 try run(envOverride) { client in
                     let pending = try client.pendingSubmissions()
                     print("Pending submissions (\(pending.count)):")
@@ -70,6 +81,21 @@ struct DispatchMod {
                         }
                         if let credit = submission.creditName { line += "  — \(credit)" }
                         print(line)
+                    }
+                    // Plan 38 flood detection: group by CloudKit's creator
+                    // metadata, client-side over the full pending fetch. The
+                    // per-device throttle is bypassable friction; THIS is
+                    // where a scripted flood actually gets caught.
+                    if !pending.isEmpty {
+                        print("Submitters:")
+                        for (user, count) in submitterCounts(pending) {
+                            var line = "  \(user)  ×\(count)"
+                            if count > floodThreshold {
+                                line += "  ⚠️ FLOOD (>\(floodThreshold) pending — "
+                                    + "`dispatch-mod reject-user \(user)` to bulk-clean)"
+                            }
+                            print(line)
+                        }
                     }
                     let flags = try client.flags()
                     print("Open flags (\(flags.count)):")
@@ -94,6 +120,45 @@ struct DispatchMod {
                 try run(envOverride) { client in
                     try client.reject(submissionRecordName: recordName)
                     print("Rejected (deleted) \(recordName)")
+                }
+            case "reject-user":
+                // Bulk cleanup for a flooding creator (plan 38). Destructive,
+                // so it prints the full list and confirms; deletes one by one
+                // with per-record verification (never trust an unverified
+                // batch success — the plan-20 lesson). Only ever touches
+                // SubmittedQuestion: approved catalog entries are outside the
+                // moderation queue by construction.
+                let skipConfirmation = flag("--yes", in: &arguments)
+                guard let user = arguments.first else {
+                    fail("reject-user needs a creator userRecordName (see `dispatch-mod list`)")
+                }
+                try run(envOverride) { client in
+                    let pending = try client.pendingSubmissions()
+                        .filter { $0.createdUserRecordName == user }
+                    guard !pending.isEmpty else {
+                        print("No pending submissions from \(user). "
+                            + "(Queries lag writes — see docs/moderation.md on eventual consistency.)")
+                        return
+                    }
+                    print("Pending submissions from \(user) (\(pending.count)):")
+                    for submission in pending {
+                        print("  \(submission.recordName)  \(submission.prompt)")
+                    }
+                    if !skipConfirmation {
+                        print("Delete ALL \(pending.count) submission(s) from \(user)? [y/N] ", terminator: "")
+                        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
+                        guard answer == "y" || answer == "yes" else {
+                            print("Aborted — nothing deleted.")
+                            return
+                        }
+                    }
+                    var deleted = 0
+                    for submission in pending {
+                        try client.reject(submissionRecordName: submission.recordName)
+                        deleted += 1
+                        print("  − \(submission.recordName)")
+                    }
+                    print("Rejected \(deleted) submission(s) from \(user).")
                 }
             case "serve":
                 let port = UInt16(optionValue("--port", in: &arguments) ?? "") ?? 8787
@@ -175,6 +240,23 @@ struct DispatchMod {
         } catch {
             fail("\(error)")
         }
+    }
+
+    /// Flood marker threshold (plan 38): twice the client-side daily cap, so
+    /// a legitimate reinstall/multi-device user never trips it and a script
+    /// does immediately. `--flood-threshold N` overrides per invocation.
+    static let defaultFloodThreshold = 10
+
+    /// Pending-submission counts per creator, most prolific first. Creator
+    /// metadata should always be present on queried records; a missing one
+    /// (defensive) groups under "(unknown)".
+    static func submitterCounts(_ pending: [SubmittedQuestion]) -> [(user: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        for submission in pending {
+            counts[submission.createdUserRecordName ?? "(unknown)", default: 0] += 1
+        }
+        return counts.sorted { ($1.value, $0.key) < ($0.value, $1.key) }
+            .map { (user: $0.key, count: $0.value) }
     }
 
     private static func run(_ envOverride: String?, _ body: (CloudKitWebClient) throws -> Void) throws {
