@@ -120,7 +120,11 @@ enum StatsMath {
     static func fisher(r: Double, count: Int, confidence: Double)
         -> (interval: ClosedRange<Double>, pValue: Double) {
         guard count > 3, abs(r) < 1 else {
-            return (interval: min(r, 1)...min(max(r, -1), 1), pValue: abs(r) >= 1 ? 0 : 1)
+            // Degenerate: |r| ≥ 1 (including float error nudging r just past
+            // ±1) or too few points for Fisher z. Clamp BOTH ends into
+            // [-1, 1] so the interval never escapes the valid range.
+            let clamped = min(max(r, -1), 1)
+            return (interval: clamped...clamped, pValue: abs(r) >= 1 ? 0 : 1)
         }
         let z = atanh(r)
         let standardError = 1 / Double(count - 3).squareRoot()

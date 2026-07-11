@@ -324,7 +324,12 @@ public enum CorrelationEngine {
             for response in report.responses ?? [] {
                 let questionKey = resolve(response)?.uniqueIdentifier
                     ?? "prompt:\(response.questionPrompt)"
-                if resolve(response)?.type == .people {
+                // A payload-less (skipped) people Response — persisted by
+                // ReportBuilder with `tokens == nil` — is MISSING the answer,
+                // not evidence of absence. Gate on the same `tokens != nil`
+                // predicate as `isAnswered` so a skip never masquerades as a
+                // person being away and fabricates an absent side.
+                if resolve(response)?.type == .people, response.tokens != nil {
                     questionResponded[questionKey, default: []].insert(index)
                     for token in response.tokens ?? [] {
                         let name = PersonResolver.person(matching: token.text,
@@ -638,7 +643,7 @@ public enum CorrelationEngine {
     /// "Answered" per kind: an empty tokens/people list is still an answer
     /// ("nobody"), but yes/no needs an option, number a parseable value,
     /// choice a non-empty selection.
-    private static func isAnswered(_ response: Response, type: QuestionType) -> Bool {
+    public static func isAnswered(_ response: Response, type: QuestionType) -> Bool {
         switch type {
         case .yesNo:
             response.answeredOptions?.first != nil

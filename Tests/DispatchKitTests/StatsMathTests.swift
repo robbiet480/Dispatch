@@ -142,6 +142,21 @@ private func approx(_ value: Double, _ expected: Double, _ tolerance: Double = 1
     #expect(approx(result.pValue, 0.004313, 1e-4))
 }
 
+/// PR #40 (Copilot): a Pearson r nudged just past ±1 by floating-point error
+/// must never produce an interval bound outside [-1, 1] — the degenerate
+/// early-return has to clamp BOTH ends, or the out-of-range value propagates
+/// into the UI copy and tier mapping.
+@Test func fisherClampsDegenerateRIntoValidRange() {
+    for r in [-1.0000001, -1.0, 1.0, 1.0000001] {
+        let result = StatsMath.fisher(r: r, count: 30, confidence: 0.95)
+        #expect(result.interval.lowerBound >= -1.0,
+                "lower bound \(result.interval.lowerBound) escaped [-1,1] for r=\(r)")
+        #expect(result.interval.upperBound <= 1.0,
+                "upper bound \(result.interval.upperBound) escaped [-1,1] for r=\(r)")
+        #expect(result.interval.lowerBound <= result.interval.upperBound)
+    }
+}
+
 // MARK: - Benjamini–Hochberg
 
 @Test func benjaminiHochbergOriginalPaperExample() {

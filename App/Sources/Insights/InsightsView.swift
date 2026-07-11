@@ -119,9 +119,11 @@ struct InsightsView: View {
                     || (response.questionIdentifier == nil
                         && response.questionPrompt == question.prompt)
                 guard matches else { return false }
-                return response.answeredOptions?.isEmpty == false
-                    || response.numericResponse != nil
-                    || response.tokens != nil
+                // Reuse the engine's single-source answered predicate so the
+                // caption count can never diverge from what `compute` treats
+                // as answered — notably, a number needs a Double-parseable
+                // payload, not merely a non-nil string.
+                return CorrelationEngine.isAnswered(response, type: question.type)
             }
         }.count
     }
