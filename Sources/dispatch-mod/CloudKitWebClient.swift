@@ -247,11 +247,14 @@ struct CloudKitWebClient {
         return submission
     }
 
-    /// Approve: validate structurally, create the CatalogQuestion (fresh
-    /// record name), then delete the submission. Two modify calls so a
-    /// delete failure can't lose the approval.
+    /// Approve: validate structurally, refuse duplicates of existing catalog
+    /// entries (plan 42 — override with `allowDuplicate` when the collision
+    /// is deliberate), create the CatalogQuestion (fresh record name), then
+    /// delete the submission. Two modify calls so a delete failure can't
+    /// lose the approval.
     @discardableResult
-    func approve(submissionRecordName: String, tags: [String]) throws -> CatalogQuestion {
+    func approve(submissionRecordName: String, tags: [String],
+                 allowDuplicate: Bool = false) throws -> CatalogQuestion {
         let submission = try lookupSubmission(recordName: submissionRecordName)
         let errors = CatalogValidation.validate(
             prompt: submission.prompt, typeRaw: submission.typeRaw,
@@ -262,6 +265,21 @@ struct CloudKitWebClient {
         guard errors.isEmpty else {
             throw ClientError.malformedResponse(
                 "submission fails validation: " + errors.map(\.message).joined(separator: " ")
+            )
+        }
+        // Duplicate check compares normalized prompts computed from a fresh
+        // catalog fetch — never stored fingerprints — so it works even
+        // before a backfill-fingerprints run.
+        if !allowDuplicate,
+           let existing = CatalogDedupe.firstMatch(prompt: submission.prompt,
+                                                   in: try catalogQuestions()) {
+            throw ClientError.server(
+                code: "DUPLICATE_PROMPT",
+                reason: """
+                the catalog already contains this question: \(existing.recordName) \
+                ("\(existing.prompt)"). Reject the submission, or re-run with \
+                --allow-duplicate if the collision is deliberate.
+                """
             )
         }
         let catalog = submission.approved(

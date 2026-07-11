@@ -15,14 +15,21 @@ struct DispatchMod {
     SUBCOMMANDS:
       list                     Pending submissions and open flags, with a
                                per-submitter summary (⚠️ FLOOD above the
-                               threshold — see --flood-threshold)
+                               threshold — see --flood-threshold); duplicates
+                               of catalog entries or older pending submissions
+                               are marked ⚠️ DUPLICATE
       approve <recordName>     Copy a submission into the catalog, then delete it
-                               (--tags a,b to attach catalog tags)
+                               (--tags a,b to attach catalog tags). Refuses
+                               duplicates of existing catalog entries unless
+                               --allow-duplicate is passed.
       reject <recordName>      Delete a submission without publishing
       reject-user <user>       Delete ALL pending submissions from one creator
                                (userRecordName from `list`). Prints them and
                                asks for confirmation; --yes to skip. Never
                                touches approved catalog entries.
+      backfill-fingerprints    Stamp promptFingerprint onto catalog entries
+                               that lack it (pre-plan-42 records; safe to
+                               re-run)
       serve                    Localhost dashboard (--port N, default 8787)
       import <seed.json>       Bulk-load a curated seed file into the catalog
                                (--dry-run to validate and preview only; prompts
@@ -40,6 +47,7 @@ struct DispatchMod {
     OPTIONS:
       --env development|production   CloudKit environment (default development)
       --tags a,b,c                   approve only: comma-separated tags
+      --allow-duplicate              approve only: publish despite a duplicate
       --port N                       serve only: listen port (127.0.0.1 only)
       --dry-run                      import only: no network, no writes
       --flood-threshold N            list only: pending submissions per creator
@@ -71,6 +79,11 @@ struct DispatchMod {
                     ?? defaultFloodThreshold
                 try run(envOverride) { client in
                     let pending = try client.pendingSubmissions()
+                    // Plan 42: mark content duplicates (normalized-prompt
+                    // identity) against the catalog and within the queue.
+                    let duplicates = CatalogDedupe.duplicateMatches(
+                        pending: pending, catalog: (try? client.catalogQuestions()) ?? []
+                    )
                     print("Pending submissions (\(pending.count)):")
                     for submission in pending {
                         let type = QuestionType(rawValue: submission.typeRaw)
@@ -80,6 +93,14 @@ struct DispatchMod {
                             line += "  {\(submission.choices.joined(separator: " | "))}"
                         }
                         if let credit = submission.creditName { line += "  — \(credit)" }
+                        switch duplicates[submission.recordName] {
+                        case .catalogEntry(let recordName):
+                            line += "  ⚠️ DUPLICATE of \(recordName)"
+                        case .pendingSubmission(let recordName):
+                            line += "  ⚠️ DUPLICATE of pending \(recordName)"
+                        case nil:
+                            break
+                        }
                         print(line)
                     }
                     // Plan 38 flood detection: group by CloudKit's creator
@@ -106,11 +127,15 @@ struct DispatchMod {
             case "approve":
                 let tags = (optionValue("--tags", in: &arguments) ?? "")
                     .split(separator: ",").map(String.init)
+                let allowDuplicate = flag("--allow-duplicate", in: &arguments)
                 guard let recordName = arguments.first else {
                     fail("approve needs a submission recordName (see `dispatch-mod list`)")
                 }
                 try run(envOverride) { client in
-                    let catalog = try client.approve(submissionRecordName: recordName, tags: tags)
+                    let catalog = try client.approve(
+                        submissionRecordName: recordName, tags: tags,
+                        allowDuplicate: allowDuplicate
+                    )
                     print("Approved → CatalogQuestion \(catalog.recordName): \(catalog.prompt)")
                 }
             case "reject":
@@ -192,6 +217,14 @@ struct DispatchMod {
                     let raw = try client.rawLookup(recordName: recordName)
                     print(raw)
                 }
+            case "backfill-fingerprints":
+                try run(envOverride) { client in
+                    let result = try client.backfillFingerprints { entry in
+                        print("  + \(entry.recordName)  \(entry.prompt)")
+                    }
+                    print("Stamped \(result.stamped) entr\(result.stamped == 1 ? "y" : "ies"); "
+                        + "\(result.alreadyStamped) already had fingerprints.")
+                }
             case "setup":
                 if arguments.contains("--help") || arguments.contains("-h") {
                     print(Setup.helpText)
@@ -215,8 +248,14 @@ struct DispatchMod {
                     return
                 }
                 try run(envOverride) { client in
-                    let existing = Set(try client.catalogQuestions().map { $0.prompt.lowercased() })
-                    let new = drafts.filter { !existing.contains($0.prompt.lowercased()) }
+                    // Plan 42: skip-set keys on the shared dedupe
+                    // normalization (case + whitespace + trailing
+                    // punctuation), same identity the approve path enforces.
+                    let existing = Set(try client.catalogQuestions()
+                        .map { CatalogDedupe.normalizedPrompt($0.prompt) })
+                    let new = drafts.filter {
+                        !existing.contains(CatalogDedupe.normalizedPrompt($0.prompt))
+                    }
                     if new.count < drafts.count {
                         print("Skipping \(drafts.count - new.count) question(s) already in the catalog.")
                     }

@@ -61,6 +61,44 @@ public enum CatalogDedupe {
         return entries.first { normalizedPrompt($0.prompt) == target }
     }
 
+    /// What a pending submission collides with, for moderation display.
+    public enum DuplicateMatch: Equatable, Sendable {
+        case catalogEntry(recordName: String)
+        case pendingSubmission(recordName: String)
+    }
+
+    /// Duplicate annotations for a pending queue, keyed by submission
+    /// recordName. A submission matching a published catalog entry maps to
+    /// `.catalogEntry` (which wins over pending collisions); otherwise, of a
+    /// group of pending submissions sharing a normalized prompt, the OLDEST
+    /// (by `submittedAt`) is treated as the original and left unmarked while
+    /// the rest map to `.pendingSubmission(itsRecordName)`. Pure — used by
+    /// `dispatch-mod list` and the dashboard.
+    public static func duplicateMatches(
+        pending: [SubmittedQuestion], catalog: [CatalogQuestion]
+    ) -> [String: DuplicateMatch] {
+        var catalogByPrompt: [String: String] = [:]
+        for entry in catalog {
+            let key = normalizedPrompt(entry.prompt)
+            guard !key.isEmpty else { continue }
+            if catalogByPrompt[key] == nil { catalogByPrompt[key] = entry.recordName }
+        }
+        var matches: [String: DuplicateMatch] = [:]
+        var firstPending: [String: String] = [:]
+        for submission in pending.sorted(by: { $0.submittedAt < $1.submittedAt }) {
+            let key = normalizedPrompt(submission.prompt)
+            guard !key.isEmpty else { continue }
+            if let catalogRecordName = catalogByPrompt[key] {
+                matches[submission.recordName] = .catalogEntry(recordName: catalogRecordName)
+            } else if let original = firstPending[key] {
+                matches[submission.recordName] = .pendingSubmission(recordName: original)
+            } else {
+                firstPending[key] = submission.recordName
+            }
+        }
+        return matches
+    }
+
     private static let quoteFolds: [(String, String)] = [
         ("\u{2019}", "'"), ("\u{2018}", "'"),   // ’ ‘
         ("\u{201C}", "\""), ("\u{201D}", "\""), // “ ”

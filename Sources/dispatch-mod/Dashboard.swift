@@ -114,8 +114,20 @@ struct Dashboard {
             let page = Self.pageHTML.replacingOccurrences(of: "__SESSION_TOKEN__", with: sessionToken)
             return ("200 OK", "text/html", Data(page.utf8))
         case ("GET", "/api/pending"):
-            let pending = try client.pendingSubmissions().map { submission in
-                [
+            let submissions = try client.pendingSubmissions()
+            // Plan 42: annotate content duplicates (same normalized prompt)
+            // against the catalog and within the queue. Untrusted strings —
+            // the page esc()'s everything as usual.
+            let duplicates = CatalogDedupe.duplicateMatches(
+                pending: submissions, catalog: (try? client.catalogQuestions()) ?? []
+            )
+            let pending = submissions.map { submission -> [String: String] in
+                let duplicateOf: String = switch duplicates[submission.recordName] {
+                case .catalogEntry(let recordName): "catalog \(recordName)"
+                case .pendingSubmission(let recordName): "pending \(recordName)"
+                case nil: ""
+                }
+                return [
                     "recordName": submission.recordName,
                     "prompt": submission.prompt,
                     "type": QuestionType(rawValue: submission.typeRaw).map(String.init(describing:)) ?? "unknown",
@@ -126,6 +138,7 @@ struct Dashboard {
                     // Untrusted output like every other field — the page only
                     // ever esc()'s it or binds it via closures.
                     "submitter": submission.createdUserRecordName ?? "",
+                    "duplicateOf": duplicateOf,
                 ]
             }
             return ("200 OK", "application/json", jsonData(pending))
@@ -227,6 +240,8 @@ struct Dashboard {
       .muted { color: #888; } #status { margin: 1rem 0; color: #9ad; min-height: 1.2em; }
       .flood { color: #f6b73c; font-weight: 600; }
       code { font-size: .8rem; color: #bbb; }
+      .dup { display: inline-block; margin-left: .5rem; padding: .1rem .45rem; border-radius: 6px;
+             background: #7a5c1e; color: #ffd47f; font-size: .75rem; }
     </style></head><body>
     <h1>Dispatch question moderation</h1>
     <div id="status"></div>
@@ -287,7 +302,7 @@ struct Dashboard {
         });
         const pendingBody = document.querySelector('#pending tbody');
         pendingBody.innerHTML = pending.map(p => `
-          <tr><td>${esc(p.prompt)}</td><td>${esc(p.type)}</td><td>${esc(p.choices)}</td>
+          <tr><td>${esc(p.prompt)}${p.duplicateOf ? '<span class=dup>⚠️ duplicate of ' + esc(p.duplicateOf) + '</span>' : ''}</td><td>${esc(p.type)}</td><td>${esc(p.choices)}</td>
           <td>${esc(p.creditName) || '<span class=muted>anonymous</span>'}</td>
           <td><code>${esc(p.submitter) || '<span class=muted>?</span>'}</code></td><td>${esc(p.submittedAt)}</td>
           <td><button class="approve">Approve</button>

@@ -113,7 +113,8 @@ public struct CatalogSeedDraft: Equatable, Sendable {
             recordName: recordName, prompt: prompt, typeRaw: typeRaw,
             choices: choices, credit: credit, approvedAt: approvedAt, tags: tags,
             inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder,
-            inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
+            inputMin: inputMin, inputMax: inputMax, inputStep: inputStep,
+            promptFingerprint: CatalogDedupe.promptFingerprint(prompt)
         )
     }
 }

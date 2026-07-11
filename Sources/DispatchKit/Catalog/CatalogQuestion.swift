@@ -93,6 +93,11 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
     public var inputMin: Double?
     public var inputMax: Double?
     public var inputStep: Double?
+    /// Content-identity fingerprint (plan 42): `CatalogDedupe.promptFingerprint`
+    /// of the prompt, written only by `dispatch-mod` (approve/import/backfill).
+    /// Optional — pre-plan-42 records lack it until backfilled; readers must
+    /// fall back to computing from `prompt`.
+    public var promptFingerprint: String?
 
     public var id: String { recordName }
 
@@ -102,7 +107,8 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
                 credit: String? = nil, approvedAt: Date, tags: [String] = [],
                 inputStyle: String? = nil, defaultAnswer: String? = nil,
                 placeholder: String? = nil, inputMin: Double? = nil,
-                inputMax: Double? = nil, inputStep: Double? = nil) {
+                inputMax: Double? = nil, inputStep: Double? = nil,
+                promptFingerprint: String? = nil) {
         self.recordName = recordName
         self.prompt = prompt
         self.typeRaw = typeRaw
@@ -116,6 +122,7 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
         self.inputMin = inputMin
         self.inputMax = inputMax
         self.inputStep = inputStep
+        self.promptFingerprint = promptFingerprint
     }
 
     /// Field dictionary for record creation — used only by `dispatch-mod`'s
@@ -135,6 +142,9 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
         if let inputMin { fields["inputMin"] = .double(inputMin) }
         if let inputMax { fields["inputMax"] = .double(inputMax) }
         if let inputStep { fields["inputStep"] = .double(inputStep) }
+        if let promptFingerprint, !promptFingerprint.isEmpty {
+            fields["promptFingerprint"] = .string(promptFingerprint)
+        }
         return fields
     }
 
@@ -155,7 +165,8 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
             placeholder: fields["placeholder"]?.stringValue,
             inputMin: fields["inputMin"]?.doubleValue,
             inputMax: fields["inputMax"]?.doubleValue,
-            inputStep: fields["inputStep"]?.doubleValue
+            inputStep: fields["inputStep"]?.doubleValue,
+            promptFingerprint: fields["promptFingerprint"]?.stringValue
         )
     }
 }
@@ -248,13 +259,16 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
     }
 
     /// Approval = copying this submission into the catalog with a fresh
-    /// record name. Only `dispatch-mod` calls this.
+    /// record name. Only `dispatch-mod` calls this. Stamps the plan-42
+    /// content-identity fingerprint (recomputed from the prompt — never
+    /// trusted from the client).
     public func approved(recordName: String, approvedAt: Date, tags: [String] = []) -> CatalogQuestion {
         CatalogQuestion(
             recordName: recordName, prompt: prompt, typeRaw: typeRaw, choices: choices,
             credit: creditName, approvedAt: approvedAt, tags: tags,
             inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder,
-            inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
+            inputMin: inputMin, inputMax: inputMax, inputStep: inputStep,
+            promptFingerprint: CatalogDedupe.promptFingerprint(prompt)
         )
     }
 }
