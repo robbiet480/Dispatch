@@ -254,11 +254,12 @@ struct SensorSettingsView: View {
 
     /// Sensor rows grouped into categories, each sorted alphabetically by
     /// display name. Every SensorKind appears in exactly one category — the
-    /// four groups partition all 19 cases.
+    /// four groups partition all 20 cases.
     private var sensorCategories: [SensorCategory] {
         let groups: [(String, [SensorKind])] = [
             ("HEALTH", [
-                .healthActivityRings, .healthCaffeine, .healthHeart, .healthHRV,
+                .healthActivityRings, .healthCaffeine, .healthHeart,
+                .healthHeartRange, .healthHRV,
                 .healthMedications, .healthRestingHeart, .healthSleep,
                 .healthFlights, .healthSteps, .healthWorkouts,
             ]),
