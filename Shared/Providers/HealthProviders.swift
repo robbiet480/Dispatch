@@ -104,11 +104,21 @@ final class HealthKitReader: Sendable {
     /// Min and max over `[start, end]` in one statistics query (plan 43).
     /// `errorNoData` (zero samples in the window) is "no reading" — nil, not
     /// an error — matching `average`.
+    ///
+    /// Strict edges (Copilot review, PR #64): without the strict options,
+    /// `predicateForSamples` matches any sample that merely OVERLAPS the
+    /// interval, so a long sample spanning a window edge (e.g. a workout-
+    /// average HR written across the previous report's date) could
+    /// contribute extremes from OUTSIDE the window. "Since the last report"
+    /// means samples fully inside the window — edge-spanning samples belong
+    /// to the neighboring window. Untestable at the kit layer (HealthKit
+    /// predicate), hence pinned by comment.
     func minMax(_ id: HKQuantityTypeIdentifier, unit: HKUnit,
                 from start: Date, to end: Date) async throws -> (min: Double, max: Double)? {
         let type = HKQuantityType(id)
         return try await withCheckedThrowingContinuation { continuation in
-            let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: end,
+                                                        options: [.strictStartDate, .strictEndDate])
             let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate,
                                           options: [.discreteMin, .discreteMax]) { _, stats, error in
                 if let error {
@@ -132,12 +142,17 @@ final class HealthKitReader: Sendable {
 
     /// The first (`newest: false`) or last (`newest: true`) sample strictly
     /// inside `[start, end]` — the window's boundary readings (plan 43).
+    /// Strict edges for the same reason as `minMax` (Copilot review,
+    /// PR #64): an overlap-matched edge-spanning sample would make the
+    /// window's "start"/"end" reading one that isn't actually inside the
+    /// window at all.
     func boundarySample(_ id: HKQuantityTypeIdentifier, unit: HKUnit,
                         from start: Date, to end: Date,
                         newest: Bool) async throws -> (value: Double, date: Date)? {
         let type = HKQuantityType(id)
         return try await withCheckedThrowingContinuation { continuation in
-            let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: end,
+                                                        options: [.strictStartDate, .strictEndDate])
             let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: !newest)]
             let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1,
                                       sortDescriptors: sort) { _, samples, error in
