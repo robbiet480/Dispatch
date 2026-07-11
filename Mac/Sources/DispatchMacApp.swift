@@ -1,3 +1,4 @@
+import AppKit
 import DispatchKit
 import os
 import SwiftData
@@ -41,6 +42,15 @@ struct DispatchMacApp: App {
         container = madeContainer
 
         themeStore = ThemeStore(defaults: appDefaults)
+        // Screenshot rig: `--theme <name>` pins the launch theme so each App
+        // Store shot can use a different palette color — same test-gated
+        // contract as DispatchApp.
+        if isTestEnvironment,
+           let flagIndex = arguments.firstIndex(of: "--theme"),
+           arguments.indices.contains(flagIndex + 1),
+           let forced = Theme(rawValue: arguments[flagIndex + 1]) {
+            themeStore.theme = forced
+        }
         visualizationFilterStore = VisualizationFilterStore(defaults: appDefaults)
 
         // Remote-change reactions (shared observer, plan 13/36): dedupe +
@@ -66,7 +76,34 @@ struct DispatchMacApp: App {
             seedLog.error("failed to seed default questions: \(error, privacy: .public)")
         }
 
+        // Screenshot fixture (same contract as DispatchApp): only reachable
+        // from the test environment's in-memory store, so the seeded demo
+        // reports can never touch (or sync) real iCloud data.
+        if isTestEnvironment, arguments.contains("--demo-data") {
+            do {
+                try DemoData.seed(into: ModelContext(container))
+            } catch {
+                seedLog.error("demo-data seeding failed: \(error, privacy: .public)")
+            }
+        }
+
         remoteChangeObserver.start()
+    }
+
+    /// Screenshot rig: `--screenshot-window` (test-gated) pins the main
+    /// window to a 1440x900-point frame — 16:10, which lands on an
+    /// ASC-accepted Mac screenshot pixel size at both 1x (1440x900) and
+    /// 2x/Retina (2880x1800). Runs async so the window exists.
+    private func pinScreenshotWindowIfRequested() {
+        guard isTestEnvironment,
+              ProcessInfo.processInfo.arguments.contains("--screenshot-window") else { return }
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: { $0.isVisible }) ?? NSApp.windows.first
+            else { return }
+            var frame = window.frame
+            frame.size = NSSize(width: 1440, height: 900)
+            window.setFrame(frame, display: true)
+        }
     }
 
     var body: some Scene {
@@ -78,6 +115,7 @@ struct DispatchMacApp: App {
                 .environment(exportController)
                 .environment(\.appDefaults, appDefaults)
                 .frame(minWidth: 900, minHeight: 560)
+                .onAppear { pinScreenshotWindowIfRequested() }
         }
         .modelContainer(container)
         // File → Import…/Export (plan 36 DECISION 6). Everything routes
