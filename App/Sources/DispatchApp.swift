@@ -166,8 +166,17 @@ struct DispatchApp: App {
             (try? FileManager.default.attributesOfItem(
                 atPath: $0.path(percentEncoded: false)))?[.creationDate] as? Date
         }
+        // Screenshot fixture (review pass): the data-settings shot over an
+        // empty backup state reads as broken UI. Seed a plausible rotation
+        // and inject its throwaway directory — BackupManager then lists it
+        // for the caption count. Test-environment + --demo-data gated.
+        var demoBackupDirectory: URL?
+        if isTestEnvironment, arguments.contains("--demo-data") {
+            demoBackupDirectory = try? DemoData.seedBackupFixture(defaults: appDefaults)
+        }
         backupManager = BackupManager(
             container: container, defaults: appDefaults, isTestEnvironment: isTestEnvironment,
+            directory: demoBackupDirectory,
             storeCreatedAt: storeCreatedAt, isSyncActive: cloudKitActive
         )
 
@@ -351,6 +360,20 @@ struct DispatchApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // Screenshot rig: invisible marker exposing the ACTIVE theme
+                // to the AX tree so the suite can verify --theme applied
+                // before capturing (a wrong-theme shot slipped a review).
+                // Test-environment-only; 1pt and 2% opacity — invisible in
+                // captures but present as a StaticText.
+                .overlay(alignment: .topLeading) {
+                    if isTestEnvironment {
+                        Text(themeStore.theme.rawValue)
+                            .font(.system(size: 4))
+                            .opacity(0.02)
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("active-theme")
+                    }
+                }
                 .environment(themeStore)
                 .environment(awakeStore)
                 .environment(visualizationFilterStore)

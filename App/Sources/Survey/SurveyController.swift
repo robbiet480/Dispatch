@@ -124,15 +124,54 @@ final class SurveyController {
 }
 
 /// Deterministic providers for XCUITest (--mock-sensors).
+///
+/// Screenshot-review fix: this set must cover EVERY capture-checklist row —
+/// a kind with no provider never gets an outcome, so its row spins
+/// "GETTING …" forever (which photographed as a broken mid-collection
+/// state). Medications mocks the granted-but-nothing-logged case (empty
+/// readings), which hides its row — the checklist's documented behavior.
 enum MockProviders {
     static let all: [any SensorProvider] = [
+        Mock(kind: .location, payload: .location(sanFrancisco)),
+        Mock(kind: .weather, payload: .weather(fog)),
         Mock(kind: .battery, payload: .battery(0.8)),
         Mock(kind: .audio, payload: .audio(AudioSample(avg: -52.8, peak: -40))),
         Mock(kind: .altitude, payload: .altitude(63)),
         Mock(kind: .connection, payload: .connection(1)),
+        Mock(kind: .photos, payload: .photos(count: 3, records: [])),
         Mock(kind: .healthSteps, payload: .health([HealthReading(type: "steps", value: 27851, unit: "count")])),
+        Mock(kind: .healthFlights, payload: .health([
+            HealthReading(type: "flightsClimbed", value: 8, unit: "count"),
+            HealthReading(type: "flightsDescended", value: 2, unit: "count"),
+        ])),
+        Mock(kind: .healthActivityRings, payload: .health([
+            HealthReading(type: "activity.move", value: 346, unit: "kcal"),
+            HealthReading(type: "activity.moveGoal", value: 500, unit: "kcal"),
+            HealthReading(type: "activity.exercise", value: 36, unit: "min"),
+            HealthReading(type: "activity.exerciseGoal", value: 30, unit: "min"),
+            HealthReading(type: "activity.stand", value: 7, unit: "hours"),
+            HealthReading(type: "activity.standGoal", value: 12, unit: "hours"),
+        ])),
+        Mock(kind: .healthMedications, payload: .health([])),
         Mock(kind: .media, payload: .media(MediaSample(source: .spotify, title: "Song 2", artist: "Blur"))),
     ]
+
+    private static var sanFrancisco: LocationSnapshot {
+        var snapshot = LocationSnapshot(latitude: 37.7764, longitude: -122.4231)
+        var placemark = Placemark()
+        placemark.locality = "San Francisco"
+        placemark.administrativeArea = "CA"
+        snapshot.placemark = placemark
+        return snapshot
+    }
+
+    private static var fog: WeatherObservation {
+        var weather = WeatherObservation()
+        weather.condition = "Fog"
+        weather.tempF = 61
+        weather.tempC = 16.1
+        return weather
+    }
 
     struct Mock: SensorProvider {
         let kind: SensorKind
