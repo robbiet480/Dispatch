@@ -25,6 +25,13 @@
     <array>
         <string>iCloud.io.robbie.Dispatch</string>
     </array>
+    <!-- Development-signed builds default to the CloudKit DEVELOPMENT
+         environment, but all real report data lives in PRODUCTION (written
+         by TestFlight iOS/watch builds) — a dev Mac build would sync an
+         empty database forever. Pin Production so local runs see real data;
+         App Store builds are Production regardless. -->
+    <key>com.apple.developer.icloud-container-environment</key>
+    <string>Production</string>
     <!-- macOS push entitlement key is PREFIXED with com.apple.developer.
          (unlike iOS's bare aps-environment). SwiftData's CloudKit mirroring
          registers for remote notifications to learn about server changes;
