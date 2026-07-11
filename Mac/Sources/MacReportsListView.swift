@@ -14,8 +14,11 @@ struct MacReportsListView: View {
     @Environment(ThemeStore.self) private var themeStore
 
     @Binding var selection: String?
+    // Hoisted to MacRootView so the dashboard's charts filter with the same
+    // query the sidebar list and stat tiles use.
+    @Binding var searchQuery: String
 
-    @State private var searchQuery = ""
+
     @SwiftUI.FocusState private var isSearchFocused: Bool
     @State private var pendingDelete: Report?
 

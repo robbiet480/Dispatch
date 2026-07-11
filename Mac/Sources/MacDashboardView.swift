@@ -14,10 +14,19 @@ struct MacDashboardView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(VisualizationFilterStore.self) private var filterStore
 
+    /// The sidebar's search query (owned by MacRootView): the dashboard's
+    /// charts must aggregate the same search-filtered report set the sidebar
+    /// list and stat tiles show, not all-reports totals.
+    var searchQuery: String = ""
+
     @State private var visualizations: [String: QuestionVisualization] = [:]
     @State private var isShowingFilter = false
 
     private var theme: Theme { themeStore.theme }
+
+    private var searchedReports: [Report] {
+        ReportSearch.filter(reports, query: searchQuery)
+    }
 
     private var visibleQuestions: [Question] {
         questions.filter { $0.isEnabled && filterStore.isVisible($0.uniqueIdentifier) }
@@ -41,14 +50,15 @@ struct MacDashboardView: View {
             hasher.combine(person.alternateNames)
             partial ^= hasher.finalize()
         }
-        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)|\(peopleFingerprint)"
+        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)|\(peopleFingerprint)|\(searchQuery)"
     }
 
     private func filteredReports() -> [Report] {
+        let searched = searchedReports
         let criteria = filterStore.criteria
-        guard !criteria.isEmpty else { return reports }
+        guard !criteria.isEmpty else { return searched }
         let peopleQuestionIDs = Set(questions.filter { $0.type == .people }.map(\.uniqueIdentifier))
-        return reports.filter {
+        return searched.filter {
             ReportFilter.matches(report: $0, criteria: criteria,
                                  peopleQuestionIDs: peopleQuestionIDs, people: people)
         }
@@ -129,7 +139,7 @@ struct MacDashboardView: View {
 
                 Spacer()
 
-                Text("\(reports.count) reports")
+                Text("\(searchedReports.count) reports")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.6))
                     .accessibilityIdentifier("report-count")

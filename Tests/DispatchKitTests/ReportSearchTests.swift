@@ -209,3 +209,55 @@ import Testing
 
     #expect(report.isBackdated == false)
 }
+
+/// Mac dashboard regression (review fix): the visualization aggregates must
+/// be built from the SEARCH-FILTERED report set — the same set the sidebar
+/// stats count — never the all-reports set. Pins the kit-side composition
+/// (ReportSearch.filter → ReportsOverview.stats / VisualizationData.build)
+/// so both surfaces agree on what "2 reports" means.
+@Test func searchFilteredReportsDriveStatsAndVisualizationsConsistently() throws {
+    let question = Question()
+    question.uniqueIdentifier = "q-working"
+    question.prompt = "Are you working?"
+    question.type = .yesNo
+    question.choices = ["Yes", "No"]
+
+    func makeReport(note: String, answer: String) -> Report {
+        let report = Report()
+        report.date = Date()
+        let noteResponse = Response()
+        noteResponse.textResponses = [TokenValue(text: note)]
+        noteResponse.report = report
+        let answerResponse = Response()
+        answerResponse.questionIdentifier = "q-working"
+        answerResponse.answeredOptions = [answer]
+        answerResponse.report = report
+        report.responses = [noteResponse, answerResponse]
+        return report
+    }
+
+    let reports = [
+        makeReport(note: "Coffee run", answer: "Yes"),
+        makeReport(note: "Coffee break", answer: "No"),
+        makeReport(note: "Gym", answer: "Yes"),
+        makeReport(note: "Gym again", answer: "Yes"),
+    ]
+
+    let searched = ReportSearch.filter(reports, query: "coffee")
+    #expect(searched.count == 2)
+
+    // The stat tiles and the charts consume the same filtered set.
+    let stats = ReportsOverview.stats(from: searched)
+    #expect(stats.reports == 2)
+
+    guard case .optionShares(let shares) = VisualizationData.build(for: question, reports: searched)
+    else {
+        Issue.record("expected optionShares")
+        return
+    }
+    // Only the two "coffee" reports contribute: one Yes, one No — 50/50.
+    // The all-reports set would read 75/25.
+    #expect(shares.count == 2)
+    #expect(shares.first(where: { $0.option == "Yes" })?.share == 0.5)
+    #expect(shares.first(where: { $0.option == "No" })?.share == 0.5)
+}

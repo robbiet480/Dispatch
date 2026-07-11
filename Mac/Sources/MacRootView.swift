@@ -12,10 +12,14 @@ struct MacRootView: View {
     @Environment(MacExportController.self) private var exportController
     @State private var selectedReportID: String?
     @State private var detailPane: MacDetailPane = .dashboard
+    // Owned here (not by the sidebar) so the dashboard sees the same search
+    // the sidebar list and stat tiles do — a search that filters "2 reports"
+    // must not leave the charts aggregating all 45.
+    @State private var searchQuery = ""
 
     var body: some View {
         NavigationSplitView {
-            MacReportsListView(selection: $selectedReportID)
+            MacReportsListView(selection: $selectedReportID, searchQuery: $searchQuery)
                 .navigationSplitViewColumnWidth(min: 300, ideal: 360)
         } detail: {
             detailContent
@@ -70,7 +74,7 @@ struct MacRootView: View {
             }
         } else {
             switch detailPane {
-            case .dashboard: MacDashboardView()
+            case .dashboard: MacDashboardView(searchQuery: searchQuery)
             case .insights: MacInsightsView()
             }
         }
