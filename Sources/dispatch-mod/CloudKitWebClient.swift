@@ -106,6 +106,14 @@ struct CloudKitWebClient {
                 if let list = entry["value"] as? [String] { fields[name] = .stringList(list) }
             case "INT64":
                 if let int = entry["value"] as? Int { fields[name] = .int(int) }
+            case "DOUBLE":
+                // CKWS may serialize a whole number without a decimal point,
+                // which JSONSerialization can bridge as Int — promote it.
+                if let double = entry["value"] as? Double {
+                    fields[name] = .double(double)
+                } else if let int = entry["value"] as? Int {
+                    fields[name] = .double(Double(int))
+                }
             default:
                 if let string = entry["value"] as? String { fields[name] = .string(string) }
                 else if let int = entry["value"] as? Int { fields[name] = .int(int) }
@@ -227,7 +235,9 @@ struct CloudKitWebClient {
         let submission = try lookupSubmission(recordName: submissionRecordName)
         let errors = CatalogValidation.validate(
             prompt: submission.prompt, typeRaw: submission.typeRaw,
-            choices: submission.choices, creditName: submission.creditName
+            choices: submission.choices, creditName: submission.creditName,
+            inputStyle: submission.inputStyle, defaultAnswer: submission.defaultAnswer,
+            placeholder: submission.placeholder
         )
         guard errors.isEmpty else {
             throw ClientError.malformedResponse(
