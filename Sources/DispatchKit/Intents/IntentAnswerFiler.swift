@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// The write-side backing for the "Log Answer" App Intent (plan 43): the
+/// The write-side backing for the "Log Answer" App Intent (plan 49): the
 /// generalization of `QuickAnswerFiler` from a single Yes/No question to any
 /// question type. Report-centric — the answer is filed INSIDE a real,
 /// minimal `Report` through the shared `ReportBuilder` path; there is no
@@ -17,7 +17,7 @@ public enum IntentAnswerFiler {
     private static let affirmativeWords: Set<String> = ["yes", "y", "true", "1", "on", "yep", "yeah"]
 
     /// Maps a raw Shortcuts string to the `AnswerValue` for a question's type.
-    /// Lenient and type-directed (see plan 43 design decisions). An empty
+    /// Lenient and type-directed (see plan 49 design decisions). An empty
     /// (whitespace-only) raw value is always `.skipped`.
     public static func coercedValue(forType type: QuestionType,
                                     choices: [String], raw: String) -> AnswerValue {

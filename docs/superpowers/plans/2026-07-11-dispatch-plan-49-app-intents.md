@@ -1,4 +1,4 @@
-# Dispatch Plan 43: Siri Shortcuts / App Intents (report-centric)
+# Dispatch Plan 49: Siri Shortcuts / App Intents (report-centric)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -189,7 +189,7 @@ intents write to.
   report's answered response for the ID (drafts and payload-less responses
   skipped; ties by later `date`); nil when none.
 - [x] Implement (pure, mirrors the exporter flatten precedence). `swift test` green.
-- [x] Commit `feat(kit): AnswerSummary — response flatten + last-answer query (plan 43, #59)`.
+- [x] Commit `feat(kit): AnswerSummary — response flatten + last-answer query (plan 49, #59)`.
 
 ### Task 2: Kit — `IntentAnswerFiler` (coercion + file) (TDD)
 
@@ -208,7 +208,7 @@ intents write to.
   report with `trigger .intent` containing the coerced answer, and returns nil
   for a missing/ineligible ID.
 - [x] Implement over `ReportBuilder.save`. `swift test` green.
-- [x] Commit `feat(kit): IntentAnswerFiler — type-directed answer coercion + report filing (plan 43, #59)`.
+- [x] Commit `feat(kit): IntentAnswerFiler — type-directed answer coercion + report filing (plan 49, #59)`.
 
 ### Task 3: App — `QuestionEntity` + query, and the six intents + donation
 
@@ -234,7 +234,7 @@ intents write to.
   `AnswerSummary`; `ReturnsValue<Int>`/`ReturnsValue<String>` + `ProvidesDialog`.
 - [x] `DispatchShortcuts`: phrases for all discoverable intents.
 - [x] `xcodegen` + `xcodebuild build-for-testing` (iPhone 17 Pro) green.
-- [x] Commit `feat: first-class Shortcuts/App Intents — file report, log answer, queries (plan 43, #59)`.
+- [x] Commit `feat: first-class Shortcuts/App Intents — file report, log answer, queries (plan 49, #59)`.
 
 ### Task 4: Wrap + self-review
 
@@ -249,7 +249,7 @@ intents write to.
 
 ## Completion note (2026-07-11)
 
-**Shipped** — all four tasks, one commit each on `plan-43-app-intents`
+**Shipped** — all four tasks, one commit each on `plan-49-app-intents`
 (branched from `main`), same PR as the plan doc:
 
 1. **`AnswerSummary`** (kit): `text(for:)` flattens a `Response` to a display

@@ -5,7 +5,7 @@ import SwiftData
 
 private let intentStoreLog = Logger(subsystem: "io.robbie.Dispatch", category: "intent-store")
 
-/// Shared SwiftData access for the App Intents layer (plan 43). App Intents
+/// Shared SwiftData access for the App Intents layer (plan 49). App Intents
 /// are instantiated by the system (Shortcuts, Siri, Spotlight) — often in a
 /// background-launched process while the foreground app has the store open —
 /// so entity/query intents open the SHARED App Group store READ-ONLY
