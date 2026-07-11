@@ -171,9 +171,13 @@ enum StatsMath {
     static func normalQuantile(_ p: Double) -> Double {
         precondition(p > 0 && p < 1, "quantile requires 0 < p < 1")
         var low = -12.0, high = 12.0
-        for _ in 0..<200 {
+        // Bisection converges to Double precision well inside this cap; break
+        // as soon as the bracket collapses so repeated Wilson/Newcombe/Fisher
+        // calls per drill-in don't burn a fixed 200 iterations each.
+        for _ in 0..<80 {
             let mid = (low + high) / 2
             if normalCDF(mid) < p { low = mid } else { high = mid }
+            if high - low < 1e-12 { break }
         }
         return (low + high) / 2
     }
@@ -192,9 +196,13 @@ enum StatsMath {
     static func studentTQuantile(_ p: Double, df: Double) -> Double {
         precondition(p > 0 && p < 1, "quantile requires 0 < p < 1")
         var low = -1e6, high = 1e6
-        for _ in 0..<200 {
+        // Welch runs this per comparison and a drill-in can do dozens; break
+        // on bracket collapse instead of always spending 200 iterations. The
+        // 1e-9 tolerance is far tighter than the 1e-3 display/test tolerance.
+        for _ in 0..<120 {
             let mid = (low + high) / 2
             if studentTCDF(mid, df: df) < p { low = mid } else { high = mid }
+            if high - low < 1e-9 { break }
         }
         return (low + high) / 2
     }

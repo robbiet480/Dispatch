@@ -650,9 +650,15 @@ public enum CorrelationEngine {
         }
     }
 
-    /// "Answered" per kind: an empty tokens/people list is still an answer
-    /// ("nobody"), but yes/no needs an option, number a parseable value,
-    /// choice a non-empty selection.
+    /// "Answered" for TARGET/eligibility purposes: yes/no needs an option,
+    /// number a parseable value, choice a non-empty selection, and
+    /// tokens/people at least one named token. An empty ("nobody") token list
+    /// yields no per-token target, so counting it toward drill-in eligibility
+    /// would surface a question as eligible that `compute` can't drill into
+    /// (zero targets → nil). Requiring a named token keeps eligibility and
+    /// drillability in lock-step. NOTE: the people-DIMENSION universe uses a
+    /// different, looser gate (`tokens != nil` in buildDimensions) — there a
+    /// "nobody" report is a valid observation of that person's absence.
     public static func isAnswered(_ response: Response, type: QuestionType) -> Bool {
         switch type {
         case .yesNo:
@@ -662,7 +668,7 @@ public enum CorrelationEngine {
         case .multipleChoice:
             response.answeredOptions?.isEmpty == false
         case .tokens, .people:
-            response.tokens != nil
+            response.tokens?.isEmpty == false
         default:
             false
         }

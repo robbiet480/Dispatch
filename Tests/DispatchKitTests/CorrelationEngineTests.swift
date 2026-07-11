@@ -529,6 +529,33 @@ private func plantedPearsonFixture() -> ([Report], [Question]) {
     #expect(!CorrelationEngine.isAnswered(makeResponse(question: "q-num"), type: .number))
 }
 
+/// PR #40 (Copilot): a people/tokens question answered only with empty
+/// ("nobody"/"nothing") token lists produces no per-token target, so
+/// `compute` returns nil. Eligibility must AGREE — it may not advertise such
+/// a question as drillable. With no named token anywhere, the question is
+/// neither eligible nor drillable (they stay in lock-step); once a token is
+/// named, it becomes both.
+@Test func peopleQuestionWithOnlyEmptyTokensIsNeitherEligibleNorDrillable() {
+    let questions = [makeQuestion(id: "q-who", prompt: "Who?", type: .people)]
+    var reports: [Report] = []
+    for index in 0..<40 {
+        reports.append(makeReport(date: day(index), responses: [
+            makeResponse(question: "q-who", tokens: []),   // "nobody" — no target
+        ]))
+    }
+    #expect(!CorrelationEngine.eligibleQuestionIDs(reports: reports, questions: questions)
+        .contains("q-who"))
+    #expect(CorrelationEngine.compute(questionID: "q-who", reports: reports,
+                                      questions: questions) == nil)
+
+    // Naming a person on ≥20 reports makes it both eligible and drillable.
+    for index in 0..<25 { reports[index].responses?.first?.tokens = [TokenValue(text: "Angela")] }
+    #expect(CorrelationEngine.eligibleQuestionIDs(reports: reports, questions: questions)
+        .contains("q-who"))
+    #expect(CorrelationEngine.compute(questionID: "q-who", reports: reports,
+                                      questions: questions) != nil)
+}
+
 @Test func eligibleQuestionIDsFilterKindAndCountAndOrderDeterministically() {
     let questions = [
         makeQuestion(id: "q-a", prompt: "Zebra?", type: .yesNo, choices: ["Yes", "No"]),
