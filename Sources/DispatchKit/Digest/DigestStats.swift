@@ -228,9 +228,27 @@ public struct DigestStats: Equatable, Sendable {
             workoutCount: workouts.count,
             workoutSeconds: workoutSeconds,
             streakDays: ReportStreak.days(reports: filed, now: ending, calendar: calendar),
-            topInsights: Array(InsightsEngine.compute(reports: filed, questions: questions)
-                .prefix(insightLimit))
+            topInsights: dedupedTopInsights(
+                from: InsightsEngine.compute(reports: filed, questions: questions))
         )
+    }
+
+    /// Picks the digest's `insightLimit` insight sentences from the ranked
+    /// list, skipping any insight that shares a source key (question, metric,
+    /// place, …) with one already taken: the same question paired with two
+    /// different contexts produces two near-identical sentences, and a
+    /// two-sentence summary that repeats itself reads broken (visual review
+    /// fix). The Insights screen still shows the full ranked list.
+    static func dedupedTopInsights(from insights: [Insight]) -> [Insight] {
+        var usedKeys: Set<String> = []
+        var selected: [Insight] = []
+        for insight in insights {
+            guard selected.count < insightLimit else { break }
+            guard usedKeys.isDisjoint(with: insight.sourceKeys) else { continue }
+            usedKeys.formUnion(insight.sourceKeys)
+            selected.append(insight)
+        }
+        return selected
     }
 
     // MARK: - Template fallback

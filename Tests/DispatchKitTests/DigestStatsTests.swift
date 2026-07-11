@@ -252,3 +252,63 @@ private var fixturePriorWeek: [Report] {
         #expect(stats.period == period)
     }
 }
+
+// MARK: - Insight dedupe (review fix: the digest repeated a sentence)
+
+@Test func dedupedTopInsightsSkipInsightsSharingASourceKey() {
+    let officeWorking = Insight(
+        title: "You answer Yes to “Are you working?” on 85% of reports at Office.",
+        detail: "Compared with 30% of other reports — based on 40 reports.",
+        kind: .cooccurrence, strength: 0.9, sampleCount: 40,
+        sourceKeys: ["question:q-working", "place:text:Office"])
+    let laptopWorking = Insight(
+        title: "You answer Yes to “Are you working?” on 82% of reports when you mention “laptop”.",
+        detail: "Compared with 31% of other reports — based on 40 reports.",
+        kind: .cooccurrence, strength: 0.85, sampleCount: 40,
+        sourceKeys: ["question:q-working", "token:laptop"])
+    let gymSteps = Insight(
+        title: "Reports where you mention “gym” average 2,400 more steps.",
+        detail: "Average 8,400 vs 6,000 otherwise — based on 40 reports.",
+        kind: .categoricalNumeric, strength: 0.8, sampleCount: 40,
+        sourceKeys: ["token:gym", "health:steps"])
+
+    // laptopWorking restates q-working — skipped in favor of the next
+    // distinct insight, so the two digest sentences never repeat a question.
+    let selected = DigestStats.dedupedTopInsights(
+        from: [officeWorking, laptopWorking, gymSteps])
+    #expect(selected == [officeWorking, gymSteps])
+}
+
+@Test func questionContributesAtMostOneSummarySentence() {
+    // One yes/no question conditioned by TWO places produces two ranked
+    // co-occurrence insights that both cite “Are you working?” — the
+    // template summary must quote the question at most once.
+    let questions = [
+        makeQuestion(id: "q-working", prompt: "Are you working?", type: .yesNo,
+                     choices: ["Yes", "No"]),
+        makeQuestion(id: "q-where", prompt: "Where are you?", type: .location),
+    ]
+    var reports: [Report] = []
+    for index in 0..<20 {
+        reports.append(makeReport(date: day(index), responses: [
+            makeResponse(question: "q-working", options: [index < 17 ? "Yes" : "No"]),
+            makeResponse(question: "q-where", place: "Office"),
+        ]))
+        reports.append(makeReport(date: day(index, hour: 18), responses: [
+            makeResponse(question: "q-working", options: [index < 6 ? "Yes" : "No"]),
+            makeResponse(question: "q-where", place: "Home"),
+        ]))
+    }
+
+    // Precondition: without dedupe the engine really does rank 2+ insights
+    // that all reference the question (otherwise this test proves nothing).
+    let ranked = InsightsEngine.compute(reports: reports, questions: questions)
+    #expect(ranked.filter { $0.sourceKeys.contains("question:q-working") }.count >= 2)
+
+    let stats = DigestStats.compute(reports: reports, questions: questions,
+                                    weekEnding: weekEnding, calendar: utcCalendar)
+    #expect(stats.topInsights.count == 1)
+    let summary = stats.templateSummary
+    let mentions = summary.components(separatedBy: "Are you working?").count - 1
+    #expect(mentions == 1)
+}

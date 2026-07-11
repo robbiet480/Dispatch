@@ -506,7 +506,8 @@ public enum InsightsEngine {
                 let detail = "Average \(numeric.format(withMean)) vs \(numeric.format(withoutMean)) otherwise — based on \(sampleCount) reports."
                 insights.append(Insight(title: title, detail: detail,
                                         kind: .categoricalNumeric,
-                                        strength: strength, sampleCount: sampleCount))
+                                        strength: strength, sampleCount: sampleCount,
+                                        sourceKeys: [categorical.sourceKey, numeric.sourceKey]))
             }
         }
         return insights
@@ -556,7 +557,8 @@ public enum InsightsEngine {
                 let candidate = Candidate(
                     insight: Insight(title: title, detail: detail,
                                      kind: .cooccurrence,
-                                     strength: strength, sampleCount: sampleCount),
+                                     strength: strength, sampleCount: sampleCount,
+                                     sourceKeys: [context.sourceKey, answer.sourceKey]),
                     contextID: context.id,
                     absDelta: abs(delta))
                 let pairKey = context.id < answer.id

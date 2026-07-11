@@ -28,13 +28,21 @@ public struct Insight: Equatable, Sendable {
     public var strength: Double
     /// Reports the comparison was computed over (both sides of the split).
     public var sampleCount: Int
+    /// The source keys of the two signals this insight compares (e.g.
+    /// `question:<id>` × `place:<key>`). Identity for dedupe: two insights
+    /// sharing a source key restate the same underlying signal — the digest's
+    /// two-sentence summary skips the weaker one so a question never
+    /// contributes two near-identical sentences.
+    public var sourceKeys: Set<String>
 
     public init(title: String, detail: String, kind: Kind,
-                strength: Double, sampleCount: Int) {
+                strength: Double, sampleCount: Int,
+                sourceKeys: Set<String> = []) {
         self.title = title
         self.detail = detail
         self.kind = kind
         self.strength = strength
         self.sampleCount = sampleCount
+        self.sourceKeys = sourceKeys
     }
 }
