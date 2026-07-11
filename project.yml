@@ -49,7 +49,7 @@ targets:
         # "Dispatch" was taken on the App Store).
         INFOPLIST_KEY_CFBundleDisplayName: Dispatch
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        CURRENT_PROJECT_VERSION: 28
+        CURRENT_PROJECT_VERSION: 29
         MARKETING_VERSION: 1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -130,7 +130,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         # Extension CFBundleShortVersionString/CFBundleVersion must match the
         # host app's or App Store validation rejects the archive.
-        CURRENT_PROJECT_VERSION: 28
+        CURRENT_PROJECT_VERSION: 29
         MARKETING_VERSION: 1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         SWIFT_VERSION: 6.0
@@ -169,7 +169,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Dispatch
         # Versions mirror the iOS targets (archive-validation constraint —
         # the controller bumps all four targets together at ship time).
-        CURRENT_PROJECT_VERSION: 28
+        CURRENT_PROJECT_VERSION: 29
         MARKETING_VERSION: 1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -206,7 +206,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.watchkitapp.widgets
         GENERATE_INFOPLIST_FILE: YES
         # Extension versions must match the host app's (ASC validation).
-        CURRENT_PROJECT_VERSION: 28
+        CURRENT_PROJECT_VERSION: 29
         MARKETING_VERSION: 1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         SWIFT_VERSION: 6.0
@@ -252,7 +252,7 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.lifestyle
         # Versions mirror the iOS/watch targets (the controller bumps all
         # targets together at ship time).
-        CURRENT_PROJECT_VERSION: 28
+        CURRENT_PROJECT_VERSION: 29
         MARKETING_VERSION: 1.0
         DEVELOPMENT_TEAM: UTQFCBPQRF
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
