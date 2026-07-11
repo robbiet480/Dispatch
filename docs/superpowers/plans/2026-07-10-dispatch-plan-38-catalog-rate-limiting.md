@@ -33,7 +33,7 @@
 
 ### Task 1: Kit — `SubmissionThrottle` (pure, TDD)
 
-- [ ] **Files:** new `Sources/DispatchKit/Catalog/SubmissionThrottle.swift`, new `Tests/DispatchKitTests/SubmissionThrottleTests.swift`.
+- [x] **Files:** new `Sources/DispatchKit/Catalog/SubmissionThrottle.swift`, new `Tests/DispatchKitTests/SubmissionThrottleTests.swift`.
 
 **Contract:** pure value logic, injected clock (`now:` parameters, no `Date()` inside): `remaining(now:)` from a stored `[Date]`, `canSubmit(now:)`, `recording(now:)` returns the pruned+appended array, `nextAllowed(now:)` for the reset-time UI. Limit 5 per rolling 24h, constant `SubmissionThrottle.dailyLimit`. Doc comment states verbatim that this is per-device friction, trivially bypassable, and that moderation (dispatch-mod flood detection) is the actual abuse control. Tests: empty history, boundary at exactly 24h, pruning of stale entries, ordering-insensitive input, `nextAllowed` correctness.
 
@@ -41,7 +41,7 @@ Verify: `swift test`. Commit `feat(kit): SubmissionThrottle — per-device catal
 
 ### Task 2: App — throttle wired into submit flow
 
-- [ ] **Files:** `App/Sources/Catalog/CatalogStore.swift` (persist/prune timestamps in `UserDefaults.standard` under `catalog.submissionTimestamps`; expose `submissionsRemaining` / `nextSubmissionAllowed`; record a timestamp only after `provider.submit` returns without throwing; throw a new `CatalogProviderError.throttled(until:)` when exhausted so scripted paths hit the same wall as the UI), `App/Sources/Catalog/CatalogSubmitView.swift` (quota footer + Send disabled at zero with reset time; identifier `catalog-submit-quota`), UI test in the existing catalog suite (stub provider: submit up to the limit via seeded defaults, assert Send disabled + quota text — seed the timestamps through a launch-argument hook rather than five round-trips).
+- [x] **Files:** `App/Sources/Catalog/CatalogStore.swift` (persist/prune timestamps in `UserDefaults.standard` under `catalog.submissionTimestamps`; expose `submissionsRemaining` / `nextSubmissionAllowed`; record a timestamp only after `provider.submit` returns without throwing; throw a new `CatalogProviderError.throttled(until:)` when exhausted so scripted paths hit the same wall as the UI), `App/Sources/Catalog/CatalogSubmitView.swift` (quota footer + Send disabled at zero with reset time; identifier `catalog-submit-quota`), UI test in the existing catalog suite (stub provider: submit up to the limit via seeded defaults, assert Send disabled + quota text — seed the timestamps through a launch-argument hook rather than five round-trips).
 
 **Contract:** first submit of a fresh install shows no quota UI (footer appears only at ≤2 remaining or when exhausted — friction shouldn't advertise itself); failed submits don't consume quota; existing `catalog-submit-*` identifiers unchanged. Stub provider stays the UI-test boundary — no real CloudKit.
 
@@ -49,7 +49,7 @@ Verify: `swift test`, build-for-testing, catalog UI tests. Commit `feat: per-dev
 
 ### Task 3: dispatch-mod — flood detection + `reject-user`
 
-- [ ] **Files:** `Sources/dispatch-mod/CloudKitWebClient.swift` (`queryRecords` surfaces `created.userRecordName` from each raw record; `pendingSubmissions()` passes it through), `Sources/DispatchKit/Catalog/CatalogQuestion.swift` (`SubmittedQuestion.createdUserRecordName: String?`, nil outside the mod tool; kit tests updated), `Sources/dispatch-mod/DispatchMod.swift` (`list` gains a per-creator summary block — `Submitters: <user> ×N` — with a `⚠️ FLOOD` marker above the threshold, default 10, `--flood-threshold N`; new `reject-user <userRecordName>` subcommand: prints that creator's pending submissions, confirms interactively or via `--yes`, deletes with per-record verification, reports count; help text updated), `Sources/dispatch-mod/Dashboard.swift` (pending list groups by submitter with counts; flood marker; per-user bulk-reject button wired to a new `/api/reject-user` endpoint carrying the session token, same hardening rules — user record names are untrusted output, escape them).
+- [x] **Files:** `Sources/dispatch-mod/CloudKitWebClient.swift` (`queryRecords` surfaces `created.userRecordName` from each raw record; `pendingSubmissions()` passes it through), `Sources/DispatchKit/Catalog/CatalogQuestion.swift` (`SubmittedQuestion.createdUserRecordName: String?`, nil outside the mod tool; kit tests updated), `Sources/dispatch-mod/DispatchMod.swift` (`list` gains a per-creator summary block — `Submitters: <user> ×N` — with a `⚠️ FLOOD` marker above the threshold, default 10, `--flood-threshold N`; new `reject-user <userRecordName>` subcommand: prints that creator's pending submissions, confirms interactively or via `--yes`, deletes with per-record verification, reports count; help text updated), `Sources/dispatch-mod/Dashboard.swift` (pending list groups by submitter with counts; flood marker; per-user bulk-reject button wired to a new `/api/reject-user` endpoint carrying the session token, same hardening rules — user record names are untrusted output, escape them).
 
 **Contract:** grouping is client-side over the full pending fetch (no new query shapes). Verify against live Development: `list` shows the submitter summary; a `reject-user` round-trip on probe submissions (create a few via `whoami`-style probes or a dev build, bulk-reject, confirm `list` empties — noting query-index lag per docs/moderation.md). Confirm the `___createdBy QUERYABLE` index is present in the live schema (`setup --export` diff or the existing probes) — expected present since the plan-20 bootstrap; this task verifies, adds nothing.
 
@@ -57,8 +57,43 @@ Verify: `swift test`, `swift build`, `swift run dispatch-mod --help`, live Devel
 
 ### Task 4: docs — emergency lever + operations; wrap
 
-- [ ] **Files:** `docs/moderation.md` (new section "Abuse response & the emergency lever": the three layers and what each honestly provides; flood-detection workflow — `list` → `reject-user`; the Console circuit breaker: revoke `_icloud` CREATE on `SubmittedQuestion`, per environment, submissions off globally within CloudKit permission propagation, browse unaffected, app shows the existing submit error; restore = re-grant; the `setup`-would-re-grant caveat from the design decisions; explicit statement that CloudKit offers no server-side rate limiting and the client throttle is friction only), this plan doc (completion notes).
+- [x] **Files:** `docs/moderation.md` (new section "Abuse response & the emergency lever": the three layers and what each honestly provides; flood-detection workflow — `list` → `reject-user`; the Console circuit breaker: revoke `_icloud` CREATE on `SubmittedQuestion`, per environment, submissions off globally within CloudKit permission propagation, browse unaffected, app shows the existing submit error; restore = re-grant; the `setup`-would-re-grant caveat from the design decisions; explicit statement that CloudKit offers no server-side rate limiting and the client throttle is friction only), this plan doc (completion notes).
 
 **Contract:** a moderator who has never read this plan can respond to a flood end-to-end from docs/moderation.md alone. Wrap: full UI suite green (iPhone), rebase on main, PR `feat: catalog submission rate limiting (plan 38)` referencing #31 — merging it closes the precondition; the open-submissions announcement itself remains a human call on #31.
 
 Verify: `swift test`, full UI suite. Commit `docs: abuse response + emergency lever for catalog submissions (plan 38, #31)`.
+
+---
+
+## Completion notes (2026-07-11)
+
+All four tasks landed. Kit suite: **598 tests green** (588 on main + 9
+`SubmissionThrottleTests` + 1 creator-metadata pin in `CatalogTests`).
+Catalog UI tests: 5/5 green on iPhone 17 Pro (includes the new
+quota-exhausted test seeded via `CATALOG_SEEDED_SUBMISSIONS`).
+
+**Deviations from the plan as written:**
+
+- **Branch:** implemented on `plan-38-doc` (house one-branch workflow — the
+  docs PR #32 becomes the feature PR), not a new `plan-38-catalog-rate-limiting`
+  branch/PR.
+- **Plan 41 adaptation:** the submit path had grown input-config parameters
+  (style/default/placeholder/bounds) since this plan was written; the throttle
+  wraps the widened `CatalogStore.submit` unchanged, and the quota footer sits
+  below the plan-41 sections in `CatalogSubmitView`.
+- **UI-test seed hook doubles as a reset:** `UserDefaults` persists across
+  launches on a simulator, so under `--ui-testing` the store always overwrites
+  the throttle state from `CATALOG_SEEDED_SUBMISSIONS` (default 0) — quota
+  state can't leak between UI tests.
+- **Live Development verification, partial:** `list` (signed round-trip),
+  `whoami` (creator metadata readable from a create response), `reject-user`'s
+  empty path, and `setup --export` confirming `___createdBy REFERENCE
+  QUERYABLE` live on both `SubmittedQuestion` and `QuestionFlag` (verify-only;
+  the export snapshot was NOT committed — it also contains unrelated CD_* type
+  drift, out of scope here). **Not performed:** a populated flood →
+  `reject-user` round trip — the tool has no create-submission path and a
+  temporary probe subcommand wasn't appropriate to land. Remaining manual
+  smoke: submit a few from a dev build (or Console), confirm the Submitters
+  summary + `reject-user` cleanup.
+- **No Production changes:** no schema changes anywhere; nothing for the
+  Console beyond what §3 already required.

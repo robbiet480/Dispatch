@@ -285,9 +285,11 @@ Production afterwards: `swift run dispatch-mod list --env production`, etc.
 ## 4. Using the tool
 
 ```sh
-swift run dispatch-mod list                    # pending submissions + open flags
+swift run dispatch-mod list                    # pending + flags + per-submitter summary
+swift run dispatch-mod list --flood-threshold 5
 swift run dispatch-mod approve <recordName> --tags mood,daily
 swift run dispatch-mod reject <recordName>
+swift run dispatch-mod reject-user <userRecordName>   # bulk-delete one creator's pending
 swift run dispatch-mod serve                   # http://127.0.0.1:8787 dashboard
 swift run dispatch-mod serve --port 9000 --env production
 ```
@@ -331,6 +333,68 @@ proves the signature is accepted; an authentication failure returns
 almost always means the public key isn't registered under Production yet
 (or `keyIDProduction` is missing) — key registrations are per-environment,
 see §1.
+
+## 4½. Abuse response & the emergency lever (plan 38)
+
+**The honest premise:** CloudKit's public database has **no server-side rate
+limiting for authenticated creates**. Any signed-in iCloud account can script
+unlimited `SubmittedQuestion` creates against the container. No client-side
+measure changes that. What CloudKit *does* give us: every record carries the
+creator's identity (`created.userRecordName` — CloudKit's own metadata, which
+we never store as a field), and `CatalogQuestion` is writable only by the
+server key. So a flood can fill the **moderation queue**, never the
+**catalog**. The three layers, and what each honestly provides:
+
+| Layer | What it is | What it actually provides |
+|---|---|---|
+| 1. Client throttle | `SubmissionThrottle` (kit): 5 per device per rolling 24h, `UserDefaults`-persisted | **Friction only.** Stops accidental double-submits; trivially bypassed by scripts or reinstalls. Zero security. |
+| 2. Flood detection + bulk cleanup | `dispatch-mod list` groups pending by creator; `reject-user` deletes a creator's queue | **The real defense.** Nothing reaches the catalog without approval; floods are detected and cleaned in one command. |
+| 3. Emergency lever | Console permission edit: revoke `_icloud` CREATE on `SubmittedQuestion` | **The circuit breaker.** Submissions off globally while a sustained flood is active. |
+
+### Responding to a flood
+
+1. `swift run dispatch-mod list` (or the dashboard's Submitters table). The
+   per-creator summary marks anyone with **more than 10 pending submissions**
+   (twice the client-side daily cap, so a reinstall or multi-device user never
+   trips it) with `⚠️ FLOOD`. Override per invocation: `--flood-threshold N`.
+2. `swift run dispatch-mod reject-user <userRecordName>` — prints that
+   creator's full pending list, asks for confirmation (`--yes` for scripting),
+   then deletes **one record at a time with per-record verified modify
+   responses** (an HTTP 200 can still carry per-record failures — §Query lag /
+   the plan-20 lesson). It only ever touches `SubmittedQuestion`; approved
+   catalog entries are untouchable by construction of the moderation boundary.
+   The dashboard's "Reject all" button on a submitter row does the same via
+   `/api/reject-user` (session-token-gated like every mutating endpoint).
+3. Re-run `list` to confirm the queue is clean — allow a few minutes of query
+   lag (see the note in §6).
+
+### The emergency lever (sustained flood)
+
+Turn submissions **off globally** without shipping anything:
+
+1. [CloudKit Console](https://icloud.developer.apple.com/) → container
+   `iCloud.io.robbie.Dispatch` → **Schema → Record Types →
+   `SubmittedQuestion` → Security** (per environment — Development and
+   Production are separate).
+2. Remove the **Create** grant from **Authenticated** (`_icloud`). Within
+   CloudKit's permission propagation, every client's submit path starts
+   failing with a permission error, which `CatalogSubmitView`'s existing error
+   path already renders. **Catalog browsing is unaffected** —
+   `CatalogQuestion` keeps its World read grant, and flags (`QuestionFlag`)
+   keep working unless you also revoke theirs.
+3. Restore = re-grant Create to Authenticated in the same place.
+
+**Caveat — `setup` re-arms the lever:** `Sources/dispatch-mod/schema.ckdb` is
+the canonical schema and `dispatch-mod setup` imports it **wholesale**,
+including `GRANT CREATE TO "_icloud"` on `SubmittedQuestion`. While the lever
+is engaged, do **not** run `setup` against that environment — it would
+silently re-enable submissions. (Development only; Production schema is
+Console-deployed anyway, §3c.)
+
+**Flag flooding** (`QuestionFlag`) is lower-stakes — flags are moderator-only
+inputs, never public. If it ever matters, `QuestionFlag` already carries the
+same queryable `___createdBy` index (§3b), so the same detect-and-bulk-clean
+approach applies.
 
 ## 5. Signature format (verified against Apple docs, 2026-07-09)
 
