@@ -196,7 +196,12 @@ final class RemoteChangeObserver {
                     guard fullPipeline else { return .success((summary, [])) }
                     try VocabularyBuilder.rebuild(in: context)
                     let reports = try context.fetch(FetchDescriptor<Report>())
+                    // Plan 36: this file is shared with DispatchMac, where
+                    // Core Spotlight indexing is deferred (in-app search only
+                    // in v1) and SpotlightIndexer isn't compiled in.
+                    #if os(iOS)
                     SpotlightIndexer.rebuildAll(reports: reports)
+                    #endif
                     // Recent non-draft report dates for the synced-report
                     // nag reconciliation (plan 19). Post-dedupe snapshot of
                     // the store — includes reports just mirrored in from
