@@ -397,6 +397,41 @@ private func plantedPearsonFixture() -> ([Report], [Question]) {
     #expect(sampleCount == 30, "universe is the answered era, never all 60")
 }
 
+/// PR #40 (Copilot): a report can carry a payload-less (skipped) people
+/// Response — `ReportBuilder` persists one for every shown-then-skipped
+/// question, with `tokens == nil`. Those reports are MISSING the people
+/// answer, not evidence the person was absent; counting them as absence
+/// fabricates a comparison. A skipped people question therefore contributes
+/// no absent side, so a person seen only on answered reports has no genuine
+/// "without" group and the row is insufficientData, never a finding/null.
+@Test func skippedPeopleResponseNeverMasqueradesAsAbsence() throws {
+    let questions = [
+        makeQuestion(id: "q-yes", prompt: "Happy?", type: .yesNo, choices: ["Yes", "No"]),
+        makeQuestion(id: "q-who", prompt: "Who?", type: .people),
+    ]
+    var reports: [Report] = []
+    for index in 0..<30 {
+        let yes = index % 2 == 0
+        // Angela present on the first 15 (answered); the people question is
+        // SKIPPED (payload-less, tokens nil) on the remaining 15.
+        let present = index < 15
+        let whoResponse = present
+            ? makeResponse(question: "q-who", tokens: ["Angela"])
+            : makeResponse(question: "q-who")   // tokens nil — persisted skip
+        reports.append(makeReport(date: day(index), responses: [
+            makeResponse(question: "q-yes", options: [yes ? "Yes" : "No"]),
+            whoResponse,
+        ]))
+    }
+    let result = CorrelationEngine.compute(questionID: "q-yes", reports: reports,
+                                           questions: questions)
+    let angela = try #require(row(result, .person(name: "Angela")))
+    guard case .insufficientData = angela.outcome else {
+        Issue.record("skipped people reports must not form an absent side; got \(angela.outcome)")
+        return
+    }
+}
+
 // MARK: - Self-pairing exclusion
 
 @Test func peopleQuestionTargetSkipsItsOwnPersonDimensions() throws {
@@ -478,6 +513,21 @@ private func plantedPearsonFixture() -> ([Report], [Question]) {
 }
 
 // MARK: - Eligibility + determinism
+
+/// PR #40 (Copilot): the shared "is this response answered?" contract must
+/// treat a number response as answered ONLY when its string parses as a
+/// Double — an unparseable numeric payload is not an answer. The Insights
+/// list caption reuses this exact predicate, so pinning it here keeps the
+/// on-screen answer count from diverging from what `compute` actually uses.
+@Test func isAnsweredTreatsUnparseableNumberAsUnanswered() {
+    let parseable = makeResponse(question: "q-num", numeric: "3.5")
+    let unparseable = makeResponse(question: "q-num", numeric: "n/a")
+    let empty = makeResponse(question: "q-num", numeric: "")
+    #expect(CorrelationEngine.isAnswered(parseable, type: .number))
+    #expect(!CorrelationEngine.isAnswered(unparseable, type: .number))
+    #expect(!CorrelationEngine.isAnswered(empty, type: .number))
+    #expect(!CorrelationEngine.isAnswered(makeResponse(question: "q-num"), type: .number))
+}
 
 @Test func eligibleQuestionIDsFilterKindAndCountAndOrderDeterministically() {
     let questions = [
