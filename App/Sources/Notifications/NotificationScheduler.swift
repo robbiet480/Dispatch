@@ -47,6 +47,12 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// which would otherwise call `requestPermissionIfNeeded` again).
     private var hasRequestedThisLaunch = false
 
+    /// EventKit seam (plan 31), wired by DispatchApp to CalendarEventObserver.
+    /// The scheduler never touches EventKit directly: a nil source (tests,
+    /// pre-wiring) simply plans no calendar prompts, so `replanNow` stays
+    /// testable exactly as before. Weak — the app owns the observer.
+    weak var calendarEventSource: (any CalendarEventEndProviding)?
+
     init(container: ModelContainer, prefs: NotificationPrefs, isTestEnvironment: Bool,
          focusFilterDefaults: UserDefaults) {
         self.container = container
@@ -353,12 +359,49 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         // Timer-scheduled groups (plan 12): planned per awake window with a
         // group-varied seed; event/disabled schedules plan nothing.
         let windows = planWindows(now: now, calendar: calendar)
-        let groupPlans: [(group: PromptGroup, all: [Date], future: [Date])] = groups.map { group in
+        let timerPlans: [(group: PromptGroup, all: [Date], future: [Date])] = groups.map { group in
             let all = windows.flatMap { window in
                 GroupPlanner.plan(group: group, awakeStart: window.start, awakeEnd: window.end,
                                   seed: window.seed, calendar: calendar)
             }.sorted()
             return (group, all, all.filter { $0 > now })
+        }
+
+        // Calendar-event groups (plan 31): SCHEDULED AHEAD — EventKit never
+        // wakes the app (no background delivery, no relaunch; see
+        // CalendarEventObserver's type doc), so matching events' END dates
+        // become ordinary content-addressed gprompt requests within the same
+        // plan windows. ONE candidate fetch per window is shared across
+        // groups (per-rule matching is kit-pure); `all` is computed with
+        // now = .distantPast so past ends feed past-parent nag resurrection
+        // exactly like the timer plans' full-window dates.
+        let (calendarGroups, _) = FocusFilterState.filterPlan(
+            groups: Self.calendarScheduledGroups(in: questionContext), state: focusFilter)
+        var calendarPlans: [(group: PromptGroup, all: [Date], future: [Date])] = []
+        if let source = calendarEventSource, !calendarGroups.isEmpty {
+            let windowCandidates = windows.map {
+                source.eventEndCandidates(start: $0.start, end: $0.end)
+            }
+            calendarPlans = calendarGroups.map { group in
+                guard case .calendarEventEnd(let rule) = group.schedule else {
+                    return (group, [], [])
+                }
+                let all = zip(windows, windowCandidates).flatMap { window, candidates in
+                    CalendarEventPlanner.fireDates(
+                        candidates: candidates, rule: rule, now: .distantPast,
+                        windowStart: window.start, windowEnd: window.end)
+                }.sorted()
+                return (group, all, all.filter { $0 > now })
+            }
+        }
+
+        // Both event-planned families join the SAME budget allocation below,
+        // interleaved in sortOrder so the allocator's in-order clamping
+        // stays honest (a busy calendar day is data-driven load — exactly
+        // what the allocator exists for).
+        let groupPlans = (timerPlans + calendarPlans).sorted {
+            ($0.group.sortOrder, $0.group.uniqueIdentifier)
+                < ($1.group.sortOrder, $1.group.uniqueIdentifier)
         }
 
         // Past parents (delivered-but-unanswered prompts, both families)
@@ -426,10 +469,12 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         for plan in groupPlans {
             let granted = allocation.count(forGroup: plan.group.uniqueIdentifier)
             let body = Self.groupBody(for: plan.group, in: questionContext)
+            let extraUserInfo = Self.eventMarkerUserInfo(for: plan.group)
             for date in plan.future.prefix(granted) {
                 let stamp = Self.groupStamp(groupID: plan.group.uniqueIdentifier, date: date)
                 let identifier = "\(NotificationIdentifiers.groupPromptPrefix)\(stamp)"
-                let content = Self.makeGroupContent(groupID: plan.group.uniqueIdentifier, body: body)
+                let content = Self.makeGroupContent(groupID: plan.group.uniqueIdentifier, body: body,
+                                                    extraUserInfo: extraUserInfo)
                 let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
                 let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                 let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
@@ -711,9 +756,34 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             guard group.isEnabled else { return false }
             switch group.schedule {
             case .everyNHours, .timesPerDay, .dailyAt: return true
-            case .workoutEnd, .visitArrival, .disabled: return false
+            case .workoutEnd, .visitArrival, .calendarEventEnd, .disabled: return false
             }
         }
+    }
+
+    /// Enabled groups with a calendar event-end schedule (plan 31), in
+    /// sortOrder — merged with the timer plans before budget allocation.
+    /// Unknown match-kind raws resolve `.disabled` and drop out here.
+    private static func calendarScheduledGroups(in context: ModelContext) -> [PromptGroup] {
+        let descriptor = FetchDescriptor<PromptGroup>(
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.uniqueIdentifier)])
+        guard let groups = try? context.fetch(descriptor) else { return [] }
+        return groups.filter { group in
+            guard group.isEnabled else { return false }
+            if case .calendarEventEnd = group.schedule { return true }
+            return false
+        }
+    }
+
+    /// userInfo marker for event-scheduled group prompts: calendar groups'
+    /// requests carry `calendarEventEndKey` so the tap-through report gets
+    /// the `.calendarEventEnd` trigger (the visitArrivalKey pattern; visit
+    /// and workout prompts are posted by their observers, not planned here).
+    private static func eventMarkerUserInfo(for group: PromptGroup) -> [String: String] {
+        if case .calendarEventEnd = group.schedule {
+            return [NotificationIdentifiers.calendarEventEndKey: "1"]
+        }
+        return [:]
     }
 
     /// Notification body for a group prompt: the group's name, else its
@@ -754,12 +824,16 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    static func makeGroupContent(groupID: String, body: String) -> UNMutableNotificationContent {
+    static func makeGroupContent(
+        groupID: String, body: String, extraUserInfo: [String: String] = [:]
+    ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = "Time to report"
         content.body = body
         content.sound = .default
-        content.userInfo = [NotificationIdentifiers.promptGroupIDKey: groupID]
+        var userInfo: [AnyHashable: Any] = [NotificationIdentifiers.promptGroupIDKey: groupID]
+        for (key, value) in extraUserInfo { userInfo[key] = value }
+        content.userInfo = userInfo
         return content
     }
 
@@ -774,12 +848,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         extraUserInfo: [String: String] = [:]
     ) -> UNNotificationRequest {
         let content = makeGroupContent(
-            groupID: group.uniqueIdentifier, body: groupBody(for: group, in: context))
-        if !extraUserInfo.isEmpty {
-            var userInfo = content.userInfo
-            for (key, value) in extraUserInfo { userInfo[key] = value }
-            content.userInfo = userInfo
-        }
+            groupID: group.uniqueIdentifier, body: groupBody(for: group, in: context),
+            extraUserInfo: extraUserInfo)
         let stamp = groupStamp(groupID: group.uniqueIdentifier, date: eventDate)
         let identifier = "\(NotificationIdentifiers.groupPromptPrefix)\(stamp)"
         return UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
@@ -873,6 +943,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             .userInfo[NotificationIdentifiers.triggeringWorkoutIDKey] as? String
         let firedByVisitArrival = response.notification.request.content
             .userInfo[NotificationIdentifiers.visitArrivalKey] != nil
+        let firedByCalendarEventEnd = response.notification.request.content
+            .userInfo[NotificationIdentifiers.calendarEventEndKey] != nil
         // Missing/unknown period → .week — also covers stale pre-plan-40
         // `digest-weekly` requests (no period payload).
         let digestPeriod = DigestPeriod(rawValue: response.notification.request.content
@@ -912,6 +984,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                     .workoutEnd
                 } else if firedByVisitArrival {
                     .visitArrival
+                } else if firedByCalendarEventEnd {
+                    .calendarEventEnd
                 } else {
                     .notification
                 }

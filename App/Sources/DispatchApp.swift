@@ -28,6 +28,7 @@ struct DispatchApp: App {
     // PLAN-39 TASK 0 PROBE — remove after measurement.
     let sleepDeliveryProbe: SleepDeliveryProbe
     let visitObserver: VisitObserver
+    let calendarEventObserver: CalendarEventObserver
     let backupManager: BackupManager
     let webhookManager: WebhookManager
     let remoteChangeObserver: RemoteChangeObserver
@@ -185,12 +186,25 @@ struct DispatchApp: App {
         // Remote-change reactions: dedupe/vocabulary/Spotlight run on a
         // background context inside the observer; the callback re-plans
         // notifications (which also re-registers the quick-answer category)
-        // and refreshes the event observers — a workout-end or visit-arrival
-        // group created or deleted on another device must arm/disarm its
-        // monitoring without a relaunch (refresh() is idempotent).
+        // and refreshes the event observers — a workout-end, visit-arrival,
+        // or calendar group created or deleted on another device must
+        // arm/disarm its monitoring without a relaunch (refresh() is
+        // idempotent).
         // Locals (not self) captured — self isn't fully initialized yet.
         let prefsForReplan = notificationPrefs
         let awakeForReplan = awakeStore
+
+        // Calendar event-end observer (plan 31): the schedule-ahead sibling
+        // of the visit observer — it never posts prompts itself (EventKit
+        // has no background wake); it feeds replanNow's calendar plans via
+        // the scheduler seam and keeps them fresh on .EKEventStoreChanged
+        // (2s-debounced replan). Test-gated internally.
+        let madeCalendarObserver = CalendarEventObserver(
+            container: container, isTestEnvironment: isTestEnvironment,
+            replan: { scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan) }
+        )
+        calendarEventObserver = madeCalendarObserver
+        scheduler.calendarEventSource = madeCalendarObserver
         // Plan 37: the diagnostics sink. Constructed always (the screen is
         // reachable with sync off), but only subscribes to CloudKit events
         // when sync is active and never under test (see the .task wiring in
@@ -214,6 +228,7 @@ struct DispatchApp: App {
                 scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
                 workoutObserver.refresh()
                 madeVisitObserver.refresh()
+                madeCalendarObserver.refresh()
             },
             onDiagnosticsEvent: { event in diagnostics.record(event) },
             onDedupePass: { summary, date in diagnostics.recordDedupePass(summary, at: date) }
@@ -302,6 +317,13 @@ struct DispatchApp: App {
         // missing Always authorization).
         visitObserver.refresh()
 
+        // Calendar observer launch refresh (plan 31): subscribes to
+        // .EKEventStoreChanged when an enabled calendar group + full access
+        // exist. Foreground-only freshness by design — EventKit never
+        // relaunches the app, so unlike the two observers above there is no
+        // relaunch contract to honor; the launch replan covers scheduling.
+        calendarEventObserver.refresh()
+
         // Subscribe to remote-change notifications and schedule the launch
         // SyncDedupe pass (debounced with the observer's first fire).
         // Test-gated internally.
@@ -329,6 +351,7 @@ struct DispatchApp: App {
                 .environment(workoutEndObserver)
                 .environment(sleepDeliveryProbe)
                 .environment(visitObserver)
+                .environment(calendarEventObserver)
                 .environment(backupManager)
                 .environment(webhookManager)
                 .environment(remoteChangeObserver)
@@ -365,6 +388,7 @@ struct DispatchApp: App {
                     // current groups; test-gated internally.
                     workoutEndObserver.refresh()
                     visitObserver.refresh()
+                    calendarEventObserver.refresh()
                     // Cold launch with lock enabled (or the --enable-app-lock
                     // forced-lock UI-test path): the window scene is connected
                     // by now, so raise the lock window before content is seen.
