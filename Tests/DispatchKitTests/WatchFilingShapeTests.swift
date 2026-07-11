@@ -12,8 +12,6 @@ struct WatchFilingShapeTests {
     @Test func watchFilingShapeCarriesTriggerProvenanceAndOnlyWatchSensors() throws {
         let container = try DispatchStore.inMemoryContainer()
         let context = ModelContext(container)
-        DeviceIdentity.deviceName = "Apple Watch"
-        defer { DeviceIdentity.deviceName = nil }
 
         // A representative watch capture: some sensors captured, one timed
         // out; phone-only kinds are ABSENT from the outcome set entirely.
@@ -25,12 +23,14 @@ struct WatchFilingShapeTests {
             .location: .disabled,
         ]
         let question = QuestionRef(uniqueIdentifier: "q-yesno", prompt: "Are you working?", type: .yesNo)
-        let report = try ReportBuilder.save(
-            kind: .regular, trigger: .watch, date: Date(), timeZone: .current,
-            outcomes: outcomes,
-            answers: [AnswerDraft(question: question, value: .options(["Yes"]))],
-            in: context
-        )
+        let report = try DeviceIdentityGate.withDeviceName("Apple Watch") {
+            try ReportBuilder.save(
+                kind: .regular, trigger: .watch, date: Date(), timeZone: .current,
+                outcomes: outcomes,
+                answers: [AnswerDraft(question: question, value: .options(["Yes"]))],
+                in: context
+            )
+        }
 
         #expect(report.trigger == .watch)
         #expect(report.sourceDeviceModel == DeviceIdentity.model)

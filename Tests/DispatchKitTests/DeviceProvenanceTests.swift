@@ -32,13 +32,12 @@ struct DeviceProvenanceTests {
     @Test func reportBuilderStampsProvenanceAtCreation() throws {
         let container = try DispatchStore.inMemoryContainer()
         let context = ModelContext(container)
-        DeviceIdentity.deviceName = "Provenance Test Device"
-        defer { DeviceIdentity.deviceName = nil }
-
-        let report = try ReportBuilder.save(
-            kind: .regular, trigger: .manual, date: Date(), timeZone: .current,
-            outcomes: [:], answers: [], in: context
-        )
+        let report = try DeviceIdentityGate.withDeviceName("Provenance Test Device") {
+            try ReportBuilder.save(
+                kind: .regular, trigger: .manual, date: Date(), timeZone: .current,
+                outcomes: [:], answers: [], in: context
+            )
+        }
         #expect(report.sourceDeviceModel == DeviceIdentity.model)
         #expect(report.sourceDeviceName == "Provenance Test Device")
     }
@@ -47,12 +46,11 @@ struct DeviceProvenanceTests {
         let container = try DispatchStore.inMemoryContainer()
         let context = ModelContext(container)
         let question = try makeYesNoQuestion(in: context)
-        DeviceIdentity.deviceName = "Apple Watch"
-        defer { DeviceIdentity.deviceName = nil }
-
-        let report = try QuickAnswerFiler.file(
-            question: question, choiceIndex: 0, trigger: .watch, in: context
-        )
+        let report = try DeviceIdentityGate.withDeviceName("Apple Watch") {
+            try QuickAnswerFiler.file(
+                question: question, choiceIndex: 0, trigger: .watch, in: context
+            )
+        }
         #expect(report.trigger == .watch)
         #expect(report.sourceDeviceModel == DeviceIdentity.model)
         #expect(report.sourceDeviceName == "Apple Watch")
@@ -61,12 +59,12 @@ struct DeviceProvenanceTests {
     @Test func uninjectedDeviceNameStampsNilNameButStillModel() throws {
         let container = try DispatchStore.inMemoryContainer()
         let context = ModelContext(container)
-        DeviceIdentity.deviceName = nil
-
-        let report = try ReportBuilder.save(
-            kind: .regular, trigger: .manual, date: Date(), timeZone: .current,
-            outcomes: [:], answers: [], in: context
-        )
+        let report = try DeviceIdentityGate.withDeviceName(nil) {
+            try ReportBuilder.save(
+                kind: .regular, trigger: .manual, date: Date(), timeZone: .current,
+                outcomes: [:], answers: [], in: context
+            )
+        }
         #expect(report.sourceDeviceModel != nil)
         #expect(report.sourceDeviceName == nil)
     }
@@ -124,13 +122,12 @@ struct DeviceProvenanceTests {
         """
         // Even with a live injected identity, import must keep nil — imported
         // reports are historical, never restamped with this device's.
-        DeviceIdentity.deviceName = "Should Not Appear"
-        defer { DeviceIdentity.deviceName = nil }
-
         let container = try DispatchStore.inMemoryContainer()
         let context = ModelContext(container)
-        _ = try V2Importer.importExport(Data(json.utf8), into: context)
-        let reports = try context.fetch(FetchDescriptor<Report>())
+        let reports = try DeviceIdentityGate.withDeviceName("Should Not Appear") {
+            _ = try V2Importer.importExport(Data(json.utf8), into: context)
+            return try context.fetch(FetchDescriptor<Report>())
+        }
         #expect(reports.count == 1)
         #expect(reports.first?.sourceDeviceModel == nil)
         #expect(reports.first?.sourceDeviceName == nil)
