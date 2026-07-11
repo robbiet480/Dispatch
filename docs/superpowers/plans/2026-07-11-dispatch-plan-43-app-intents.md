@@ -249,4 +249,41 @@ intents write to.
 
 ## Completion note (2026-07-11)
 
-_Filled in on completion below._
+**Shipped** — all four tasks, one commit each on `plan-43-app-intents`
+(branched from `main`), same PR as the plan doc:
+
+1. **`AnswerSummary`** (kit): `text(for:)` flattens a `Response` to a display
+   line (exporter precedence, payload-less → nil) and
+   `lastAnswer(toQuestionID:in:)` finds the most recent non-draft answered
+   response. 5 tests.
+2. **`IntentAnswerFiler`** (kit): `coercedValue(forType:choices:raw:)`
+   (type-directed, lenient) + `eligibleQuestion(id:in:)` (enabled + regular) +
+   `file(...)` filing one-answer reports through `ReportBuilder.save`
+   (`trigger .intent`). 10 tests. Kit imports no `AppIntents`.
+3. **iOS App Intents** (`App/Sources/Intents/`): `QuestionEntity` +
+   read-only `QuestionEntityQuery`; `FileReportIntent` (evolves the old
+   `StartReportIntent`, adds an optional `PromptGroupEntity`); `LogAnswerIntent`
+   (writable-store filing via `IntentAnswerFiler`, `WidgetQuickAnswerMarker`
+   nag-cancel + `WebhookQueue` enqueue + `WidgetCenter` reload, dialog);
+   `TodayReportCountIntent` / `CurrentStreakIntent` / `LastAnswerIntent`
+   (read-only, `ReturnsValue` + `ProvidesDialog`); `IntentStore` shared-store
+   opener; `DispatchShortcuts` donation phrases.
+4. Wrap: full `swift test` **642 tests green** (+15 vs baseline); iOS
+   `DispatchApp` scheme builds clean (iPhone 17 Pro sim).
+
+**Deviations / deferrals (logged):**
+- **`LogAnswerIntent` files a MINIMAL report (no live sensor capture)** —
+  the issue's "with sensor context" is not achievable out-of-process
+  (`QuickAnswerFiler`'s documented budget constraint). Intent-filed reports
+  carry `DeviceIdentity` provenance; full sensor context is deferred to the
+  foreground capture path (open the app via `FileReportIntent`).
+- **watchOS / macOS intent registration deferred.** The kit backing is fully
+  cross-platform and unit-tested and the query intents need no `AppActions`,
+  so each remaining platform needs only a curated per-target
+  `AppShortcutsProvider` + a store-URL resolver (watch: its own App Group
+  store; Mac: Application Support store, and a Mac file-report additionally
+  depends on capture-on-Mac / plan 36 v2). Not wired here to keep this a
+  reviewable single-platform slice.
+
+**Merge gate (deferred — simulator-heavy):** the Shortcuts-app UI suite and
+on-device Siri/Spotlight donation verification. PR stays open for review.
