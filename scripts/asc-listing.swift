@@ -154,13 +154,19 @@ func marketingVersion() -> String {
 }
 
 // --- screenshots ------------------------------------------------------------
-/// Verified enum values (ScreenshotDisplayType, fetched 2026-07-10): the API
-/// has no APP_IPHONE_69/63 — 67 is the current largest slot, 61 the 6.1/6.3
-/// class. Rig slugs (scripts/screenshots.sh) map accordingly. Order matters:
+/// Verified enum values (ScreenshotDisplayType, ASC OpenAPI spec fetched
+/// 2026-07-11): the API has no APP_IPHONE_69/63 — 67 is the current largest
+/// iPhone slot, 61 the 6.1/6.3 class; the 13" iPad slot is still named
+/// APP_IPAD_PRO_3GEN_129; APP_WATCH_ULTRA covers the Ultra class; Mac is
+/// APP_DESKTOP (16:10 only — 1280x800/1440x900/2560x1600/2880x1800).
+/// Rig slugs (scripts/screenshots.sh) map accordingly. Order matters:
 /// longest prefix first so "iphone-17-pro-max" never matches "iphone-17".
 let displayTypeMapping: [(slugPrefix: String, displayType: String)] = [
     ("iphone-17-pro-max", "APP_IPHONE_67"),
     ("iphone-17", "APP_IPHONE_61"),
+    ("ipad-pro-13-inch", "APP_IPAD_PRO_3GEN_129"),
+    ("apple-watch-ultra", "APP_WATCH_ULTRA"),
+    ("mac", "APP_DESKTOP"),
 ]
 
 struct Shot {
@@ -441,10 +447,12 @@ for appInfoID in appInfoIDs {
 
 // 5. Screenshots: get-or-create the set per display type, skip files already
 //    present (fileName+fileSize match), reserve → PUT chunks → commit (MD5).
-if !shots.isEmpty {
+//    iPhone/iPad/watch sets all hang off the IOS version's localization;
+//    APP_DESKTOP sets require a MAC_OS appStoreVersion (handled in 5b).
+func uploadScreenshotSets(shots: [Shot], versionLocID: String, platformLabel: String) {
     let setsResponse = call(
         "GET", "/v1/appStoreVersionLocalizations/\(versionLocID)/appScreenshotSets",
-        describe: "Fetch existing screenshot sets")
+        describe: "Fetch existing screenshot sets (\(platformLabel))")
     for displayType in displayTypeMapping.map(\.displayType) {
         let shotsForType = shots.filter { $0.displayType == displayType }
         if shotsForType.isEmpty { continue }
@@ -529,6 +537,61 @@ if !shots.isEmpty {
             ], describe: "Commit \(shot.fileName) (MD5 \(checksum))")
         }
     }
+}
+
+let iosShots = shots.filter { $0.displayType != "APP_DESKTOP" }
+let macShots = shots.filter { $0.displayType == "APP_DESKTOP" }
+if !iosShots.isEmpty {
+    uploadScreenshotSets(shots: iosShots, versionLocID: versionLocID, platformLabel: "iOS")
+}
+
+// 5b. Mac screenshots: APP_DESKTOP sets belong to a MAC_OS appStoreVersion's
+//     localization, never the iOS one. Same fetch-or-create discipline as
+//     step 2; the Mac version shares the marketing version string (the ASC
+//     app record is universal-purchase — one bundle id, one listing).
+if !macShots.isEmpty {
+    let macVersionsResponse = call(
+        "GET", "/v1/apps/\(appID)/appStoreVersions?filter[versionString]=\(version)&filter[platform]=MAC_OS",
+        describe: "Look up Mac App Store version \(version)")
+    var macVersionID: String
+    if let existing = firstID(macVersionsResponse, placeholder: "mac-version-id"), apply {
+        macVersionID = existing
+        announce("Mac version \(version) already exists (\(macVersionID)) — reusing")
+    } else if apply {
+        let created = call("POST", "/v1/appStoreVersions", body: [
+            "data": [
+                "type": "appStoreVersions",
+                "attributes": ["platform": "MAC_OS", "versionString": version],
+                "relationships": ["app": ["data": ["type": "apps", "id": appID]]],
+            ],
+        ], describe: "Create Mac App Store version \(version)")
+        macVersionID = dataID(created, placeholder: "mac-version-id")
+    } else {
+        macVersionID = "<mac-version-id>"
+        announce("If missing: POST /v1/appStoreVersions (platform MAC_OS, versionString \(version))")
+    }
+
+    let macLocalizations = call(
+        "GET", "/v1/appStoreVersions/\(macVersionID)/appStoreVersionLocalizations",
+        describe: "Fetch Mac version localizations")
+    var macVersionLocID = "<mac-version-localization-id>"
+    if apply {
+        if let existing = dataArray(macLocalizations).first(where: {
+            (($0["attributes"] as? [String: Any])?["locale"] as? String) == locale
+        })?["id"] as? String {
+            macVersionLocID = existing
+        } else {
+            let created = call("POST", "/v1/appStoreVersionLocalizations", body: [
+                "data": [
+                    "type": "appStoreVersionLocalizations",
+                    "attributes": ["locale": locale],
+                    "relationships": ["appStoreVersion": ["data": ["type": "appStoreVersions", "id": macVersionID]]],
+                ],
+            ], describe: "Create \(locale) Mac version localization")
+            macVersionLocID = dataID(created, placeholder: "mac-version-localization-id")
+        }
+    }
+    uploadScreenshotSets(shots: macShots, versionLocID: macVersionLocID, platformLabel: "macOS")
 }
 
 // 6. Review details (contact from config, notes from review-notes.md).
