@@ -427,6 +427,7 @@ extension SensorKind {
         case .healthSteps: "Steps"
         case .healthFlights: "Stairs"
         case .healthHeart: "Heart Rate"
+        case .healthHeartRange: "Heart Rate Range"
         case .healthHRV: "HRV"
         case .healthRestingHeart: "Resting Heart Rate"
         case .healthSleep: "Sleep"

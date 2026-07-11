@@ -145,7 +145,7 @@ extension SensorKind {
         case .audio: .microphone
         case .focus: .focus
         case .healthFlights: .motion
-        case .healthSteps, .healthHeart, .healthHRV, .healthRestingHeart,
+        case .healthSteps, .healthHeart, .healthHeartRange, .healthHRV, .healthRestingHeart,
              .healthSleep, .healthWorkouts, .healthCaffeine, .healthActivityRings: .health
         case .media: .mediaLibrary
         case .battery, .connection, .healthMedications: nil
