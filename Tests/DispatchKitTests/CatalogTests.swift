@@ -255,6 +255,75 @@ import Testing
     #expect(CatalogValidation.validateFlagReason("").isEmpty)
 }
 
+// MARK: - Input configuration validation (plan 41)
+
+@Test func validationAcceptsFullyConfiguredNumberQuestion() {
+    #expect(CatalogValidation.validate(
+        prompt: "Stress level?", typeRaw: QuestionType.number.rawValue, choices: [],
+        inputStyle: "scale", defaultAnswer: "3", placeholder: "1–5"
+    ).isEmpty)
+}
+
+@Test func validationRejectsInputStyleAndDefaultAnswerOnNonNumberTypes() {
+    let yesNo = QuestionType.yesNo.rawValue
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: yesNo, choices: [], inputStyle: "slider"
+    ) == [.inputStyleNotAllowed])
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: yesNo, choices: [], defaultAnswer: "3"
+    ) == [.defaultAnswerNotAllowed])
+    // Placeholder is allowed on ANY type (the editor's PLACEHOLDER section
+    // is unconditional).
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: yesNo, choices: [], placeholder: "hint"
+    ).isEmpty)
+    // Whitespace-only values are treated as absent.
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: yesNo, choices: [], inputStyle: "  ", defaultAnswer: " \n"
+    ).isEmpty)
+}
+
+@Test func validationToleratesUnknownInputStyleOnNumberQuestions() {
+    // Leniency: an unknown raw resolves to a text field on old builds; it is
+    // never a validation error on a number question.
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: QuestionType.number.rawValue, choices: [], inputStyle: "hologram"
+    ).isEmpty)
+}
+
+@Test func validationLimitsDefaultAnswerAndPlaceholderLengths() {
+    let number = QuestionType.number.rawValue
+    let longDefault = String(repeating: "9", count: CatalogValidation.defaultAnswerMaxLength + 1)
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: number, choices: [], defaultAnswer: longDefault
+    ) == [.defaultAnswerTooLong(limit: CatalogValidation.defaultAnswerMaxLength)])
+    let longPlaceholder = String(repeating: "h", count: CatalogValidation.placeholderMaxLength + 1)
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: number, choices: [], placeholder: longPlaceholder
+    ) == [.placeholderTooLong(limit: CatalogValidation.placeholderMaxLength)])
+    // Trimmed before counting: padding around an at-limit value passes.
+    let paddedDefault = "  " + String(repeating: "9", count: CatalogValidation.defaultAnswerMaxLength) + "  "
+    let paddedPlaceholder = " " + String(repeating: "h", count: CatalogValidation.placeholderMaxLength) + " "
+    #expect(CatalogValidation.validate(
+        prompt: "p", typeRaw: number, choices: [],
+        defaultAnswer: paddedDefault, placeholder: paddedPlaceholder
+    ).isEmpty)
+}
+
+@Test func normalizationTrimsAndCollapsesInputConfigStrings() {
+    let result = CatalogValidation.normalized(
+        prompt: " p ", choices: [], creditName: nil,
+        inputStyle: " scale ", defaultAnswer: "  ", placeholder: " 1–5 "
+    )
+    #expect(result.inputStyle == "scale")
+    #expect(result.defaultAnswer == nil)
+    #expect(result.placeholder == "1–5")
+    let empty = CatalogValidation.normalized(prompt: "p", choices: [], creditName: nil)
+    #expect(empty.inputStyle == nil)
+    #expect(empty.defaultAnswer == nil)
+    #expect(empty.placeholder == nil)
+}
+
 @Test func validationCollectsMultipleErrors() {
     let errors = CatalogValidation.validate(
         prompt: "", typeRaw: QuestionType.multipleChoice.rawValue, choices: ["only"]

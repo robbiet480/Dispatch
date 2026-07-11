@@ -16,6 +16,10 @@ public enum CatalogValidationError: Error, Equatable, Sendable {
     case choicesNotAllowed
     case creditNameTooLong(limit: Int)
     case flagReasonTooLong(limit: Int)
+    case inputStyleNotAllowed
+    case defaultAnswerNotAllowed
+    case defaultAnswerTooLong(limit: Int)
+    case placeholderTooLong(limit: Int)
 
     /// Human-readable description for form errors and mod-tool output.
     public var message: String {
@@ -42,6 +46,14 @@ public enum CatalogValidationError: Error, Equatable, Sendable {
             "Credit name must be \(limit) characters or fewer."
         case .flagReasonTooLong(let limit):
             "Flag reason must be \(limit) characters or fewer."
+        case .inputStyleNotAllowed:
+            "Input style only applies to number questions."
+        case .defaultAnswerNotAllowed:
+            "Default answers only apply to number questions."
+        case .defaultAnswerTooLong(let limit):
+            "Default answer must be \(limit) characters or fewer."
+        case .placeholderTooLong(let limit):
+            "Placeholder must be \(limit) characters or fewer."
         }
     }
 }
@@ -53,13 +65,16 @@ public enum CatalogValidation {
     public static let choicesMaxCount = 20
     public static let creditNameMaxLength = 50
     public static let flagReasonMaxLength = 500
+    public static let defaultAnswerMaxLength = 40
+    public static let placeholderMaxLength = 100
 
     /// Validate the structural shape of a question headed for (or from) the
     /// catalog. Returns every violation, not just the first, so forms can
     /// show all problems at once. Whitespace is trimmed before length checks;
     /// callers should persist the trimmed values (`normalized` below).
     public static func validate(
-        prompt: String, typeRaw: Int, choices: [String], creditName: String? = nil
+        prompt: String, typeRaw: Int, choices: [String], creditName: String? = nil,
+        inputStyle: String? = nil, defaultAnswer: String? = nil, placeholder: String? = nil
     ) -> [CatalogValidationError] {
         var errors: [CatalogValidationError] = []
 
@@ -107,6 +122,28 @@ public enum CatalogValidation {
             }
         }
 
+        // Input configuration (plan 41). Structural gates only: style and
+        // default answer are number-only (matching the editor, which writes
+        // them exclusively for number questions); placeholder is allowed on
+        // any type. An UNKNOWN style raw is never an error — it resolves to
+        // the plain text field, the same leniency as `Question.inputStyle`.
+        let trimmedStyle = inputStyle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedStyle.isEmpty, type != .number {
+            errors.append(.inputStyleNotAllowed)
+        }
+        let trimmedDefault = defaultAnswer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedDefault.isEmpty {
+            if type != .number {
+                errors.append(.defaultAnswerNotAllowed)
+            } else if trimmedDefault.count > defaultAnswerMaxLength {
+                errors.append(.defaultAnswerTooLong(limit: defaultAnswerMaxLength))
+            }
+        }
+        let trimmedPlaceholder = placeholder?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmedPlaceholder.count > placeholderMaxLength {
+            errors.append(.placeholderTooLong(limit: placeholderMaxLength))
+        }
+
         return errors
     }
 
@@ -121,15 +158,26 @@ public enum CatalogValidation {
     }
 
     /// Trimmed, persistence-ready copies of the user-entered values. Empty
-    /// credit collapses to nil (anonymous by default).
+    /// credit collapses to nil (anonymous by default), and the plan-41 input
+    /// configuration strings follow the same "empty ⇒ nil" rule (nothing to
+    /// carry). The numeric input bounds aren't strings and pass around this
+    /// function untouched.
     public static func normalized(
-        prompt: String, choices: [String], creditName: String?
-    ) -> (prompt: String, choices: [String], creditName: String?) {
-        let trimmedCredit = creditName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        prompt: String, choices: [String], creditName: String?,
+        inputStyle: String? = nil, defaultAnswer: String? = nil, placeholder: String? = nil
+    ) -> (prompt: String, choices: [String], creditName: String?,
+          inputStyle: String?, defaultAnswer: String?, placeholder: String?) {
+        func collapse(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (trimmed?.isEmpty ?? true) ? nil : trimmed
+        }
         return (
             prompt.trimmingCharacters(in: .whitespacesAndNewlines),
             choices.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
-            (trimmedCredit?.isEmpty ?? true) ? nil : trimmedCredit
+            collapse(creditName),
+            collapse(inputStyle),
+            collapse(defaultAnswer),
+            collapse(placeholder)
         )
     }
 }

@@ -91,6 +91,25 @@ private func seedData(_ json: String) -> Data { Data(json.utf8) }
     #expect(drafts[0].inputStep == nil)
 }
 
+@Test func seedRejectsInputConfigOnWrongTypes() {
+    let json = """
+    {"questions": [
+      {"prompt": "Yes with a style?", "type": "yesNo", "inputStyle": "slider"},
+      {"prompt": "Note with a default?", "type": "note", "defaultAnswer": "3"}
+    ]}
+    """
+    do {
+        _ = try CatalogSeed.parse(seedData(json))
+        Issue.record("expected CatalogSeedError")
+    } catch let CatalogSeedError.problems(problems) {
+        #expect(problems.count == 2)
+        #expect(problems[0].contains("Input style"))
+        #expect(problems[1].contains("Default answers"))
+    } catch {
+        Issue.record("unexpected error: \(error)")
+    }
+}
+
 // MARK: - Problem collection
 
 @Test func seedCollectsAllProblemsAcrossEntries() {
