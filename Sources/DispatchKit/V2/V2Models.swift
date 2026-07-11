@@ -49,11 +49,19 @@ public struct V2PromptGroup: Codable {
     public var scheduledTimes: [String]?
     public var isEnabled: Bool
     public var sortOrder: Int
+    /// Calendar-event match rule (plan 31, calendarEventEnd schedule kind).
+    /// Omitted when nil (`.allEvents` stores all-nil fields); import
+    /// tolerates absence. Unknown kind raws import intact and resolve to a
+    /// never-firing schedule on this build.
+    public var calendarMatchKind: String?
+    public var calendarIdentifiers: [String]?
+    public var calendarTitleFilter: String?
 
     public init(uniqueIdentifier: String, name: String, questionIDs: [String]?,
                 scheduleKind: String, scheduleHours: Int? = nil, scheduleCount: Int? = nil,
                 scheduleDistribution: String? = nil, scheduledTimes: [String]? = nil,
-                isEnabled: Bool, sortOrder: Int) {
+                isEnabled: Bool, sortOrder: Int, calendarMatchKind: String? = nil,
+                calendarIdentifiers: [String]? = nil, calendarTitleFilter: String? = nil) {
         self.uniqueIdentifier = uniqueIdentifier
         self.name = name
         self.questionIDs = questionIDs
@@ -64,6 +72,9 @@ public struct V2PromptGroup: Codable {
         self.scheduledTimes = scheduledTimes
         self.isEnabled = isEnabled
         self.sortOrder = sortOrder
+        self.calendarMatchKind = calendarMatchKind
+        self.calendarIdentifiers = calendarIdentifiers
+        self.calendarTitleFilter = calendarTitleFilter
     }
 }
 

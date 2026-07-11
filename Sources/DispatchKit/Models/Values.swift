@@ -10,6 +10,9 @@ public enum ReportTrigger: String, Codable, Sendable, CaseIterable {
     /// Filed from the Apple Watch app (plan 19) — additive raw value; older
     /// builds decode it via the `.manual` raw-value fallback.
     case watch
+    /// Tap-through from a calendar event-end prompt (plan 31) — additive raw
+    /// value; older builds decode it via the `.manual` raw-value fallback.
+    case calendarEventEnd
 }
 
 /// Raw values 0–2 match the original Reporter export (gist.github.com/dbreunig/9315705).

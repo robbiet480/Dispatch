@@ -43,6 +43,9 @@ public enum NotificationIdentifiers {
     /// userInfo marker ("1") on prompts fired by a visit arrival (plan 16) —
     /// tap-through reports get the `.visitArrival` trigger.
     public static let visitArrivalKey = "triggeredByVisitArrival"
+    /// userInfo marker ("1") on prompts scheduled at a calendar event's end
+    /// (plan 31) — tap-through reports get the `.calendarEventEnd` trigger.
+    public static let calendarEventEndKey = "triggeredByCalendarEventEnd"
 }
 
 /// Where the next upcoming prompt notification comes from, for the settings

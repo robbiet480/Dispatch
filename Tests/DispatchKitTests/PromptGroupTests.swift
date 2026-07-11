@@ -29,6 +29,52 @@ import Testing
     #expect(group.scheduleKindRaw == "visitArrival")
 }
 
+@Test func promptGroupCalendarEventEndScheduleRoundTripsEveryRule() throws {
+    let group = PromptGroup()
+
+    group.schedule = .calendarEventEnd(.allEvents)
+    #expect(group.schedule == .calendarEventEnd(.allEvents))
+    #expect(group.scheduleKindRaw == "calendarEventEnd")
+    // .allEvents is the nil-fields storage form.
+    #expect(group.calendarMatchKindRaw == nil)
+    #expect(group.calendarIdentifiersJSON == nil)
+    #expect(group.calendarTitleFilter == nil)
+
+    group.schedule = .calendarEventEnd(.calendars(["cal-1", "cal-2"]))
+    #expect(group.schedule == .calendarEventEnd(.calendars(["cal-1", "cal-2"])))
+    #expect(group.calendarMatchKindRaw == "calendars")
+    #expect(group.calendarIdentifiersJSON != nil)
+    #expect(group.calendarTitleFilter == nil)
+
+    group.schedule = .calendarEventEnd(.titleContains("standup"))
+    #expect(group.schedule == .calendarEventEnd(.titleContains("standup")))
+    #expect(group.calendarMatchKindRaw == "titleContains")
+    #expect(group.calendarTitleFilter == "standup")
+    #expect(group.calendarIdentifiersJSON == nil)
+
+    // Switching back to .allEvents nils the rule fields again.
+    group.schedule = .calendarEventEnd(.allEvents)
+    #expect(group.calendarMatchKindRaw == nil)
+    #expect(group.calendarIdentifiersJSON == nil)
+    #expect(group.calendarTitleFilter == nil)
+}
+
+/// A calendarEventEnd group whose match-kind raw is unknown (a future rule
+/// synced from a newer build) resolves to `.disabled` — never fires rather
+/// than misfires — and write-back preserves both raws (the `.disabled`
+/// round-trip-safety precedent).
+@Test func promptGroupUnknownCalendarMatchKindResolvesDisabledAndPreservesRaws() throws {
+    let group = PromptGroup()
+    group.scheduleKindRaw = "calendarEventEnd"
+    group.calendarMatchKindRaw = "futureRule"
+    group.calendarTitleFilter = "kept"
+    #expect(group.schedule == .disabled)
+    group.schedule = .disabled
+    #expect(group.scheduleKindRaw == "calendarEventEnd")
+    #expect(group.calendarMatchKindRaw == "futureRule")
+    #expect(group.calendarTitleFilter == "kept")
+}
+
 @Test func promptGroupUnknownScheduleKindResolvesDisabledAndPreservesRaw() throws {
     let group = PromptGroup()
     group.scheduleKindRaw = "lunarPhase" // future kind synced from a newer build
@@ -210,6 +256,122 @@ import Testing
 
     let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
     #expect(exportA == exportB)
+}
+
+/// A calendar-event group (per match rule) and a `.calendarEventEnd`-triggered
+/// report round-trip through v2 byte-identically (plan 31 — the plan-16
+/// visitArrival precedent).
+@Test func calendarEventEndGroupAndTriggerRoundTripThroughV2() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+
+    let calendarsGroup = PromptGroup()
+    calendarsGroup.uniqueIdentifier = "pg-cal-cals"
+    calendarsGroup.name = "Work meetings"
+    calendarsGroup.schedule = .calendarEventEnd(.calendars(["cal-1", "cal-2"]))
+    calendarsGroup.sortOrder = 0
+    contextA.insert(calendarsGroup)
+
+    let titleGroup = PromptGroup()
+    titleGroup.uniqueIdentifier = "pg-cal-title"
+    titleGroup.name = "Standups"
+    titleGroup.schedule = .calendarEventEnd(.titleContains("standup"))
+    titleGroup.sortOrder = 1
+    contextA.insert(titleGroup)
+
+    let report = Report()
+    report.uniqueIdentifier = "r-cal"
+    report.date = Date(timeIntervalSince1970: 1_700_000_000)
+    report.trigger = .calendarEventEnd
+    report.promptGroupID = "pg-cal-title"
+    contextA.insert(report)
+    try contextA.save()
+
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
+    let json = try #require(String(data: exportA, encoding: .utf8))
+    #expect(json.contains("\"calendarEventEnd\""))
+    #expect(json.contains("\"calendarMatchKind\""))
+    #expect(json.contains("\"calendarIdentifiers\""))
+    #expect(json.contains("\"calendarTitleFilter\""))
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(exportA, into: contextB)
+
+    let groups = try contextB.fetch(
+        FetchDescriptor<PromptGroup>(sortBy: [SortDescriptor(\.sortOrder)]))
+    #expect(groups.count == 2)
+    #expect(groups[0].schedule == .calendarEventEnd(.calendars(["cal-1", "cal-2"])))
+    #expect(groups[1].schedule == .calendarEventEnd(.titleContains("standup")))
+    let importedReport = try #require(try contextB.fetch(FetchDescriptor<Report>()).first)
+    #expect(importedReport.trigger == .calendarEventEnd)
+
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
+    #expect(exportA == exportB)
+}
+
+/// The three calendar-rule keys are omitted for `.allEvents` (nil-fields
+/// storage form) and for non-calendar groups — pre-plan-31 v2 exports stay
+/// byte-identical.
+@Test func calendarRuleKeysOmittedForAllEventsAndNonCalendarGroups() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+
+    let allEventsGroup = PromptGroup()
+    allEventsGroup.uniqueIdentifier = "pg-cal-all"
+    allEventsGroup.name = "Any event"
+    allEventsGroup.schedule = .calendarEventEnd(.allEvents)
+    context.insert(allEventsGroup)
+
+    let timerGroup = PromptGroup()
+    timerGroup.uniqueIdentifier = "pg-timer"
+    timerGroup.name = "Timer"
+    timerGroup.schedule = .everyNHours(2)
+    timerGroup.sortOrder = 1
+    context.insert(timerGroup)
+    try context.save()
+
+    let json = try #require(
+        String(data: try V2Exporter.exportData(from: context, stamp: fixedStamp), encoding: .utf8))
+    #expect(json.contains("\"calendarEventEnd\""))
+    #expect(!json.contains("\"calendarMatchKind\""))
+    #expect(!json.contains("\"calendarIdentifiers\""))
+    #expect(!json.contains("\"calendarTitleFilter\""))
+}
+
+/// A v2 file authored by a newer build carrying the calendarEventEnd trigger,
+/// schedule kind, and match-rule fields as plain JSON imports on this build;
+/// an unknown FUTURE match-kind raw imports intact but resolves `.disabled`
+/// (the tolerance-fixture pattern).
+@Test func v2ImportAcceptsCalendarEventEndRawStrings() throws {
+    let fixture = Data("""
+    {"schemaVersion": 2, "questions": [], "reports": [{
+        "uniqueIdentifier": "r-c", "date": "2026-07-10T12:00:00.000Z",
+        "timeZone": "GMT", "kind": "regular", "trigger": "calendarEventEnd",
+        "isBackdated": false, "isDraft": false, "wasInBackground": false
+    }], "promptGroups": [{
+        "uniqueIdentifier": "pg-c", "name": "Meetings",
+        "scheduleKind": "calendarEventEnd", "calendarMatchKind": "titleContains",
+        "calendarTitleFilter": "standup", "isEnabled": true, "sortOrder": 0
+    }, {
+        "uniqueIdentifier": "pg-f", "name": "Future rule",
+        "scheduleKind": "calendarEventEnd", "calendarMatchKind": "futureRule",
+        "isEnabled": true, "sortOrder": 1
+    }]}
+    """.utf8)
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let summary = try V2Importer.importExport(fixture, into: context)
+    #expect(summary.reportsImported == 1)
+    #expect(summary.promptGroupsImported == 2)
+    let report = try #require(try context.fetch(FetchDescriptor<Report>()).first)
+    #expect(report.trigger == .calendarEventEnd)
+    let groups = try context.fetch(
+        FetchDescriptor<PromptGroup>(sortBy: [SortDescriptor(\.sortOrder)]))
+    #expect(groups[0].schedule == .calendarEventEnd(.titleContains("standup")))
+    // Unknown match-kind raw → .disabled, raw preserved for write-back.
+    #expect(groups[1].schedule == .disabled)
+    #expect(groups[1].calendarMatchKindRaw == "futureRule")
 }
 
 /// A v2 file authored by a newer build carrying the visitArrival trigger and

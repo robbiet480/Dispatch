@@ -62,7 +62,17 @@ public enum V2Exporter {
                           scheduleCount: g.scheduleCount,
                           scheduleDistribution: g.scheduleDistributionRaw,
                           scheduledTimes: g.scheduledTimeStrings.isEmpty ? nil : g.scheduledTimeStrings,
-                          isEnabled: g.isEnabled, sortOrder: g.sortOrder)
+                          isEnabled: g.isEnabled, sortOrder: g.sortOrder,
+                          // Calendar match rule (plan 31): omitted when nil
+                          // (.allEvents stores all-nil fields); empty
+                          // identifier lists collapse to nil.
+                          calendarMatchKind: g.calendarMatchKindRaw,
+                          calendarIdentifiers: {
+                              let ids = CalendarEventMatchRule.identifiers(
+                                  fromJSON: g.calendarIdentifiersJSON)
+                              return ids.isEmpty ? nil : ids
+                          }(),
+                          calendarTitleFilter: g.calendarTitleFilter)
         }
         export.promptGroups = groupDTOs.isEmpty ? nil : groupDTOs
 
