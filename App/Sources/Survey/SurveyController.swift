@@ -59,6 +59,7 @@ final class SurveyController {
             HealthMetricProvider(kind: .healthSteps, reader: health, since: since),
             HealthMetricProvider(kind: .healthFlights, reader: health, since: since),
             HealthMetricProvider(kind: .healthHeart, reader: health, since: since),
+            HealthMetricProvider(kind: .healthHeartRange, reader: health, since: since),
             HealthMetricProvider(kind: .healthHRV, reader: health, since: since),
             HealthMetricProvider(kind: .healthRestingHeart, reader: health, since: since),
             HealthMetricProvider(kind: .healthSleep, reader: health, since: since),
@@ -153,6 +154,14 @@ enum MockProviders {
             HealthReading(type: "activity.standGoal", value: 12, unit: "hours"),
         ])),
         Mock(kind: .healthMedications, payload: .health([])),
+        // Plan 43: matches the acceptance-criteria detail line
+        // "72 → 88 bpm (+16) · low 64 · high 112".
+        Mock(kind: .healthHeartRange, payload: .health([
+            HealthReading(type: HeartRateWindowFormatter.startType, value: 72, unit: "bpm"),
+            HealthReading(type: HeartRateWindowFormatter.endType, value: 88, unit: "bpm"),
+            HealthReading(type: HeartRateWindowFormatter.minType, value: 64, unit: "bpm"),
+            HealthReading(type: HeartRateWindowFormatter.maxType, value: 112, unit: "bpm"),
+        ])),
         Mock(kind: .media, payload: .media(MediaSample(source: .spotify, title: "Song 2", artist: "Blur"))),
     ]
 
