@@ -85,8 +85,12 @@ final class SensorSettingsUITests: XCTestCase {
             statuses: #"{"location":"granted","health":"requested","motion":"granted","microphone":"denied","photos":"denied","mediaLibrary":"granted","focus":"granted"}"#
         )
 
-        // Screen is up (the location sensor row is visible)…
-        XCTAssertTrue(app.switches["sensor-toggle-location"].firstMatch.waitForExistence(timeout: 10))
+        // Screen is up — the (granted) location row renders. It lives in the
+        // LOCATION & WEATHER category below HEALTH, so in the lazy List it
+        // starts off-screen; scroll down to it rather than asserting bare
+        // existence (an off-screen row isn't in the tree yet).
+        XCTAssertTrue(scrollDownUntil(app.switches["sensor-toggle-location"].firstMatch, app),
+                      "location sensor row never materialized")
         // …but with nothing in not-determined there is nothing to request:
         // scroll through the whole section (rows are lazy) and confirm the
         // bulk row never materializes.
