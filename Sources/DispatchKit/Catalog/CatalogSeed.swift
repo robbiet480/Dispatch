@@ -191,7 +191,10 @@ public enum CatalogSeed {
                 inputStyle: entry.inputStyle, defaultAnswer: entry.defaultAnswer,
                 placeholder: entry.placeholder
             )
-            if !seenPrompts.insert(normalized.prompt.lowercased()).inserted {
+            // Plan 42: duplicate identity is CatalogDedupe's normalization
+            // (case + whitespace + trailing punctuation), the same rule the
+            // importer and moderation paths use.
+            if !seenPrompts.insert(CatalogDedupe.normalizedPrompt(normalized.prompt)).inserted {
                 problems.append("\(label): duplicate prompt within the file")
                 continue
             }

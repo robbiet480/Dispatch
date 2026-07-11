@@ -136,6 +136,27 @@ private func seedData(_ json: String) -> Data { Data(json.utf8) }
     }
 }
 
+@Test func seedDuplicateCheckUsesDedupeNormalization() {
+    // Plan 42: in-file duplicate detection keys on CatalogDedupe's
+    // normalization, not bare lowercasing — whitespace and trailing
+    // punctuation variants are the same question.
+    let json = """
+    {"questions": [
+      {"prompt": "Did you exercise today?", "type": "yesNo"},
+      {"prompt": "did you   exercise today", "type": "yesNo"}
+    ]}
+    """
+    do {
+        _ = try CatalogSeed.parse(seedData(json))
+        Issue.record("expected CatalogSeedError")
+    } catch let CatalogSeedError.problems(problems) {
+        #expect(problems.count == 1)
+        #expect(problems[0].contains("duplicate prompt"))
+    } catch {
+        Issue.record("unexpected error: \(error)")
+    }
+}
+
 @Test func seedRejectsMalformedJSON() {
     #expect(throws: CatalogSeedError.self) {
         _ = try CatalogSeed.parse(seedData("not json"))
@@ -189,7 +210,7 @@ func shippedSeedIsValid(filename: String, count: Int) throws {
 @Test func shippedSeedFilesDoNotOverlap() throws {
     let tumblr = try CatalogSeed.parse(Data(contentsOf: shippedSeedURL("reporter-tumblr-seed.json")))
     let starter = try CatalogSeed.parse(Data(contentsOf: shippedSeedURL("dispatch-starter-seed.json")))
-    let tumblrPrompts = Set(tumblr.map { $0.prompt.lowercased() })
-    let overlap = starter.filter { tumblrPrompts.contains($0.prompt.lowercased()) }
+    let tumblrPrompts = Set(tumblr.map { CatalogDedupe.normalizedPrompt($0.prompt) })
+    let overlap = starter.filter { tumblrPrompts.contains(CatalogDedupe.normalizedPrompt($0.prompt)) }
     #expect(overlap.isEmpty, "starter prompts duplicated from the Tumblr set: \(overlap.map(\.prompt))")
 }
