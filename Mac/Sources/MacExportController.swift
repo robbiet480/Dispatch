@@ -24,6 +24,12 @@ final class MacExportController {
     var isShowingMessage = false
     var isImportRunning = false
 
+    /// Plan 47: question-definition import preview state. The open panel +
+    /// parse + plan run here; `MacQuestionsView` presents the preview sheet
+    /// and calls `commitQuestionImport` on confirm.
+    var questionImportPlan: QuestionImportPlan?
+    var showingQuestionImport = false
+
     init(container: ModelContainer) {
         self.container = container
     }
@@ -70,6 +76,81 @@ final class MacExportController {
         } catch {
             exportLog.error("markdown export failed: \(error, privacy: .public)")
             present("Markdown export failed: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Question definition export (plan 47, issue #57)
+
+    /// Export the question DEFINITIONS (not report data) as JSON — mirrors the
+    /// catalog seed shape so a personal export and a curated seed are the same
+    /// file shape.
+    func exportQuestionsJSON() {
+        savePanelExport(suggestedName: "dispatch-questions.json", type: .json) { context in
+            try QuestionPortability.encodeJSON(Self.questionDefinitions(in: context))
+        }
+    }
+
+    /// Export the question definitions as CSV (documented column schema).
+    func exportQuestionsCSV() {
+        savePanelExport(suggestedName: "dispatch-questions.csv", type: .commaSeparatedText) { context in
+            Data(QuestionPortability.encodeCSV(try Self.questionDefinitions(in: context)).utf8)
+        }
+    }
+
+    private static func questionDefinitions(in context: ModelContext) throws -> [QuestionDefinition] {
+        let questions = try context.fetch(
+            FetchDescriptor<Question>(sortBy: [SortDescriptor(\.sortOrder)]))
+        return questions.map(QuestionDefinition.init)
+    }
+
+    /// Open a CSV/JSON question file, parse it, and build a preview plan
+    /// (adds/skips/errors) against the current questions. Presents the preview
+    /// sheet; nothing is written until `commitQuestionImport`.
+    func importQuestions(existingPrompts: [String]) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.json, .commaSeparatedText]
+        panel.prompt = "Import"
+        panel.message = "Choose a question CSV or JSON file."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let definitions: [QuestionDefinition]
+            if url.pathExtension.lowercased() == "csv" {
+                definitions = try QuestionPortability.decodeCSV(String(decoding: data, as: UTF8.self))
+            } else {
+                definitions = try QuestionPortability.decodeJSON(data)
+            }
+            questionImportPlan = QuestionImportPlan.make(
+                incoming: definitions, existingPrompts: existingPrompts)
+            showingQuestionImport = true
+        } catch {
+            exportLog.error("question import parse failed: \(error, privacy: .public)")
+            present("Question import failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Commit the previewed adds into the store, appended after the existing
+    /// questions (fresh identities — never collides with sync).
+    func commitQuestionImport(into context: ModelContext) {
+        defer {
+            questionImportPlan = nil
+            showingQuestionImport = false
+        }
+        guard let plan = questionImportPlan, !plan.adds.isEmpty else { return }
+        let existing = (try? context.fetch(FetchDescriptor<Question>())) ?? []
+        var nextOrder = (existing.map(\.sortOrder).max() ?? -1) + 1
+        for definition in plan.adds {
+            context.insert(definition.makeQuestion(sortOrder: nextOrder))
+            nextOrder += 1
+        }
+        do {
+            try context.save()
+            present("Imported \(plan.adds.count) question\(plan.adds.count == 1 ? "" : "s").")
+        } catch {
+            exportLog.error("question import commit failed: \(error, privacy: .public)")
+            present("Question import failed: \(error.localizedDescription)")
         }
     }
 

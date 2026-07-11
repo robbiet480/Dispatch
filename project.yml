@@ -247,6 +247,12 @@ targets:
       # platform seam (#if canImport(UIKit)). OptionBlockLayout is pure math.
       - path: App/Sources/Visualizations/QuestionVisualizationView.swift
       - path: App/Sources/Visualizations/OptionBlockLayout.swift
+      # Plan 47 (issue #58): the catalog store + provider are already
+      # UIKit-free (CloudKit framework, available on macOS) — dual target
+      # membership rather than a Mac twin. The catalog VIEWS stay iOS-only
+      # (they use UIKit/iOS-styled SwiftUI); the Mac gets its own catalog UI.
+      - path: App/Sources/Catalog/CatalogStore.swift
+      - path: App/Sources/Catalog/CatalogProvider.swift
       - path: Mac/Assets.xcassets
       - path: Mac/PrivacyInfo.xcprivacy
     dependencies:
