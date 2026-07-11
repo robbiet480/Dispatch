@@ -76,6 +76,55 @@ jobs:
           path: ui-tests.xcresult
           retention-days: 7
 
+  ipad-ui-suite:
+    # EXPERIMENTAL / non-blocking: the suite has only ever run on iPhone and
+    # some tests encode compact-width assumptions (HomeParity, sheet vs
+    # popover). Gathering pass/fail data first; promote to blocking once the
+    # suite is triaged iPad-clean (then drop continue-on-error).
+    runs-on: macos-26
+    timeout-minutes: 90
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+      - name: Ensure iOS platform
+        run: |
+          if xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator; then
+            exit 0
+          fi
+          for i in 1 2 3; do
+            sudo xcodebuild -downloadPlatform iOS && exit 0
+            sleep 30
+          done
+          exit 1
+      - name: Install XcodeGen + xcbeautify
+        run: brew install xcodegen xcbeautify
+      - name: Generate project
+        run: xcodegen generate
+      - name: Ensure simulator
+        run: |
+          if ! xcrun simctl list devices available | grep -q "iPad Pro 13-inch (M5) ("; then
+            RUNTIME=$(xcrun simctl list runtimes | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
+            xcrun simctl create "iPad Pro 13-inch (M5)" "iPad Pro 13-inch (M5)" "$RUNTIME"
+          fi
+      - name: Run full UI suite on iPad
+        run: |
+          xcodebuild test \
+            -project Dispatch.xcodeproj \
+            -scheme DispatchApp \
+            -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' \
+            -resultBundlePath ipad-ui-tests.xcresult \
+            -retry-tests-on-failure \
+            | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
+      - name: Upload result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipad-ui-tests-xcresult
+          path: ipad-ui-tests.xcresult
+          retention-days: 7
+
   mac-ui-smoke:
     runs-on: macos-26
     timeout-minutes: 45
