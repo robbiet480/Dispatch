@@ -1,6 +1,14 @@
 import Charts
 import DispatchKit
 import SwiftUI
+// Plan 36: this file has dual target membership (DispatchApp + DispatchMac)
+// — Swift Charts renders the same marks on both platforms; the only
+// platform seam is the color-blending helpers at the bottom.
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
 
 /// Renders a single question's aggregated visualization. One of these is shown per
 /// page in Home's paged TabView, chosen by `QuestionVisualization`'s case.
@@ -134,12 +142,24 @@ struct OptionSharesBarsView: View {
 }
 
 private extension Color {
+    /// sRGB components via the native color type — the file's one platform
+    /// seam (plan 36): UIColor answers getRed directly; NSColor must be
+    /// converted to an sRGB color space first or getRed raises.
+    var rgbaComponents: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        #if canImport(UIKit)
+        UIColor(self).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #else
+        (NSColor(self).usingColorSpace(.sRGB) ?? .black)
+            .getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #endif
+        return (red, green, blue, alpha)
+    }
+
     /// Blends toward black by `amount` (0...1), used to produce per-index darker tints.
     func blended(withBlack amount: Double) -> Color {
         guard amount > 0 else { return self }
-        let resolved = UIColor(self)
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let (red, green, blue, alpha) = rgbaComponents
         let clampedAmount = min(max(amount, 0), 0.9)
         return Color(
             red: red * (1 - clampedAmount),
@@ -153,9 +173,7 @@ private extension Color {
     /// off the theme background so it reads against it (plan 29).
     func blended(withWhite amount: Double) -> Color {
         guard amount > 0 else { return self }
-        let resolved = UIColor(self)
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let (red, green, blue, alpha) = rgbaComponents
         let clampedAmount = min(max(amount, 0), 0.9)
         return Color(
             red: red + (1 - red) * clampedAmount,
