@@ -26,6 +26,19 @@
 - **Permissions/entitlements: zero new dialogs, zero profile work.** `sleepAnalysis` is already in `HealthKitReader.readTypes` (the bulk read set users authorize in the cascade), and `com.apple.developer.healthkit.background-delivery` is ALREADY in `App/Dispatch.entitlements` — `WorkoutEndObserver.swift` is the shipping precedent for `enableBackgroundDelivery(frequency: .immediate)` and the registration pattern to follow, so no new entitlement and no provisioning-profile recreation (the release-pipeline profiles only need recreating for NEW entitlements). The observer starts regardless of authorization state — HealthKit surfaces denial as queries returning nothing, and `authorizationStatus(for:)` is unreliable for read types by design. No PermissionCascade change, no top-up step.
 - **Test gating absolute (standing rule):** `--mock-sensors`/`--ui-testing` ⇒ `SleepObserver` never touches HealthKit (internal gate like `WorkoutEndObserver`), the focus-filter path stays deterministic via the existing isolated-suite + `FOCUS_FILTER_STATE` injection hook, and the new UI test drives state via launch arguments only.
 
+## Observable Acceptance Criteria
+
+*(Appended 2026-07-11 with the implementation — the plan predates the plan-conventions requirement.)*
+
+- Settings → Notifications shows a **SLEEP** section between the Focus-filter status row and FREQUENCY with the toggle **"Set automatically from Sleep Focus & Health"** (`auto-sleep-toggle`), OFF by default, and a footer naming both signals, the Focus Filters setup path, and the 90-minute manual override.
+- With the toggle untouched, nothing anywhere changes: the Home pill (`awake-toggle`) keeps its exact manual semantics (flip → survey offer → state authoritative even if cancelled).
+- iOS Settings → Focus → Sleep → Focus Filters → Dispatch shows the new **"This Focus Means I'm Asleep"** switch; a filter with it set shows **", marks asleep"** in its subtitle.
+- With the toggle ON and that filter attached to Sleep Focus: engaging Sleep Focus flips Dispatch to ASLEEP within about a minute **without opening the app** (the pill reads ASLEEP on next launch); disengaging it flips AWAKE the same way.
+- While asleep from an automatic source, the Notifications hero (`next-notification-source`) reads **"SLEEP FOCUS MARKED YOU ASLEEP — PROMPTS RESUME AT WAKE"** (or **"HEALTH DATA MARKED YOU ASLEEP — …"**); a manually-set asleep state keeps the byte-identical **"YOU'RE MARKED ASLEEP — PROMPTS RESUME AT WAKE"**.
+- A manual pill flip within 90 minutes of an automatic signal wins: the state visibly stays where the user put it (automation ignores are debug-log-only).
+- If the watch's sleep data arrives hours after wake while the state is already awake, nothing visibly changes (correct no-op); if the state was stranded asleep, it flips AWAKE when the batch lands.
+- Sync Diagnostics' timeline shows one **awakeAuto** entry per automatic transition with the same reason string the `awake-auto` os_log line carries.
+
 ## Global Constraints
 
 - Kit changes test-first: failing test → `swift test` red → implement → `swift test` green, per task. App target verified with `xcodebuild build-for-testing` (UI suite reserved for the merge gate).
@@ -45,9 +58,9 @@ The forum-grade timing claim in decision 1 is load-bearing for Signal 2's whole 
 **Files:**
 - Modify: `App/Sources/DispatchApp.swift` (debug-flag-gated probe only — no product code)
 
-- [ ] **Step 1: Probe.** Behind a `--probe-sleep-delivery` launch argument AND a `sleepProbe.enabled` defaults flag (so it survives background relaunches, where launch args are absent — set the flag when the argument is seen, honor the flag thereafter), register an `HKObserverQuery` on `HKCategoryType(.sleepAnalysis)` + `enableBackgroundDelivery(frequency: .immediate)` at launch, following `WorkoutEndObserver.swift`'s registration pattern verbatim (entitlement already present — see the permissions decision). On EVERY observer fire, os_log (`category: "sleep-probe"`) a timestamped line: fire time, plus for each sleepAnalysis sample with endDate in the last 12h its stage raw value, startDate, endDate, and sourceRevision.source.name. Call the completion handler on every path.
-- [ ] **Step 2: One-night run (owner).** Robbie installs a dev build with the flag set on his device, sleeps normally with the watch on, and in the morning pulls the log (`log show --predicate 'category == "sleep-probe"'` or Console). The morning log definitively characterizes on current watchOS/iOS: (a) whether any fires occur DURING the night, (b) when the night's samples first arrive relative to actual wake, (c) whether they arrive as one batch or trickle.
-- [ ] **Step 3: Record + adjust.** Append the measured timings to this plan (spike-findings subsection) and update decision 1's wake-lag expectation and Task 4's recency-window reasoning from measurement. If the measurement CONTRADICTS the forum claim (e.g. mid-night deliveries are real), revisit whether Signal 2 can carry more of the onset job — as a logged design-decision amendment, not silent scope growth.
+- [x] **Step 1: Probe.** Behind a `--probe-sleep-delivery` launch argument AND a `sleepProbe.enabled` defaults flag (so it survives background relaunches, where launch args are absent — set the flag when the argument is seen, honor the flag thereafter), register an `HKObserverQuery` on `HKCategoryType(.sleepAnalysis)` + `enableBackgroundDelivery(frequency: .immediate)` at launch, following `WorkoutEndObserver.swift`'s registration pattern verbatim (entitlement already present — see the permissions decision). On EVERY observer fire, os_log (`category: "sleep-probe"`) a timestamped line: fire time, plus for each sleepAnalysis sample with endDate in the last 12h its stage raw value, startDate, endDate, and sourceRevision.source.name. Call the completion handler on every path.
+- [x] **Step 2: One-night run (owner).** Robbie installs a dev build with the flag set on his device, sleeps normally with the watch on, and in the morning pulls the log (`log show --predicate 'category == "sleep-probe"'` or Console). The morning log definitively characterizes on current watchOS/iOS: (a) whether any fires occur DURING the night, (b) when the night's samples first arrive relative to actual wake, (c) whether they arrive as one batch or trickle.
+- [x] **Step 3: Record + adjust.** Append the measured timings to this plan (spike-findings subsection) and update decision 1's wake-lag expectation and Task 4's recency-window reasoning from measurement. If the measurement CONTRADICTS the forum claim (e.g. mid-night deliveries are real), revisit whether Signal 2 can carry more of the onset job — as a logged design-decision amendment, not silent scope growth.
 - [x] **Step 4: Keep or strip.** ~~Keep the probe permanently behind its flag (the `--dump-pending`/`--probe-focus-filter` precedent) — it's the re-measurement tool the design log tells future maintainers to run.~~ **AMENDED 2026-07-11 (owner decision, Robbie): STRIP the probe entirely as part of the plan-39 implementation.** Rationale: the measured findings below are the re-measurement baseline; the probe (unlike the launch-arg-only `--dump-pending`/`--probe-focus-filter` precedents) carried real UI surface (a Settings > Sensors Diagnostics toggle) plus an app-documents log file, and it can be resurrected verbatim from git history (commit `da42acf`, "feat: sleep-delivery probe (plan 39 Task 0 diagnostic)") if the measurement ever needs re-running. Removing it also lifts the "builds 22–29 not App-Store-submittable" restriction the probe imposed. Removed: `App/Sources/Providers/SleepDeliveryProbe.swift`, `AppTests/SleepProbeLogFormatterTests.swift`, and every wiring site carrying the `PLAN-39 TASK 0 PROBE` banner (DispatchApp.swift, SensorSettingsView.swift's Diagnostics section, project.yml's DispatchAppTests source entry). Plan 37's `--probe-cloudkit-events` harness is unrelated and stays.
 
 ### Task 0 spike findings (MEASURED 2026-07-10/11, two nights, iPhone + Apple Watch on current OS 26)
@@ -74,9 +87,9 @@ Probe log: `sleep-probe.log` (Settings > Sensors > Diagnostics toggle build; own
 - `AwakeChangeSource: String` enum — `.manual, .focusFilter, .health`
 - `AwakeStore.setAwake(_:source:now:)`, `AwakeStore.lastChangeSource: AwakeChangeSource?`, `AwakeStore.lastManualChangeAt: Date?`
 
-- [ ] **Step 1: Write the failing tests.** `FocusFilterStateTests`: (a) round-trip with `indicatesSleep: true` preserves it; (b) LENIENCY — a JSON blob WITHOUT the key (verbatim old-format fixture string, not re-encoded) decodes with `indicatesSleep == nil`; (c) `filterPlan` output is unaffected by the flag. `UIStateTests`: (d) `setAwake(false, source: .focusFilter)` flips state, records source, does NOT stamp `lastManualChangeAt`; (e) `toggle()` records `.manual` and stamps `lastManualChangeAt`; (f) persistence — a second `AwakeStore` on the same suite reads back source + timestamp; (g) the plain `isAwake` setter records no source (existing-caller safety).
-- [ ] **Step 2: Run `swift test` — expect the new tests FAIL** (members don't exist).
-- [ ] **Step 3: Implement.** `FocusFilterState`: add the optional field + init parameter (Codable synthesis handles absence). `AwakeStore`:
+- [x] **Step 1: Write the failing tests.** `FocusFilterStateTests`: (a) round-trip with `indicatesSleep: true` preserves it; (b) LENIENCY — a JSON blob WITHOUT the key (verbatim old-format fixture string, not re-encoded) decodes with `indicatesSleep == nil`; (c) `filterPlan` output is unaffected by the flag. `UIStateTests`: (d) `setAwake(false, source: .focusFilter)` flips state, records source, does NOT stamp `lastManualChangeAt`; (e) `toggle()` records `.manual` and stamps `lastManualChangeAt`; (f) persistence — a second `AwakeStore` on the same suite reads back source + timestamp; (g) the plain `isAwake` setter records no source (existing-caller safety).
+- [x] **Step 2: Run `swift test` — expect the new tests FAIL** (members don't exist).
+- [x] **Step 3: Implement.** `FocusFilterState`: add the optional field + init parameter (Codable synthesis handles absence). `AwakeStore`:
 
 ```swift
 /// Who last changed the awake state — the automation policy (plan 39)
@@ -111,8 +124,8 @@ public func toggle(now: Date = Date()) -> ReportKind {
 ```
 
 (init reads both keys back; `toggle()` keeps its exact signature compatibility — the added defaulted parameter breaks no caller.)
-- [ ] **Step 4: Run `swift test` — expect PASS** (whole kit suite).
-- [ ] **Step 5: Commit** — `git commit -m "feat(kit): focus-filter sleep flag + awake source tracking (plan 39)"` → push.
+- [x] **Step 4: Run `swift test` — expect PASS** (whole kit suite).
+- [x] **Step 5: Commit** — `git commit -m "feat(kit): focus-filter sleep flag + awake source tracking (plan 39)"` → push.
 
 ### Task 2: Kit — AwakeAutoPolicy state machine
 
@@ -126,15 +139,15 @@ public func toggle(now: Date = Date()) -> ReportKind {
 - `AwakeAutoPolicy.decide(event:isAwake:lastManualChangeAt:now:) -> Decision`
 - `AwakeAutoPolicy.manualCooldown: TimeInterval` (90 × 60), `AwakeAutoPolicy.healthRecencyWindow: TimeInterval` (90 × 60)
 
-- [ ] **Step 1: Write the failing tests** — table-driven over the full matrix, every case asserting BOTH the decision and the reason string prefix:
+- [x] **Step 1: Write the failing tests** — table-driven over the full matrix, every case asserting BOTH the decision and the reason string prefix:
   - Focus activation while awake → transition asleep; while already asleep → ignore ("already asleep").
   - Focus deactivation while asleep → transition awake; while awake → ignore.
   - `healthSleepEnded` while asleep, endDate within `healthRecencyWindow` of now → transition awake; endDate older than the window → ignore ("stale sample"); while already awake → ignore.
   - `healthSleepStarted` while awake, recent → transition asleep; stale/already-asleep → ignore.
   - **Cooldown:** every one of the four events, fired < 90 min after `lastManualChangeAt`, → ignore ("manual cooldown"), in BOTH directions (manual-asleep suppresses focus-wake; manual-awake suppresses focus-sleep); at exactly 90 min + 1s → transitions resume. nil `lastManualChangeAt` → no cooldown.
   - **Conflicting-signal sequences (folded, not per-event):** (a) manual wake at 06:00, Sleep Focus still active re-fires activation at 06:10 → ignored; HealthKit reports sleep ended 06:05 delivered 07:45 → ignored (already awake) — state stays awake throughout. (b) Sleep Focus on at 22:00 (→ asleep), user manually flips awake at 23:00 (insomnia), Focus deactivation at 07:00 → ignore (already awake). (c) Focus deactivates 07:00 (→ awake), HealthKit delivers sleep-ended-06:52 at 07:20 → ignore (already awake, correct no-op). (d) NO Focus configured: healthSleepEnded at 07:30 while asleep → transition awake (health as sole, lagged wake path).
-- [ ] **Step 2: `swift test` — RED.**
-- [ ] **Step 3: Implement** — a single pure function, no stored state:
+- [x] **Step 2: `swift test` — RED.**
+- [x] **Step 3: Implement** — a single pure function, no stored state:
 
 ```swift
 /// Decides whether an automation signal may change the AWAKE/ASLEEP state
@@ -193,8 +206,8 @@ public enum AwakeAutoPolicy {
 }
 ```
 
-- [ ] **Step 4: `swift test` — GREEN** (whole suite).
-- [ ] **Step 5: Commit** — `git commit -m "feat(kit): AwakeAutoPolicy — auto sleep-state machine (plan 39)"` → push.
+- [x] **Step 4: `swift test` — GREEN** (whole suite).
+- [x] **Step 5: Commit** — `git commit -m "feat(kit): AwakeAutoPolicy — auto sleep-state machine (plan 39)"` → push.
 
 ### Task 3: App — Focus filter sleep parameter + signal-1 wiring
 
@@ -203,7 +216,7 @@ public enum AwakeAutoPolicy {
 
 **Interfaces (produced):** `DispatchFocusFilter.awakeSignalInApp: (@MainActor (AwakeAutoPolicy.Event) -> Void)?` hook; `AwakeAutoController` (app, `App/Sources/Providers/AwakeAutoController.swift` — created here, shared with Task 4).
 
-- [ ] **Step 1: `AwakeAutoController`** — the one place decisions are applied (both signals route through it):
+- [x] **Step 1: `AwakeAutoController`** — the one place decisions are applied (both signals route through it):
 
 ```swift
 /// Applies AwakeAutoPolicy decisions (plan 39): the single funnel for both
@@ -240,7 +253,7 @@ final class AwakeAutoController {
 ```
 
 `NotificationPrefs` gains `autoSleepEnabled: Bool` (defaults-backed, default false — the `digestEnabled` pattern; kit change, add a one-line kit test alongside the existing prefs tests).
-- [ ] **Step 2: Intent parameter + emission.** `DispatchFocusFilter` gains the parameter and, in `perform()`, emits through a hook (the `replanInApp` pattern — set in `DispatchApp.init`):
+- [x] **Step 2: Intent parameter + emission.** `DispatchFocusFilter` gains the parameter and, in `perform()`, emits through a hook (the `replanInApp` pattern — set in `DispatchApp.init`):
 
 ```swift
 @Parameter(title: "This Focus Means I'm Asleep", default: false)
@@ -250,10 +263,10 @@ var indicatesSleep: Bool
 ```
 
 In `perform()`: read `let previous = FocusFilterState.read(from: defaults)` BEFORE writing/clearing. On the write path with `indicatesSleep` → after writing state, `awakeSignalInApp?(.focusSleepActivated)` (before `replanInApp` — the replan must see asleep). On the clear path → if `previous?.indicatesSleep == true`, `awakeSignalInApp?(.focusSleepDeactivated)` before `filterClearedInApp`/`replanInApp`. `state(from:)`: `isConfigured` gains `|| intent.indicatesSleep`; the returned state carries `indicatesSleep: intent.indicatesSleep ? true : nil`. `displayRepresentation` appends ", marks asleep" when set.
-- [ ] **Step 3: Liveness-gate parity.** In `NotificationScheduler.activeFocusFilter`'s stale-clear branch: capture `state.indicatesSleep == true` before `FocusFilterState.clear`, and invoke a new `staleSleepFilterCleared: (() -> Void)?` hook (set by DispatchApp to `awakeAutoController.handle(.focusSleepDeactivated)`) after `focusFilterCleared()`. A missed deactivation can otherwise strand the state asleep until HealthKit's lagged correction.
-- [ ] **Step 4: Wire in `DispatchApp.init`** — construct `AwakeAutoController` after the scheduler, set `DispatchFocusFilter.awakeSignalInApp` next to the existing `replanInApp`/`filterClearedInApp` assignments, inject the controller into the environment for Settings. Extend the `--probe-focus-filter` harness: activation with `indicatesSleep = true` prints `FOCUS-PROBE-SLEEP: asleep=\(!awakeStore.isAwake)`, deactivation prints the wake flip — the same simulator-observable evidence trail plan 15 left.
-- [ ] **Step 5: Verify** — `swift test` (prefs + any kit deltas green), `xcodebuild build-for-testing`, run the probe on the simulator and paste the `FOCUS-PROBE-SLEEP` lines into the PR notes.
-- [ ] **Step 6: Commit** — `git commit -m "feat: sleep-focus filter parameter drives auto asleep state (plan 39)"` → push.
+- [x] **Step 3: Liveness-gate parity.** In `NotificationScheduler.activeFocusFilter`'s stale-clear branch: capture `state.indicatesSleep == true` before `FocusFilterState.clear`, and invoke a new `staleSleepFilterCleared: (() -> Void)?` hook (set by DispatchApp to `awakeAutoController.handle(.focusSleepDeactivated)`) after `focusFilterCleared()`. A missed deactivation can otherwise strand the state asleep until HealthKit's lagged correction.
+- [x] **Step 4: Wire in `DispatchApp.init`** — construct `AwakeAutoController` after the scheduler, set `DispatchFocusFilter.awakeSignalInApp` next to the existing `replanInApp`/`filterClearedInApp` assignments, inject the controller into the environment for Settings. Extend the `--probe-focus-filter` harness: activation with `indicatesSleep = true` prints `FOCUS-PROBE-SLEEP: asleep=\(!awakeStore.isAwake)`, deactivation prints the wake flip — the same simulator-observable evidence trail plan 15 left.
+- [x] **Step 5: Verify** — `swift test` (prefs + any kit deltas green), `xcodebuild build-for-testing`, run the probe on the simulator and paste the `FOCUS-PROBE-SLEEP` lines into the PR notes.
+- [x] **Step 6: Commit** — `git commit -m "feat: sleep-focus filter parameter drives auto asleep state (plan 39)"` → push.
 
 ### Task 4: App — SleepObserver (HealthKit background delivery)
 
@@ -261,14 +274,14 @@ In `perform()`: read `let previous = FocusFilterState.read(from: defaults)` BEFO
 - Create: `App/Sources/Providers/SleepObserver.swift`
 - Modify: `App/Sources/DispatchApp.swift`
 
-- [ ] **Step 1: Implement `SleepObserver`** — clone `WorkoutEndObserver`'s structure (same `UncheckedSendableBox` completion-handler discipline — the handler MUST be called on every path or HealthKit throttles delivery; same `isHandlingFire` serialization; same test gate):
+- [x] **Step 1: Implement `SleepObserver`** — clone `WorkoutEndObserver`'s structure (same `UncheckedSendableBox` completion-handler discipline — the handler MUST be called on every path or HealthKit throttles delivery; same `isHandlingFire` serialization; same test gate):
   - `refresh()`: start when `prefs.autoSleepEnabled` && not test env && `HKHealthStore.isHealthDataAvailable()`; stop + `disableBackgroundDelivery` otherwise.
   - `start()`: baseline `sleepAuto.lastSeenEndDate` to now on first run; `HKObserverQuery(sampleType: HKCategoryType(.sleepAnalysis))`; `enableBackgroundDelivery(for: HKCategoryType(.sleepAnalysis), frequency: .immediate)` with the sourced comment: *iOS accepts any frequency for sleepAnalysis (forums 650330) but wakes at most ~hourly for most types (enableBackgroundDelivery doc); forum reports (763329) say watch-native samples arrive minutes-or-longer after wake, and the Task 0 one-night device measurement found: [MEASURED RESULT HERE] — this observer is the lagged/authoritative signal by design; real-time onset is the Focus filter's job (plan 39 design log).* Fill the bracket from Task 0's findings — this task must not start until they exist.
   - `handleObserverFire()`: fetch asleep-stage samples (filter via `HKCategoryValueSleepAnalysis.allAsleepValues`, the `sleepSeconds` precedent) with endDate > lastSeen, limit-bounded, sorted ascending; persist the new lastSeen BEFORE emitting (double-fire safety, the workout-observer comment applies). Derive at most one event per fire: newest sample covering now → `.healthSleepStarted(at: itsStartDate)`; else newest endDate within `AwakeAutoPolicy.healthRecencyWindow` → `.healthSleepEnded(at: newestEndDate)`; else no event. Hand it to `AwakeAutoController.handle(_:)` (recency/direction/cooldown arbitration lives in the POLICY, kit-tested — the observer only describes what it saw).
   - Record the sleep window: query asleep-stage samples over the last 18h, persist min startDate / max endDate as `sleepAuto.lastSleepWindowStart`/`End`, log it.
-- [ ] **Step 2: Launch + lifecycle wiring.** `DispatchApp.init`: construct after `AwakeAutoController`, call `sleepObserver.refresh()` next to `workoutEndObserver.refresh()` with the same headless-relaunch comment; `.environment(sleepObserver)`; refresh again in `onAppear` (parity with the other observers) and from the Settings toggle (Task 5).
-- [ ] **Step 3: Verify** — `xcodebuild build-for-testing`; on the simulator (Health app → add a sleep sample ending now, foreground Dispatch with the toggle ON) confirm the `awake-auto` os_log lines show the fire → decision → replan chain; record what was observable in the PR notes (simulator HealthKit background delivery is best-effort — the foreground fire is the honest sim-verifiable slice).
-- [ ] **Step 4: Commit** — `git commit -m "feat: sleepAnalysis background delivery corrects awake state (plan 39)"` → push.
+- [x] **Step 2: Launch + lifecycle wiring.** `DispatchApp.init`: construct after `AwakeAutoController`, call `sleepObserver.refresh()` next to `workoutEndObserver.refresh()` with the same headless-relaunch comment; `.environment(sleepObserver)`; refresh again in `onAppear` (parity with the other observers) and from the Settings toggle (Task 5).
+- [x] **Step 3: Verify** — `xcodebuild build-for-testing`; on the simulator (Health app → add a sleep sample ending now, foreground Dispatch with the toggle ON) confirm the `awake-auto` os_log lines show the fire → decision → replan chain; record what was observable in the PR notes (simulator HealthKit background delivery is best-effort — the foreground fire is the honest sim-verifiable slice).
+- [x] **Step 4: Commit** — `git commit -m "feat: sleepAnalysis background delivery corrects awake state (plan 39)"` → push.
 
 ### Task 5: App — Settings toggle + hero empty-state + UI test
 
@@ -276,8 +289,8 @@ In `perform()`: read `let previous = FocusFilterState.read(from: defaults)` BEFO
 - Modify: `App/Sources/Settings/NotificationSettingsView.swift`
 - Test: create `AppUITests/AutoSleepUITests.swift`
 
-- [ ] **Step 1: Failing UI test** — launch with `--ui-testing --skip-onboarding`; navigate to Settings → Notifications; assert `auto-sleep-toggle` exists and is OFF by default; toggle it; relaunch-free assertion that it stays on (`.isSelected`/value). Second test: launch with the toggle pre-enabled via launch defaults + a launch argument `--auto-asleep` (test hook: sets `awakeStore.setAwake(false, source: .focusFilter)` in the test-env branch of DispatchApp.init) and assert `next-notification-source` reads `"SLEEP FOCUS MARKED YOU ASLEEP — PROMPTS RESUME AT WAKE"`. RED.
-- [ ] **Step 2: Implement the SLEEP section** (between `focusFilterSection` and `frequencySection`):
+- [x] **Step 1: Failing UI test** — launch with `--ui-testing --skip-onboarding`; navigate to Settings → Notifications; assert `auto-sleep-toggle` exists and is OFF by default; toggle it; relaunch-free assertion that it stays on (`.isSelected`/value). Second test: launch with the toggle pre-enabled via launch defaults + a launch argument `--auto-asleep` (test hook: sets `awakeStore.setAwake(false, source: .focusFilter)` in the test-env branch of DispatchApp.init) and assert `next-notification-source` reads `"SLEEP FOCUS MARKED YOU ASLEEP — PROMPTS RESUME AT WAKE"`. RED.
+- [x] **Step 2: Implement the SLEEP section** (between `focusFilterSection` and `frequencySection`):
 
 ```swift
 private var sleepSection: some View {
@@ -302,7 +315,7 @@ private var sleepSection: some View {
 }
 ```
 
-- [ ] **Step 3: Hero caption switch** in `emptyNextAlertState()`'s asleep branch:
+- [x] **Step 3: Hero caption switch** in `emptyNextAlertState()`'s asleep branch:
 
 ```swift
 } else {
@@ -315,14 +328,29 @@ private var sleepSection: some View {
 }
 ```
 
-- [ ] **Step 4: Verify** — build; `AutoSleepUITests` GREEN; re-run the hero's existing sentinel suites (`NavigationUITests`, `FocusFilterUITests` — the settings screen gained a section, identifiers unchanged).
-- [ ] **Step 5: Commit** — `git commit -m "feat: auto sleep-state settings toggle + honest hero captions (plan 39)"` → push.
+- [x] **Step 4: Verify** — build; `AutoSleepUITests` GREEN; re-run the hero's existing sentinel suites (`NavigationUITests`, `FocusFilterUITests` — the settings screen gained a section, identifiers unchanged).
+- [x] **Step 5: Commit** — `git commit -m "feat: auto sleep-state settings toggle + honest hero captions (plan 39)"` → push.
 
 ### Task 6: Merge gate + self-review
 
-- [ ] **Merge gate:** `swift test` (full kit), `xcodebuild build-for-testing`, FULL UI suite. Default-OFF regression sweep: with the toggle untouched, `NavigationUITests.testNavigationAndAwakeToggle` (manual pill semantics byte-identical) and the plan-15 `FocusFilterUITests` must pass unmodified.
-- [ ] Grep the diff for accidental changes to frozen identifiers and to `FocusFilterState`'s existing JSON keys (`git diff main | grep -E 'accessibilityIdentifier|CodingKeys'`).
-- [ ] Confirm the sourced comments cite forums 650330/763329/781261, the enableBackgroundDelivery doc, AND Task 0's measured result at: the SleepObserver frequency call, the AwakeAutoPolicy header, and the design-log warning against re-attempting real-time HealthKit onset without re-measuring. Confirm the Task 0 spike-findings subsection was appended to this plan.
-- [ ] Confirm zero diffs to report schema/export (`Sources/DispatchKit/V2/`, `Export/`) and zero new permission-cascade steps.
-- [ ] Re-read the conflicting-signal test table against the implementation one final time — every `ignore` reason string must match what the controller logs, so a field os_log trace can be diffed against the kit tests.
-- [ ] Update this plan's checkboxes + append the implementation report section (plan 26/29 convention), noting what the simulator could and couldn't prove about background delivery, and whether the plan-37 ring-buffer mirror was included.
+- [ ] **Merge gate:** `swift test` (full kit), `xcodebuild build-for-testing`, FULL UI suite. Default-OFF regression sweep: with the toggle untouched, `NavigationUITests.testNavigationAndAwakeToggle` (manual pill semantics byte-identical) and the plan-15 `FocusFilterUITests` must pass unmodified. *(Runs at the gate; locally verified: full kit suite 653 green, build-for-testing clean, AutoSleepUITests + NavigationUITests + FocusFilterUITests + NotificationSettingsUITests + DigestScheduleUITests green on iPhone 17 Pro.)*
+- [x] Grep the diff for accidental changes to frozen identifiers and to `FocusFilterState`'s existing JSON keys (`git diff main | grep -E 'accessibilityIdentifier|CodingKeys'`).
+- [x] Confirm the sourced comments cite forums 650330/763329/781261, the enableBackgroundDelivery doc, AND Task 0's measured result at: the SleepObserver frequency call, the AwakeAutoPolicy header, and the design-log warning against re-attempting real-time HealthKit onset without re-measuring. Confirm the Task 0 spike-findings subsection was appended to this plan.
+- [x] Confirm zero diffs to report schema/export (`Sources/DispatchKit/V2/`, `Export/`) and zero new permission-cascade steps.
+- [x] Re-read the conflicting-signal test table against the implementation one final time — every `ignore` reason string must match what the controller logs, so a field os_log trace can be diffed against the kit tests.
+- [x] Update this plan's checkboxes + append the implementation report section (plan 26/29 convention), noting what the simulator could and couldn't prove about background delivery, and whether the plan-37 ring-buffer mirror was included.
+
+## Implementation report (2026-07-11)
+
+Implemented on `plan-39-doc` (the one-branch workflow — PR #42 becomes the feature PR), rebased onto post-test-suite-restructure main (8135926) before app-side work so `SleepObserver` was written against the `WorkoutEndMarkerPlanner`-era `WorkoutEndObserver`.
+
+- **Task 0 Step 4 amendment executed:** the probe was STRIPPED (owner decision, recorded above) — files, Settings toggle, project.yml entry, all `PLAN-39 TASK 0 PROBE` banners. Resurrectable from commit `da42acf`. This lifts the builds-22–29 App-Store-submittability restriction.
+- **Kit:** `FocusFilterState.indicatesSleep` (lenient old-blob decode pinned by a verbatim-fixture test), `AwakeChangeSource` + `AwakeStore.setAwake(_:source:now:)`/`lastChangeSource`/`lastManualChangeAt`, `AwakeAutoPolicy` exactly as specced (25 new kit tests incl. the four conflicting-signal sequences and both-direction cooldown). `NotificationPrefs.autoSleepEnabled` (default OFF). Kit suite: 653 green.
+- **App:** `AwakeAutoController` (single funnel, toggle-gated, no survey, replan-after-state-change, plan-37 ring-buffer mirror INCLUDED — `kindRaw: "awakeAuto"` rides the buffer's unknown-kind leniency); `DispatchFocusFilter.indicatesSleep` + `awakeSignalInApp` hook with previous-state deactivation detection; `NotificationScheduler.staleSleepFilterCleared` liveness-gate parity; `SleepObserver` (WorkoutEndObserver discipline: completion-handler-on-every-path, persist-before-emit, isHandlingFire, launch+onAppear+toggle refresh); SLEEP settings section + source-honest hero captions; `--auto-asleep` test hook.
+- **Deviations (all minor, reasons inline in code):**
+  - `scheduler.authorizationStatus()` reports `.authorized` under the test environment — UI tests never grant permission (the replan-gate rationale), and the authorized empty states (the asleep captions) were otherwise unreachable in UI tests. No existing test asserted the unauthorized caption.
+  - `NotificationSettingsUITests.testNagStepperRowsRespondToTaps` gained a scroll-into-view loop: the new SLEEP section pushed the nag rows below the fold (off-screen SwiftUI List rows aren't in the AX tree; the digest-suite precedent). No identifier changes.
+  - The Task 5 toggle test asserts the flip holds relaunch-free (per the plan's own step wording) rather than a navigate-away-and-back round-trip, which trips over SwiftUI destination-value caching, not prefs persistence.
+  - `AwakeAutoController` is `@Observable` so it can ride `.environment` as the plan's wiring step asks.
+- **What the simulator could and couldn't prove:** the `--probe-focus-filter` harness printed the full Signal-1 chain (`FOCUS-PROBE-SLEEP: asleep=true source=focusFilter`, `FOCUS-PROBE-SLEEP-WAKE: awake=true source=focusFilter`). For Signal 2, the sim-verifiable slice was registration + fire handling (`awake-auto: sleep background delivery enabled: true`, plus a graceful auth-not-determined error fire with the completion handler still called); real batched watch-sample delivery is on-device-only by nature (Task 0 already measured it).
+- **On-device verification owed (owner):** (1) Sleep Focus engage → asleep and disengage → awake while the app is backgrounded; (2) the morning HealthKit batch (~4h post-wake) correcting a stranded-asleep state and recording the window; (3) manual-pill precedence inside the 90-minute cooldown; (4) the awakeAuto rows appearing in Sync Diagnostics.
