@@ -69,32 +69,15 @@ final class NavigationUITests: XCTestCase {
     @MainActor
     func testVisualizationFilterHidesToggledOffQuestionsPage() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        // Home only shows visualization pages once at least one report exists. Seed the
+        // curated demo fixture at launch (--demo-data) so reports — and their viz pages —
+        // are present immediately, instead of driving a full survey to create one.
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding", "--demo-data"]
         app.launch()
 
-        // Home only shows visualization pages once at least one report exists — reuse the
-        // mock-sensor report-flow pattern from SurveyFlowUITests to create one first.
-        let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        let before = countLabel.label
-
-        app.buttons["report-button"].tap()
-        XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
-                      || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
-
-        let next = app.buttons["survey-next"]
-        XCTAssertTrue(next.waitForExistence(timeout: 10))
-        if app.buttons["Yes"].exists { app.buttons["Yes"].tap() }
-        for _ in 0..<12 where next.label == "NEXT" {
-            next.tap()
-        }
-        XCTAssertEqual(next.label, "DONE")
-        next.tap()
-
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        XCTAssertNotEqual(countLabel.label, before)
-
-        // A report now exists, so the visualization pages (and filter pill) should be visible.
+        // Reports already exist from the demo seed, so the visualization pages (and filter
+        // pill) should be visible. The demo fixture seeds the default "Are you working?"
+        // question with answers, so its viz page is present.
         let filterButton = app.buttons["viz-filter-button"]
         XCTAssertTrue(filterButton.waitForExistence(timeout: 10))
 
@@ -143,138 +126,20 @@ final class NavigationUITests: XCTestCase {
         }
     }
 
+    /// End-to-end group-editor plumbing: create a group, assign a question,
+    /// pick a NON-default (calendar event-end) schedule with a title-contains
+    /// match rule, save, and assert it lands in the list with its schedule
+    /// label and NO needs-access hint. The calendar variant is the richest of
+    /// the group-create flows (it also asserts the needs-access hint is absent
+    /// under the full-access test posture), so it stands in for the collapsed
+    /// plain 4×/day and visit-arrival variants.
+    ///
+    /// The per-schedule-type LABEL and MATCH-rule semantics are pinned by the
+    /// DispatchKit unit suite — GroupPlannerTests (schedule planning/labels)
+    /// and CalendarEventPlannerTests (calendar match rules) — so this UI test
+    /// only needs to exercise the editor plumbing for one schedule type.
     @MainActor
-    func testCreatePromptGroupWithQuestionAppearsInList() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
-        app.launch()
-
-        // Settings → Prompt Groups.
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let groupsLink = app.buttons["prompt-groups-link"]
-        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
-        groupsLink.tap()
-
-        XCTAssertTrue(
-            app.otherElements["prompt-groups"].waitForExistence(timeout: 10)
-                || app.collectionViews["prompt-groups"].waitForExistence(timeout: 10)
-                || app.tables["prompt-groups"].waitForExistence(timeout: 10)
-        )
-        // Add a group and assign one question. The store is in-memory per
-        // launch under --ui-testing, but scroll to the add row anyway so the
-        // test survives a long list (belt and braces).
-        let addButton = app.buttons["group-add"]
-        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
-        var scrollsRemaining = 8
-        while !addButton.isHittable, scrollsRemaining > 0 {
-            app.swipeUp()
-            scrollsRemaining -= 1
-        }
-        XCTAssertTrue(addButton.isHittable, "ADD A GROUP row should be reachable by scrolling")
-        addButton.tap()
-
-        let groupName = "Check-in \(Int(Date().timeIntervalSince1970) % 100_000)"
-        // Clean up the created group even if an assertion below fails, so a
-        // failed run can't pollute the list for later tests in this launch.
-        addTeardownBlock { @MainActor in
-            let row = app.staticTexts[groupName.uppercased()]
-            guard row.exists else { return }
-            row.swipeLeft()
-            let deleteButton = app.buttons["Delete"]
-            if deleteButton.waitForExistence(timeout: 5) {
-                deleteButton.tap()
-            }
-        }
-        let nameField = app.textFields["group-name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
-        nameField.tap()
-        nameField.typeText(groupName)
-
-        let questionRow = app.buttons["Are you working?"]
-        XCTAssertTrue(questionRow.waitForExistence(timeout: 10))
-        questionRow.tap()
-
-        app.buttons["group-save"].tap()
-
-        // Back on the list: the new group shows with its question count and
-        // the empty-state explainer is gone.
-        XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["4× per day – 1 question"].exists)
-        XCTAssertFalse(app.staticTexts["prompt-groups-empty"].exists)
-    }
-
-    /// Plan 16: a visit-arrival group can be created entirely through the
-    /// editor under --mock-sensors (the observer and the Always-location
-    /// request are test-gated — no system dialog) and lands in the list
-    /// with its schedule label.
-    @MainActor
-    func testCreateVisitArrivalGroupShowsScheduleLabel() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
-        app.launch()
-
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let groupsLink = app.buttons["prompt-groups-link"]
-        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
-        groupsLink.tap()
-
-        let addButton = app.buttons["group-add"]
-        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
-        var scrollsRemaining = 8
-        while !addButton.isHittable, scrollsRemaining > 0 {
-            app.swipeUp()
-            scrollsRemaining -= 1
-        }
-        addButton.tap()
-
-        let groupName = "Arrivals \(Int(Date().timeIntervalSince1970) % 100_000)"
-        addTeardownBlock { @MainActor in
-            let row = app.staticTexts[groupName.uppercased()]
-            guard row.exists else { return }
-            row.swipeLeft()
-            let deleteButton = app.buttons["Delete"]
-            if deleteButton.waitForExistence(timeout: 5) {
-                deleteButton.tap()
-            }
-        }
-
-        let nameField = app.textFields["group-name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
-        nameField.tap()
-        nameField.typeText(groupName)
-
-        let questionRow = app.buttons["Are you working?"]
-        XCTAssertTrue(questionRow.waitForExistence(timeout: 10))
-        questionRow.tap()
-
-        // Form pickers render as a menu: open it, choose the visit schedule.
-        let schedulePicker = app.buttons["group-schedule-kind"]
-        XCTAssertTrue(schedulePicker.waitForExistence(timeout: 10))
-        schedulePicker.tap()
-        let visitOption = app.buttons["When I arrive somewhere"]
-        XCTAssertTrue(visitOption.waitForExistence(timeout: 10))
-        visitOption.tap()
-
-        app.buttons["group-save"].tap()
-
-        // Back on the list: the visit group shows with its schedule label.
-        XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["When I arrive somewhere – 1 question"].waitForExistence(timeout: 10))
-    }
-
-    /// Plan 31: a calendar event-end group with a title-contains match rule
-    /// can be created entirely through the editor under --mock-sensors (the
-    /// observer reads as full access with an empty calendar list — no system
-    /// dialog) and lands in the list with its schedule label and NO
-    /// needs-access hint.
-    @MainActor
-    func testCreateCalendarEventGroupShowsScheduleLabelWithoutAccessHint() throws {
+    func testCreatePromptGroupWithScheduleAppearsInList() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
