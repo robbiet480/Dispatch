@@ -882,7 +882,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Delayed (or immediate) group prompt for the CLMonitor observer (plan
-    /// 43). Uses the `mprompt-` prefix — a DISTINCT identifier family from
+    /// 45). Uses the `mprompt-` prefix — a DISTINCT identifier family from
     /// `gprompt-` so it SURVIVES the replan's remove-before-add batch (which
     /// sweeps gprompt-) during the delay window; MonitorObserver owns its
     /// lifecycle (cancel-by-prefix on a contradiction, orphan sweep on
