@@ -74,7 +74,7 @@ struct CatalogSubmitView: View {
                         Button("Send") { submit() }
                             .tint(.white)
                             .fontWeight(.semibold)
-                            .disabled(isSubmitting)
+                            .disabled(isSubmitting || store.submissionsRemaining == 0)
                             .accessibilityIdentifier("catalog-submit-send")
                     }
                 }
@@ -208,6 +208,19 @@ struct CatalogSubmitView: View {
                         .accessibilityIdentifier("catalog-submit-error")
                 }
             }
+
+            // Plan 38: the per-device quota surfaces only when it bites
+            // (≤2 remaining or exhausted) — friction shouldn't advertise
+            // itself on a fresh install.
+            if let quotaMessage {
+                Section {
+                    Text(quotaMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .listRowBackground(Color.clear)
+                        .accessibilityIdentifier("catalog-submit-quota")
+                }
+            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -242,6 +255,21 @@ struct CatalogSubmitView: View {
     /// identical to the question editor's.
     private var configFields: (min: Bool, max: Bool, step: Bool) {
         inputStyle.exposedConfigFields
+    }
+
+    /// Quota footer text (plan 38): nil above 2 remaining, a countdown at
+    /// 1–2, and the reset time once the rolling window is exhausted.
+    private var quotaMessage: String? {
+        let remaining = store.submissionsRemaining
+        if remaining == 0 {
+            let reset = store.nextSubmissionAllowed?
+                .formatted(date: .omitted, time: .shortened) ?? "tomorrow"
+            return "Daily limit reached — try again after \(reset)."
+        }
+        if remaining <= 2 {
+            return "\(remaining) submission\(remaining == 1 ? "" : "s") left today."
+        }
+        return nil
     }
 
     /// Style/bounds/default gated to number questions, parsed with the

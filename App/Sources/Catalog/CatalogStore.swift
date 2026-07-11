@@ -27,8 +27,34 @@ final class CatalogStore {
 
     var hasMore: Bool { cursor != nil }
 
+    /// Per-device submission throttle state (plan 38). `UserDefaults.standard`
+    /// deliberately — NOT iCloud KVS: syncing the counter would punish
+    /// multi-device users for a control that provides zero security anyway
+    /// (see `SubmissionThrottle`'s doc comment).
+    static let submissionTimestampsKey = "catalog.submissionTimestamps"
+    private(set) var submissionTimestamps: [Date]
+
     init(provider: any CatalogProviding = CatalogStore.makeProvider()) {
         self.provider = provider
+        // UI-test hook: seed (or reset — defaults persist across launches on
+        // a simulator) the throttle state so quota tests don't need five
+        // round-trip submissions.
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-testing") || arguments.contains("--mock-sensors") {
+            let count = Int(ProcessInfo.processInfo.environment["CATALOG_SEEDED_SUBMISSIONS"] ?? "") ?? 0
+            let seeded = (0..<count).map { Date.now.addingTimeInterval(-Double($0) * 60) }
+            UserDefaults.standard.set(seeded, forKey: Self.submissionTimestampsKey)
+        }
+        submissionTimestamps =
+            (UserDefaults.standard.array(forKey: Self.submissionTimestampsKey) as? [Date]) ?? []
+    }
+
+    var submissionsRemaining: Int {
+        SubmissionThrottle(timestamps: submissionTimestamps).remaining(now: .now)
+    }
+
+    var nextSubmissionAllowed: Date? {
+        SubmissionThrottle(timestamps: submissionTimestamps).nextAllowed(now: .now)
     }
 
     /// Stubbed under UI-test launch args — UI tests never touch real CloudKit.
@@ -92,6 +118,16 @@ final class CatalogStore {
                 inputStyle: String? = nil, defaultAnswer: String? = nil,
                 placeholder: String? = nil, inputMin: Double? = nil,
                 inputMax: Double? = nil, inputStep: Double? = nil) async throws {
+        // Throttle first (plan 38): exhausted quota fails before validation
+        // or the network, and a timestamp is recorded only after the provider
+        // succeeds — failed submits never burn a slot.
+        let now = Date.now
+        let throttle = SubmissionThrottle(timestamps: submissionTimestamps)
+        guard throttle.canSubmit(now: now) else {
+            throw CatalogProviderError.throttled(
+                until: throttle.nextAllowed(now: now) ?? now.addingTimeInterval(SubmissionThrottle.window)
+            )
+        }
         let errors = CatalogValidation.validate(
             prompt: prompt, typeRaw: typeRaw, choices: choices, creditName: creditName,
             inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder
@@ -108,6 +144,9 @@ final class CatalogStore {
             placeholder: normalized.placeholder,
             inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
         )
+        let recorded = throttle.recording(now: now)
+        submissionTimestamps = recorded.timestamps
+        UserDefaults.standard.set(recorded.timestamps, forKey: Self.submissionTimestampsKey)
     }
 
     func flag(catalogRecordName: String, reason: String) async throws {
