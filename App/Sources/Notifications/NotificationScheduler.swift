@@ -47,6 +47,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// which would otherwise call `requestPermissionIfNeeded` again).
     private var hasRequestedThisLaunch = false
 
+    /// Plan 39: set by DispatchApp to route a wake signal through
+    /// AwakeAutoController when the liveness gate below clears a STALE
+    /// sleep-marker filter — the gate can be the first place a missed
+    /// deactivation delivery is noticed, and without this the state would
+    /// strand asleep until HealthKit's lagged (hours-scale) correction.
+    var staleSleepFilterCleared: (() -> Void)?
+
     /// EventKit seam (plan 31), wired by DispatchApp to CalendarEventObserver.
     /// The scheduler never touches EventKit directly: a nil source (tests,
     /// pre-wiring) simply plans no calendar prompts, so `replanNow` stays
@@ -83,8 +90,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
            INFocusStatusCenter.default.authorizationStatus == .authorized,
            INFocusStatusCenter.default.focusStatus.isFocused == false {
             notificationLog.info("focus filter state (\(state.label, privacy: .public)) is stale — no Focus active; clearing and planning the full schedule")
+            // Plan 39: capture the sleep marker BEFORE the clear — the wake
+            // signal is derived from the outgoing state, matching the
+            // intent path's previous-state read.
+            let wasSleepMarker = state.indicatesSleep == true
             FocusFilterState.clear(in: focusFilterDefaults)
             focusFilterCleared()
+            if wasSleepMarker {
+                staleSleepFilterCleared?()
+            }
             return nil
         }
         return state
