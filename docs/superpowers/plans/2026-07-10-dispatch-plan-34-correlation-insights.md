@@ -258,3 +258,30 @@ public struct CorrelationFinding: Equatable, Sendable {
 - [ ] **Step 1: UI test.** Extend `InsightsUITests` (existing `--mock-sensors` empty-store test stays): fresh store → open Insights → `correlation-question-row` does NOT exist and the unlock footnote does (identifier it in Task 4). If the suite has a demo-data path (`ScreenshotTests` seeds demo — check whether `DemoData` seeding is reachable under a launch argument; if not, the empty-store assertions are the whole UI test and the drill-in stays covered by kit tests + the Task 4 sim smoke — record which in the completion note).
 - [ ] **Step 2: Merge gate** — full `swift test`, `xcodebuild build-for-testing`, UI suite. Counts vs the pre-plan baseline; InsightsEngineTests unchanged and green.
 - [ ] **Step 3: Commit** — `git commit -m "test: correlations UI coverage + merge-gate run"` → push. Whole-branch review follows (controller-driven). Completion note records: plan 26/28 merge state encountered and which conditional path was taken; the hrvSDNN and digest-integration follow-ups; the time-question integration point if plan 28 landed.
+
+## Observable Acceptance Criteria
+
+- Insights (from Settings → Insights, `insights-view`) shows a **CORRELATIONS**
+  header beneath the insight cards with one tappable row per eligible question
+  (`correlation-question-row`), each showing the prompt and an answer-count
+  caption (e.g. `40 ANSWERS`).
+- On a fresh install (no eligible question) the CORRELATIONS section is absent
+  and a one-line footnote reads "Per-question correlations unlock at 20 answers
+  to a question." (`correlations-unlock-footnote`).
+- Tapping a question row opens the drill-in (`question-correlations-view`)
+  titled with the prompt. Every context dimension renders exactly one row:
+  - a finding card (`correlation-finding-card`) with the dimension label, a
+    headline like "You answered Yes more often when Angela was around.", a
+    detail carrying both sides + 95% CI + n, and a tier caption like
+    `MODERATE · 59 REPORTS`;
+  - or a muted "No reliable link — tested across N reports" row
+    (`correlation-null-row`);
+  - or a muted "Not enough data yet (have 4, needs 10)" row
+    (`correlation-insufficient-row`).
+- Multi-answer questions group rows under per-answer headers (e.g. `RED`),
+  with "Showing your 8 most common answers." when truncated.
+- The correlation-≠-causation disclaimer (`correlation-disclaimer`) is always
+  present at the end of the drill-in scroll content, findings or not.
+- No headline or detail anywhere claims causation ("causes", "because",
+  "leads to", "makes you", "2x", "twice as likely", "proves", "drives") —
+  pinned by kit test.
