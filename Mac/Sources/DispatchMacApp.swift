@@ -97,9 +97,17 @@ struct DispatchMacApp: App {
     private func pinScreenshotWindowIfRequested() {
         guard isTestEnvironment,
               ProcessInfo.processInfo.arguments.contains("--screenshot-window") else { return }
-        DispatchQueue.main.async {
-            guard let window = NSApp.windows.first(where: { $0.isVisible }) ?? NSApp.windows.first
-            else { return }
+        // The window may not exist yet when the root view first appears —
+        // retry over ~5s until it does.
+        pinScreenshotWindow(attemptsLeft: 25)
+    }
+
+    private func pinScreenshotWindow(attemptsLeft: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            guard let window = NSApp.windows.first(where: { $0.isVisible }) else {
+                if attemptsLeft > 0 { pinScreenshotWindow(attemptsLeft: attemptsLeft - 1) }
+                return
+            }
             var frame = window.frame
             frame.size = NSSize(width: 1440, height: 900)
             window.setFrame(frame, display: true)

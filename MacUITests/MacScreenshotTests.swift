@@ -89,7 +89,16 @@ final class MacScreenshotTests: XCTestCase {
     @MainActor
     private func mainWindow(_ app: XCUIApplication) -> XCUIElement {
         let window = app.windows.firstMatch
+        if !window.waitForExistence(timeout: 10) {
+            // Occasionally the launch lands without a main window (observed
+            // when another instance of the bundle id is running). WindowGroup
+            // honors ⌘N — ask for one.
+            app.activate()
+            app.typeKey("n", modifierFlags: .command)
+        }
         XCTAssertTrue(window.waitForExistence(timeout: 15))
+        // Give the --screenshot-window resize (retry loop app-side) a moment.
+        Thread.sleep(forTimeInterval: 2)
         return window
     }
 
