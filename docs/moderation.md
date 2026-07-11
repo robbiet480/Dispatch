@@ -195,9 +195,30 @@ Field shapes (all created automatically by the writes above):
 
 | Record type | Fields |
 |---|---|
-| `SubmittedQuestion` | `prompt` String, `typeRaw` Int64, `choicesJSON` String, `creditName` String (optional), `submittedAt` Date/Time |
-| `CatalogQuestion` | `prompt` String, `typeRaw` Int64, `choicesJSON` String, `credit` String (optional), `approvedAt` Date/Time, `tags` String List (optional) |
+| `SubmittedQuestion` | `prompt` String, `typeRaw` Int64, `choicesJSON` String, `creditName` String (optional), `submittedAt` Date/Time, + input config below |
+| `CatalogQuestion` | `prompt` String, `typeRaw` Int64, `choicesJSON` String, `credit` String (optional), `approvedAt` Date/Time, `tags` String List (optional), + input config below |
 | `QuestionFlag` | `catalogRecordName` String, `reason` String, `flaggedAt` Date/Time |
+
+**Input configuration fields (plan 41):** both `SubmittedQuestion` and
+`CatalogQuestion` additionally carry `inputStyle` String, `defaultAnswer`
+String, `placeholder` String, `inputMin` Double, `inputMax` Double, and
+`inputStep` Double — all optional, all omitted when unset, none indexed
+(the catalog sorts on `approvedAt` and filters client-side). They let an
+approved question arrive fully configured when a user adds it to their
+questions (the plan-21 number input styles). Forward-lenient by omission:
+pre-plan-41 app builds only extract keys they know, so records carrying the
+new fields render on old builds exactly as before (bare style), and records
+without them decode with the fields nil.
+
+**Schema deploy for these columns:** additive columns auto-create in
+**Development** on the first write that carries them (a configured submission
+from a dev build, or `dispatch-mod import` of a configured seed). But
+**Production needs an OWNER Console deploy — Deploy Schema Changes →
+Production (§3c)**; `cktool import-schema`/`validate-schema` are rejected in
+Production. Writes that OMIT the new fields keep working before the deploy
+(they are nil-omitted); only a write that SETS one of the new fields before
+the Production deploy would fail. So the deploy gates real use of the
+feature in Production, not the merge.
 
 ## 3. Console checklist (user actions — required before TestFlight)
 

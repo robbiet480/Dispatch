@@ -100,6 +100,23 @@ final class ModSchemaTests: XCTestCase {
         XCTAssertFalse(block("CatalogQuestion").contains("\"___createdBy\" REFERENCE QUERYABLE"))
     }
 
+    func testInputConfigColumnsOnBothCatalogRecordTypes() {
+        // Plan 41: six additive nullable columns on BOTH record types, none
+        // indexed (never queried — the catalog sorts on approvedAt and
+        // filters client-side).
+        let columns = [
+            "inputStyle STRING", "defaultAnswer STRING", "placeholder STRING",
+            "inputMin DOUBLE", "inputMax DOUBLE", "inputStep DOUBLE",
+        ]
+        for type in ["CatalogQuestion", "SubmittedQuestion"] {
+            for column in columns {
+                XCTAssertTrue(block(type).contains(column), "\(type) missing \(column)")
+                XCTAssertFalse(block(type).contains("\(column) SORTABLE"))
+                XCTAssertFalse(block(type).contains("\(column) QUERYABLE"))
+            }
+        }
+    }
+
     func testNoSearchableIndexes() {
         // App search is client-side over loaded entries (docs §3b).
         XCTAssertFalse(Self.schema.contains("SEARCHABLE"))
