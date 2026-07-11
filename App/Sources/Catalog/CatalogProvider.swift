@@ -25,18 +25,31 @@ enum CatalogAccountStatus: Sendable {
 enum CatalogProviderError: LocalizedError {
     case network(underlying: String)
     case validation([CatalogValidationError])
+<<<<<<< HEAD
     /// Plan 38: the per-device submission throttle is exhausted. Thrown by
     /// `CatalogStore.submit` before the provider is touched, so scripted
     /// callers hit the same wall as the UI. Friction, not security — see
     /// `SubmissionThrottle`.
     case throttled(until: Date)
+=======
+    /// Plan 42: the prompt matches an existing catalog entry (normalized
+    /// identity). The submit form offers "Add to My Questions" instead.
+    case duplicate(existing: CatalogQuestion)
+    /// Plan 42: this device already submitted the same prompt.
+    case alreadySubmitted
+>>>>>>> ef64989 (feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47))
 
     var errorDescription: String? {
         switch self {
         case .network(let underlying): underlying
         case .validation(let errors): errors.map(\.message).joined(separator: " ")
+<<<<<<< HEAD
         case .throttled(let until):
             "Daily limit reached — try again after \(until.formatted(date: .omitted, time: .shortened))."
+=======
+        case .duplicate: "This question is already in the catalog."
+        case .alreadySubmitted: "You already submitted this question. It's waiting for moderation."
+>>>>>>> ef64989 (feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47))
         }
     }
 }
@@ -57,6 +70,12 @@ protocol CatalogProviding: Sendable {
 
     /// Create a QuestionFlag record against a catalog entry.
     func flag(catalogRecordName: String, reason: String) async throws
+
+    /// First catalog entry whose `promptFingerprint` equals `fingerprint`,
+    /// or nil — including nil on ANY error (offline, index not yet deployed,
+    /// record type missing). The duplicate pre-check is UX friction only;
+    /// a lookup failure must never block a submission (plan 42).
+    func catalogQuestion(matchingFingerprint fingerprint: String) async -> CatalogQuestion?
 
     /// Whether writes are possible (submitting/flagging needs an iCloud
     /// account; browsing the public database does not).
@@ -149,6 +168,24 @@ final class CloudKitCatalogProvider: CatalogProviding {
         }
     }
 
+    func catalogQuestion(matchingFingerprint fingerprint: String) async -> CatalogQuestion? {
+        let query = CKQuery(
+            recordType: CatalogRecordType.catalogQuestion,
+            predicate: NSPredicate(format: "promptFingerprint == %@", fingerprint)
+        )
+        do {
+            let (matchResults, _) = try await database.records(matching: query, resultsLimit: 1)
+            guard let record = try matchResults.first?.1.get() else { return nil }
+            return Self.catalogQuestion(from: record)
+        } catch {
+            // UX-only check: a failed lookup (offline, promptFingerprint
+            // index not deployed in this environment yet, record type
+            // missing pre-setup) means "no duplicate found", never an error.
+            catalogLog.info("duplicate pre-check query failed; proceeding without it: \(error)")
+            return nil
+        }
+    }
+
     func accountStatus() async -> CatalogAccountStatus {
         do {
             let status = try await CKContainer(identifier: SyncPolicy.containerIdentifier).accountStatus()
@@ -201,6 +238,11 @@ final class CloudKitCatalogProvider: CatalogProviding {
         }
         for key in ["inputMin", "inputMax", "inputStep"] {
             if let double = record[key] as? Double { fields[key] = .double(double) }
+        }
+        // Content-identity fingerprint (plan 42) — optional; absent on
+        // records approved before the backfill.
+        if let fingerprint = record["promptFingerprint"] as? String {
+            fields["promptFingerprint"] = .string(fingerprint)
         }
         return CatalogQuestion(recordName: record.recordID.recordName, fields: fields)
     }
@@ -293,6 +335,12 @@ final class StubCatalogProvider: CatalogProviding, @unchecked Sendable {
 
     func flag(catalogRecordName: String, reason: String) async throws {
         flags.append((catalogRecordName, reason))
+    }
+
+    func catalogQuestion(matchingFingerprint fingerprint: String) async -> CatalogQuestion? {
+        // Stub entries carry no stored fingerprint; resolve like the
+        // backfilled server would — from the prompt.
+        Self.stubEntries.first { CatalogDedupe.promptFingerprint($0.prompt) == fingerprint }
     }
 
     func accountStatus() async -> CatalogAccountStatus { .available }
