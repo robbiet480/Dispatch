@@ -50,23 +50,36 @@ final class WatchScreenshotTests: XCTestCase {
         Thread.sleep(forTimeInterval: 1)
         snap("01-home")
 
-        // 02 — answering a question (the multiple-choice sleep question is
-        // the first row of the Questions section in default sortOrder).
-        let sleepRow = app.staticTexts["How did you sleep?"]
-        XCTAssertTrue(sleepRow.waitForExistence(timeout: 10))
-        sleepRow.tap()
-        XCTAssertTrue(app.staticTexts["Answer"].waitForExistence(timeout: 10)
-                      || app.navigationBars["Answer"].waitForExistence(timeout: 10))
-        Thread.sleep(forTimeInterval: 1)
+        // 02 — answering a question. Only regular-report questions appear in
+        // the watch list; the coffee count (number question, crown stepper)
+        // photographs best. The List is lazy, so scroll until its row exists,
+        // falling back to the first question row.
+        // (Rows surface as Buttons in the watch AX tree, not StaticTexts.)
+        let coffeeRow = app.buttons["How many coffees did you have today?"]
+        for _ in 0..<6 where !coffeeRow.exists {
+            app.swipeUp()
+        }
+        if coffeeRow.exists {
+            coffeeRow.tap()
+        } else {
+            let workingRow = app.buttons["Are you working?"]
+            XCTAssertTrue(workingRow.waitForExistence(timeout: 10))
+            workingRow.tap()
+        }
+        Thread.sleep(forTimeInterval: 1.5)
         snap("02-question-answer")
 
         // 03 — settings (sync toggle + about), via home.
         app.terminate()
         let relaunched = launchApp()
+        XCTAssertTrue(relaunched.buttons["watch-quick-answer-yes"].waitForExistence(timeout: 15))
+        // The link is the last list row and the List is lazy — it doesn't
+        // exist in the AX tree until scrolled into view.
         let settingsLink = relaunched.buttons["watch-settings-link"]
-        XCTAssertTrue(settingsLink.waitForExistence(timeout: 15))
-        // The link is the last list row — scroll it into view.
-        relaunched.swipeUp()
+        for _ in 0..<8 where !settingsLink.exists {
+            relaunched.swipeUp()
+        }
+        XCTAssertTrue(settingsLink.exists)
         settingsLink.tap()
         Thread.sleep(forTimeInterval: 1)
         snap("03-settings")
