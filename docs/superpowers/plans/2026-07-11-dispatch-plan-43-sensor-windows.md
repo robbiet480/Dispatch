@@ -42,7 +42,8 @@ query window. What's missing:
    existing `average`.
 4. **Readings, not composites** — the window summary is stored as additive
    `HealthReading` entries in the existing `Report.health` array:
-   `heartRateStart`, `heartRateEnd`, `heartRateMin`, `heartRateMax` (unit
+   `heartRateWindowStart`, `heartRateWindowEnd`, `heartRateWindowMin`,
+   `heartRateWindowMax` (unit
    `bpm`, `startDate` = window start, `endDate` = window end; the boundary
    readings carry their own sample dates). `HealthReading.type` is an open
    string, so storage, CloudKit sync, and V2 export/import are additive with
