@@ -132,14 +132,23 @@ final class WorkoutEndObserver {
         // cover several workouts (e.g. batched background delivery), and
         // handling only the newest would silently swallow the others.
         let workouts = await workouts(endingAfter: lastSeen)
-        guard let newestEndDate = workouts.last?.endDate else { return }
 
-        // Persist BEFORE posting so a rapid second observer fire can't
-        // duplicate the prompts for the same workouts.
-        defaults.set(newestEndDate.timeIntervalSince1970, forKey: Self.lastSeenKey)
+        // Pure decision (DispatchKit): whether to prompt now and what the
+        // marker becomes. Crucially, workouts ending while asleep do NOT
+        // advance the marker, so they stay eligible on the next fire (after
+        // wake) instead of being permanently swallowed. Persist the marker on
+        // every path — when awake it advances past the handled workouts so a
+        // rapid second fire can't duplicate the prompts; when asleep or empty
+        // it's an unchanged no-op write.
+        let plan = WorkoutEndMarkerPlanner.plan(
+            currentMarker: lastSeen, newestEndDate: workouts.last?.endDate,
+            isAwake: awakeStore.isAwake)
+        defaults.set(plan.newMarker.timeIntervalSince1970, forKey: Self.lastSeenKey)
 
-        guard awakeStore.isAwake else {
-            observerLog.info("\(workouts.count, privacy: .public) workout(s) ended while asleep — no prompt")
+        guard plan.shouldPrompt else {
+            if !workouts.isEmpty {
+                observerLog.info("\(workouts.count, privacy: .public) workout(s) ended while asleep — no prompt, staying eligible")
+            }
             return
         }
 
