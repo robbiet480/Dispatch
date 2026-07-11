@@ -134,3 +134,7 @@
 
 - [x] Full `swift test` run, App-target build (`xcodebuild build`, no launch).
 - [x] Open PR referencing #61; PR stays open for review, not merged.
+
+## Completion note (2026-07-11)
+
+All 7 tasks landed. `swift test`: 634 tests, all green. Builds verified: `DispatchApp` scheme (App + Watch + widgets, generic/iOS Simulator) and `DispatchMac` scheme, both `xcodebuild build` clean — no simulator launch, per the kit-first/deferred-UI-verification constraint. Simulator-launch/XCUITest verification (capture-checklist rows, settings toggles, report-detail rows actually rendering) is deferred to reviewer/follow-up, as scoped.
