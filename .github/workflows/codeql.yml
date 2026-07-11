@@ -15,7 +15,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Scopes PR analysis to the languages actually touched. Non-PR events
+  # (push to main, weekly schedule, dispatch) analyze everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      actions: ${{ steps.diff.outputs.actions }}
+      python: ${{ steps.diff.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -z "$BASE_SHA" ]; then
+            echo "actions=true" >> "$GITHUB_OUTPUT"
+            echo "python=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD)
+          echo "$CHANGED" | grep -qE '^\.github/workflows/' && echo "actions=true" >> "$GITHUB_OUTPUT" || echo "actions=false" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" | grep -qE '\.py$' && echo "python=true" >> "$GITHUB_OUTPUT" || echo "python=false" >> "$GITHUB_OUTPUT"
+
   analyze-swift:
+    # NOT run on pull_request: the traced build occupies a macOS runner for
+    # ~20 min and competes with the REQUIRED ios-ui-suite check for the
+    # scarce macos-26 pool — Swift findings are want-to-know, not
+    # merge-blocking. Runs on every main push + the weekly schedule instead.
+    if: github.event_name != 'pull_request'
     # Swift needs manual build mode: the .xcodeproj is XcodeGen-generated
     # (never committed), so CodeQL's autobuild has nothing to discover —
     # its default-setup run failed with "unable to automatically build".
@@ -60,6 +89,8 @@ jobs:
           category: "/language:swift"
 
   analyze-actions:
+    needs: changes
+    if: needs.changes.outputs.actions == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -75,6 +106,8 @@ jobs:
           category: "/language:actions"
 
   analyze-python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
