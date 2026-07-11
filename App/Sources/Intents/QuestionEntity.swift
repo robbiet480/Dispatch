@@ -5,7 +5,7 @@ import SwiftData
 
 /// A `Question` as an `AppEntity` so Shortcuts can parameterize the
 /// "Log Answer" and "Last Answer" actions with a picker of the user's
-/// questions (plan 43). Read from the SHARED App Group store READ-ONLY — the
+/// questions (plan 49). Read from the SHARED App Group store READ-ONLY — the
 /// `PromptGroupEntity` precedent — since the system may query it from a
 /// background-launched process while the foreground app holds the store.
 ///

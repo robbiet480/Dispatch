@@ -3,7 +3,7 @@ import SwiftData
 import Testing
 @testable import DispatchKit
 
-// AnswerSummary (plan 43): flatten one Response to a display string, and find
+// AnswerSummary (plan 49): flatten one Response to a display string, and find
 // the most recent answered response for a question across reports — the
 // backing for the "last answer to a question" query intent. Report-centric:
 // answers are read out of the reports they live in.

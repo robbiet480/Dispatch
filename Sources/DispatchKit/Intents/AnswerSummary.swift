@@ -1,6 +1,6 @@
 import Foundation
 
-/// Read-side helper for the App Intents query layer (plan 43): flatten a
+/// Read-side helper for the App Intents query layer (plan 49): flatten a
 /// `Response` to a display string and find the most recent answer to a
 /// question across a set of reports. Report-centric — answers are always read
 /// out of the `Report` they live in; there is no free-floating answer.
