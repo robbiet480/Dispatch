@@ -62,6 +62,16 @@ public enum CorrelationEngine {
     /// prompt ascending, id tiebreak).
     public static func eligibleQuestionIDs(reports: [Report],
                                            questions: [Question]) -> [String] {
+        eligibleQuestions(reports: reports, questions: questions).map(\.id)
+    }
+
+    /// Eligible questions WITH their answered-report counts, in the same
+    /// deterministic order as `eligibleQuestionIDs`. A single pass over all
+    /// responses builds every count — callers (the Insights drill-in list)
+    /// use these directly instead of re-scanning reports per question, and
+    /// the caption count is exactly the count that decided eligibility.
+    public static func eligibleQuestions(reports: [Report],
+                                         questions: [Question]) -> [(id: String, count: Int)] {
         let filed = sortedFiled(reports)
         let resolve = questionResolver(questions)
         var counts: [String: Int] = [:]
@@ -83,7 +93,7 @@ public enum CorrelationEngine {
                 if lhsPrompt != rhsPrompt { return lhsPrompt < rhsPrompt }
                 return lhs.key < rhs.key
             }
-            .map(\.key)
+            .map { (id: $0.key, count: $0.value) }
     }
 
     // MARK: - Compute

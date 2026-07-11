@@ -71,15 +71,18 @@ final class InsightsUITests: XCTestCase {
 
         let drillIn = app.descendants(matching: .any)["question-correlations-view"].firstMatch
         XCTAssertTrue(drillIn.waitForExistence(timeout: 10))
+        // The disclaimer is unconditional scroll content (renders even during
+        // compute). Wait for it to enter the hierarchy before touching it —
+        // don't race the compute with a swipe-poll loop.
         let disclaimer = app.descendants(matching: .any)["correlation-disclaimer"].firstMatch
-        // The disclaimer is unconditional scroll content — scroll to the end
-        // to reach it on small screens.
+        XCTAssertTrue(disclaimer.waitForExistence(timeout: 10),
+                      "the causation disclaimer must always render in the drill-in")
+        // Then bring it fully on screen if a long findings list pushed it down.
         var attempts = 0
-        while !disclaimer.exists && attempts < 8 {
+        while !disclaimer.isHittable && attempts < 8 {
             app.swipeUp()
             attempts += 1
         }
-        XCTAssertTrue(disclaimer.exists,
-                      "the causation disclaimer must always render in the drill-in")
+        XCTAssertTrue(disclaimer.exists)
     }
 }
