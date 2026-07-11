@@ -9,6 +9,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 8 * * 1" # weekly full scan
+  workflow_dispatch:
 
 concurrency:
   group: codeql-${{ github.event.pull_request.number || github.run_id }}
