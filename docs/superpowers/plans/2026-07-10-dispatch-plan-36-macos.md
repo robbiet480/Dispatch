@@ -42,7 +42,7 @@
 
 ### Task 1: Kit — DayOneExporter (TDD)
 
-- [ ] **Files:** create `Sources/DispatchKit/Export/DayOneExporter.swift`, `Tests/DispatchKitTests/DayOneExporterTests.swift`.
+- [x] **Files:** create `Sources/DispatchKit/Export/DayOneExporter.swift`, `Tests/DispatchKitTests/DayOneExporterTests.swift`.
 
 Failing tests first: envelope shape (`metadata.version`, `entries` array); one entry per report; `creationDate` ISO-8601 UTC with the report's date; text contains each prompt as a heading with the flattened answer (one case per answer type — tokens, yesNo, number, multipleChoice, location, note, people, and time if plan 28 has merged: rebase-aware, same convention as plan 28's CSV note); location answer maps to the native `location` field; empty reports and skipped questions produce no phantom sections; deterministic output (stable ordering) so tests can compare full strings.
 
@@ -52,7 +52,7 @@ Verify: `swift test`. Commit `feat(kit): Day One JSON exporter (plan 36)`.
 
 ### Task 2: Kit — MarkdownExporter (TDD)
 
-- [ ] **Files:** create `Sources/DispatchKit/Export/MarkdownExporter.swift`, `Tests/DispatchKitTests/MarkdownExporterTests.swift`.
+- [x] **Files:** create `Sources/DispatchKit/Export/MarkdownExporter.swift`, `Tests/DispatchKitTests/MarkdownExporterTests.swift`.
 
 Failing tests first: returns `[(filename: String, contents: String)]`; filename `YYYY-MM-DD HHmm.md` from report date, collision-suffixed deterministically (`… 2.md`) for same-minute reports; YAML front matter (ISO-8601 date, sensor scalars, tokens/people as YAML lists); body headings per answered prompt; YAML-escaping for prompts/answers containing quotes/colons; no trailing whitespace damage that would trip Obsidian.
 
@@ -62,7 +62,7 @@ Verify: `swift test`. Commit `feat(kit): Markdown/Obsidian exporter (plan 36)`.
 
 ### Task 3: DispatchMac target — project.yml, entitlements, store + CloudKit boot
 
-- [ ] **Files:** `project.yml` (new `DispatchMac` application target, `platform: macOS`, `deploymentTarget.macOS: "26.0"`, bundle id `io.robbie.Dispatch.mac` — a distinct bundle id keeps iOS provisioning untouched; versions mirrored; `INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.lifestyle`), create `Mac/DispatchMac.entitlements` (per DECISION 2: sandbox, network.client, iCloud CloudKit + container `iCloud.io.robbie.Dispatch`, `com.apple.developer.aps-environment`), create `Mac/Sources/DispatchMacApp.swift` (ModelContainer construction: plain Application Support store URL per DECISION 3, `cloudKitDatabase:` per shared `SyncPolicy`; placeholder `WindowGroup`), create `Mac/Assets.xcassets` (icon reuse), `Mac/PrivacyInfo.xcprivacy`. Dual-membership: `App/Sources/Sync/SyncPolicy.swift`, `App/Sources/Sync/RemoteChangeObserver.swift`, `App/Sources/ThemeColor.swift` (audit each compiles for macOS first).
+- [x] **Files:** `project.yml` (new `DispatchMac` application target, `platform: macOS`, `deploymentTarget.macOS: "26.0"`, bundle id `io.robbie.Dispatch.mac` — a distinct bundle id keeps iOS provisioning untouched; versions mirrored; `INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.lifestyle`), create `Mac/DispatchMac.entitlements` (per DECISION 2: sandbox, network.client, iCloud CloudKit + container `iCloud.io.robbie.Dispatch`, `com.apple.developer.aps-environment`), create `Mac/Sources/DispatchMacApp.swift` (ModelContainer construction: plain Application Support store URL per DECISION 3, `cloudKitDatabase:` per shared `SyncPolicy`; placeholder `WindowGroup`), create `Mac/Assets.xcassets` (icon reuse), `Mac/PrivacyInfo.xcprivacy`. Dual-membership: `App/Sources/Sync/SyncPolicy.swift`, `App/Sources/Sync/RemoteChangeObserver.swift`, `App/Sources/ThemeColor.swift` (audit each compiles for macOS first).
 
 **Contract:** `xcodegen generate` succeeds; `xcodebuild build -scheme DispatchMac -destination 'platform=macOS'` succeeds; app launches, constructs the store, and (signed with the real team) reaches CloudKit — verified by a real archive + `codesign -d --entitlements` dump showing the exact entitlement keys, and a two-device smoke: a report filed on iOS appears in the Mac store (log `category == "sync"`). iOS suites untouched and green.
 
@@ -70,7 +70,7 @@ Verify: `swift test` + Mac build + iPhone `build-for-testing`. Commit `feat(mac)
 
 ### Task 4: Reports browsing + detail (split view)
 
-- [ ] **Files:** create `Mac/Sources/MacRootView.swift` (`NavigationSplitView`: sidebar = reports list with stats header + `.searchable` search field; detail = dashboard placeholder or report detail), `Mac/Sources/MacReportsListView.swift` (selection-driven `List`, kit-backed search filtering, delete via context menu + ⌫ with confirmation), `Mac/Sources/MacReportDetailView.swift` (prompt/answer sections, sensor snapshot section, per-answer-type rendering — audit `App/Sources/Reports/ReportDetailView.swift` subviews for dual-membership candidates first; share what compiles, twin the rest).
+- [x] **Files:** create `Mac/Sources/MacRootView.swift` (`NavigationSplitView`: sidebar = reports list with stats header + `.searchable` search field; detail = dashboard placeholder or report detail), `Mac/Sources/MacReportsListView.swift` (selection-driven `List`, kit-backed search filtering, delete via context menu + ⌫ with confirmation), `Mac/Sources/MacReportDetailView.swift` (prompt/answer sections, sensor snapshot section, per-answer-type rendering — audit `App/Sources/Reports/ReportDetailView.swift` subviews for dual-membership candidates first; share what compiles, twin the rest).
 
 **Contract:** browse, search, select, read, delete reports against the synced store; deleting the selected report clears the detail pane (plan 27's dangling-selection lesson); layout honors macOS conventions (sidebar toggle, min window size).
 
@@ -78,7 +78,7 @@ Verify: `swift test` + Mac build. Commit `feat(mac): reports split view — brow
 
 ### Task 5: Visualizations dashboard + Insights
 
-- [ ] **Files:** create `Mac/Sources/MacDashboardView.swift` (default detail-pane content: multi-column grid of question visualizations off the kit's `VisualizationData`, filter control, report count), `Mac/Sources/MacInsightsView.swift` (kit `InsightsEngine` output in an adaptive grid). Audit `App/Sources/Visualizations/QuestionVisualizationView.swift` for dual membership — Swift Charts is cross-platform and this is the highest-value share in the plan; twin only if iOS-only modifiers block it.
+- [x] **Files:** create `Mac/Sources/MacDashboardView.swift` (default detail-pane content: multi-column grid of question visualizations off the kit's `VisualizationData`, filter control, report count), `Mac/Sources/MacInsightsView.swift` (kit `InsightsEngine` output in an adaptive grid). Audit `App/Sources/Visualizations/QuestionVisualizationView.swift` for dual membership — Swift Charts is cross-platform and this is the highest-value share in the plan; twin only if iOS-only modifiers block it.
 
 **Contract:** every question type that visualizes on iOS visualizes identically on Mac (same `VisualizationData` input, same chart marks); the memoized rebuild pattern (visualizationTaskID) is reused, not reinvented; window resize reflows the grid.
 
@@ -86,7 +86,7 @@ Verify: `swift test` + Mac build. Commit `feat(mac): visualizations dashboard + 
 
 ### Task 6: Menu bar, Settings scene, imports + exports UI
 
-- [ ] **Files:** `Mac/Sources/DispatchMacApp.swift` (`.commands`: File → Import Dispatch/Reporter JSON…, Export → Day One JSON… / Markdown Folder… / Dispatch JSON… / CSV…; ⌘F search focus), create `Mac/Sources/MacSettingsView.swift` (`Settings` scene: iCloud sync toggle via shared `SyncPolicy` with the relaunch caveat text, theme color, About), create `Mac/Sources/MacExportController.swift` (fileExporter/NSSavePanel for single-file exports; NSOpenPanel folder pick + per-file writes for Markdown; progress + error surfacing).
+- [x] **Files:** `Mac/Sources/DispatchMacApp.swift` (`.commands`: File → Import Dispatch/Reporter JSON…, Export → Day One JSON… / Markdown Folder… / Dispatch JSON… / CSV…; ⌘F search focus), create `Mac/Sources/MacSettingsView.swift` (`Settings` scene: iCloud sync toggle via shared `SyncPolicy` with the relaunch caveat text, theme color, About), create `Mac/Sources/MacExportController.swift` (fileExporter/NSSavePanel for single-file exports; NSOpenPanel folder pick + per-file writes for Markdown; progress + error surfacing).
 
 **Contract:** importing the gitignored personal Reporter export (`DISPATCH_V1_EXPORT` ground truth) via the menu produces the same report count as iOS import; a Day One JSON export re-imports into the actual Day One app (manual verification — record the result honestly in completion notes); a Markdown export opens as an Obsidian vault folder with working front matter; all exports run against the sandbox without entitlement violations in Console.
 
@@ -99,3 +99,72 @@ Verify: `swift test` + Mac build. Commit `feat(mac): menus, settings, import/exp
 **Contract:** a real macOS archive exports with manual signing and uploads to ASC, appearing as a Mac TestFlight build on the existing app record; entitlement dump of the archived app matches DECISION 2 exactly; smoke checklist executed and recorded (sync both directions, all four exports, import, search, delete). Rebase on main; PR titled `feat: macOS app (plan 36)` referencing #22.
 
 Verify: `swift test`; Mac + iPhone + iPad builds green; archive uploaded. Commit `chore(mac): TestFlight lane + wrap (plan 36)`.
+
+---
+
+## Completion notes (2026-07-10, implementation on PR #34 / branch plan-36-doc)
+
+Tasks 1–6 implemented per house workflow ON the plan-doc branch (the docs PR
+becomes the feature PR). Branch rebased onto main (post #52/#53/build 28)
+before implementation.
+
+**Verification record:**
+- `swift test`: 557 tests green (540 baseline + 9 DayOneExporter + 8
+  MarkdownExporter), TDD red-first for both exporters.
+- `xcodegen generate` clean; `DispatchMac` scheme builds for
+  `platform=macOS` (compile/link verified with `CODE_SIGNING_ALLOWED=NO`
+  — see signing caveat below). iPhone `build-for-testing`
+  (iPhone 17 / iOS 26.5 sim) and iPad `build-for-testing` green — the
+  iOS app is undisturbed. Full UI suite NOT run here (merge gate).
+- Entitlements verified by `codesign -d --entitlements` dump of the
+  built, ad-hoc-signed app: exactly the DECISION 2 set (app-sandbox,
+  network.client, files.user-selected.read-write, iCloud CloudKit +
+  `iCloud.io.robbie.Dispatch`, `com.apple.developer.aps-environment`).
+  A real archive dump still owed once a provisioning profile exists.
+- Launch smoke (ad-hoc signed): with the iCloud/aps entitlements
+  stripped (no profile available headless) and sync ON, SwiftData's
+  CloudKit mirroring SIGTRAPs asynchronously on
+  `com.apple.coredata.cloudkit.queue` AFTER successful container
+  construction — the never-fail-launch catch cannot see it. This is an
+  unprovisioned-binary artifact, not a code bug (iOS behaves the same
+  without its entitlement); with sync toggled off the app launches
+  clean: split view, stats sidebar, Dashboard/Insights picker, themed
+  empty state (screenshot-verified). Real CloudKit smoke (report filed
+  on iOS appears on Mac) is owed once signing exists.
+
+**Deviations from the plan doc:**
+- Task 7's distribution lane (upload-testflight.sh Mac lane, ASC
+  provisioning profile, TestFlight upload) deliberately NOT done in this
+  pass — out of scope per the controller instruction (no ASC/TestFlight/
+  upload-script work). README macOS section + these notes done.
+- Task 6 UI surfaces live in a Settings `Form` + File-menu commands
+  driven by `MacExportController` (NSSavePanel/NSOpenPanel), not
+  SwiftUI `fileExporter` — commands can't anchor `fileExporter`, and one
+  controller serves both the menu bar and Settings.
+- Exporter prompt ordering is alphabetical within an entry/file: the
+  pure `export(reports:)` contract has no question list, and
+  `Report.responses` relationship order isn't stable across fetches —
+  alphabetical is the deterministic choice (documented in both files).
+- The Mac filter UI is a popover twin (`MacFilterPopover`), not the
+  shared `VisualizationFilterView` (iOS-only navigation-bar styling +
+  inset-grouped lists). Dual membership shipped: SyncPolicy,
+  RemoteChangeObserver (one `#if os(iOS)` around the Spotlight reindex),
+  ThemeColor, AppDefaultsEnvironment, QuestionVisualizationView (one
+  `#if canImport(UIKit)` color-blend seam), OptionBlockLayout.
+- Day One format written from Day One's published import shape; the
+  plan's "verify against a real Day One import" is a manual step (below).
+
+**Manual steps for the owner:**
+1. Portal: register App ID `io.robbie.Dispatch.mac` with iCloud
+   (`iCloud.io.robbie.Dispatch`) + Push Notifications capabilities;
+   create a Mac App Development profile (or let Xcode automatic signing
+   do it in-IDE) — headless xcodebuild here had no Apple ID session.
+2. Two-device CloudKit smoke once signed: file a report on iOS, watch
+   `log stream --predicate 'category == "sync"'` on the Mac.
+3. Import a real Day One JSON export produced by the app into Day One
+   and record the result here (format was written from the published
+   shape, not verified against the real importer).
+4. Task 7 when ready to ship: "Dispatch macOS App Store" distribution
+   profile via the ASC API, upload-testflight.sh Mac lane, Mac
+   screenshots + `scripts/asc-listing.swift` display-type mapping
+   (issue #22 comment), ASC Mac listing.

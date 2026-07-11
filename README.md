@@ -136,6 +136,14 @@ one.
   glue, sync policy, and intents.
 - **`Widgets/Sources/`** — the widget extension (`DispatchWidgets`),
   which reads the shared App Group store directly (read-only).
+- **`Mac/Sources/`** — the native macOS app (`DispatchMac`), a
+  review-and-analyze shell over the same kit: reports split view with
+  search, the visualizations dashboard, insights, imports, and the
+  journaling-ecosystem exports (Day One JSON, Markdown/Obsidian). It
+  syncs through the same CloudKit container (its store lives in its own
+  Application Support — CloudKit is the only data channel). Capture
+  stays on iPhone/Apple Watch by design: no sensors, notifications,
+  widgets, prompt scheduling, or app lock on the Mac.
 - **`Sources/dispatch-mod/`** — a macOS-only executable target for
   moderating the community catalog via CloudKit Web Services. Never
   compiled into the iOS app.
@@ -166,6 +174,20 @@ xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp \
 
 Or open `Dispatch.xcodeproj` in Xcode after `xcodegen generate`. Kit
 tests need no simulator: `swift test`.
+
+The macOS app builds from the same project:
+
+```sh
+xcodebuild -project Dispatch.xcodeproj -scheme DispatchMac \
+  -destination 'platform=macOS' build
+```
+
+Its entitlements (CloudKit, `com.apple.developer.aps-environment`)
+require a "Mac App Development" provisioning profile for the
+`io.robbie.Dispatch.mac` App ID — register it on the portal with the
+iCloud container + Push capabilities (see the fork checklist), or let
+Xcode's automatic signing create it. To verify only that the code
+compiles, build with `CODE_SIGNING_ALLOWED=NO`.
 
 ### Fork checklist (entitlements & portal prerequisites)
 
