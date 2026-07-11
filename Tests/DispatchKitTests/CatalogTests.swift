@@ -89,6 +89,45 @@ import Testing
     #expect(catalog.tags == ["habits"])
 }
 
+// MARK: - Prompt fingerprint (plan 42)
+
+@Test func catalogQuestionFingerprintRoundTripsAndOmitsWhenNil() throws {
+    let stamped = CatalogQuestion(
+        recordName: "cat-fp", prompt: "Did you exercise today?", typeRaw: QuestionType.yesNo.rawValue,
+        choices: [], approvedAt: Date(timeIntervalSince1970: 1_700_000_000),
+        promptFingerprint: CatalogDedupe.promptFingerprint("Did you exercise today?")
+    )
+    #expect(stamped.fields["promptFingerprint"]?.stringValue
+        == CatalogDedupe.promptFingerprint("Did you exercise today?"))
+    let restored = try #require(CatalogQuestion(recordName: "cat-fp", fields: stamped.fields))
+    #expect(restored == stamped)
+
+    // Pre-plan-42 records have no fingerprint: nil-omitted, decodes nil.
+    let bare = CatalogQuestion(
+        recordName: "cat-old", prompt: "Old entry?", typeRaw: QuestionType.yesNo.rawValue,
+        choices: [], approvedAt: .now
+    )
+    #expect(bare.fields["promptFingerprint"] == nil)
+    #expect(CatalogQuestion(recordName: "cat-old", fields: bare.fields)?.promptFingerprint == nil)
+}
+
+@Test func approvalStampsPromptFingerprint() {
+    let submission = SubmittedQuestion(
+        recordName: "sub-fp", prompt: "  Did you  exercise today?!", typeRaw: QuestionType.yesNo.rawValue,
+        choices: [], submittedAt: .now
+    )
+    let catalog = submission.approved(recordName: "cat-fp2", approvedAt: .now)
+    #expect(catalog.promptFingerprint == CatalogDedupe.promptFingerprint("did you exercise today"))
+}
+
+@Test func seedDraftStampsPromptFingerprint() {
+    let draft = CatalogSeedDraft(
+        prompt: "How are you?", typeRaw: QuestionType.note.rawValue, choices: []
+    )
+    let question = draft.catalogQuestion(recordName: "cat-fp3", approvedAt: .now)
+    #expect(question.promptFingerprint == CatalogDedupe.promptFingerprint("How are you?"))
+}
+
 // MARK: - Input configuration fields (plan 41)
 
 @Test func submittedQuestionInputConfigRoundTrips() throws {

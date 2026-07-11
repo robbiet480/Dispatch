@@ -48,5 +48,34 @@ extension CloudKitWebClient {
             chunk.forEach(onCreate)
         }
     }
+
+    /// Stamp `promptFingerprint` onto catalog entries that lack it (plan 42
+    /// backfill for pre-plan-42 records). Safe to re-run: already-stamped
+    /// entries are untouched. Uses `forceUpdate` (no etag dance — the tool
+    /// is the only writer of this record type) with only the fingerprint
+    /// field, and verifies every per-record result.
+    func backfillFingerprints(
+        onStamp: (CatalogQuestion) -> Void = { _ in }
+    ) throws -> (stamped: Int, alreadyStamped: Int) {
+        let entries = try catalogQuestions()
+        let missing = entries.filter { $0.promptFingerprint == nil }
+        for entry in missing {
+            let response = try post(operation: "records/modify", body: [
+                "operations": [[
+                    "operationType": "forceUpdate",
+                    "record": [
+                        "recordType": CatalogRecordType.catalogQuestion,
+                        "recordName": entry.recordName,
+                        "fields": Self.fieldJSON([
+                            "promptFingerprint": .string(CatalogDedupe.promptFingerprint(entry.prompt)),
+                        ]),
+                    ] as [String: Any],
+                ] as [String: Any]],
+            ])
+            try Self.verifyModifyResponse(response, recordName: entry.recordName)
+            onStamp(entry)
+        }
+        return (missing.count, entries.count - missing.count)
+    }
 }
 #endif
