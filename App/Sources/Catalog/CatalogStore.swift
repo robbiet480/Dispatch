@@ -109,8 +109,11 @@ final class CatalogStore {
         await provider.accountStatus()
     }
 
-    /// Validate + normalize + create a SubmittedQuestion record. Throws
-    /// `CatalogProviderError.validation` with all structural problems.
+    /// Validate + normalize + duplicate-check + create a SubmittedQuestion
+    /// record. Throws `CatalogProviderError.validation` with all structural
+    /// problems, `.duplicate(existing:)` when the prompt matches a catalog
+    /// entry (plan 42 — the form offers "Add to My Questions" instead), or
+    /// `.alreadySubmitted` when this device already submitted the prompt.
     /// The input configuration (plan 41) is optional: style/default answer
     /// are number-only, placeholder applies to any type, and the bounds ride
     /// along with the style (already parsed to finite Doubles by the form).
@@ -137,6 +140,20 @@ final class CatalogStore {
             prompt: prompt, choices: choices, creditName: creditName,
             inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder
         )
+        // Duplicate pre-check (plan 42): UX friction only — dispatch-mod is
+        // the enforcement. Loaded entries first (free, covers un-backfilled
+        // records), then a targeted fingerprint query for entries beyond the
+        // loaded pages. Lookup failures never block a submission.
+        let fingerprint = CatalogDedupe.promptFingerprint(normalized.prompt)
+        if let existing = CatalogDedupe.firstMatch(prompt: normalized.prompt, in: entries) {
+            throw CatalogProviderError.duplicate(existing: existing)
+        }
+        if let existing = await provider.catalogQuestion(matchingFingerprint: fingerprint) {
+            throw CatalogProviderError.duplicate(existing: existing)
+        }
+        if Self.submittedFingerprints().contains(fingerprint) {
+            throw CatalogProviderError.alreadySubmitted
+        }
         try await provider.submit(
             prompt: normalized.prompt, typeRaw: typeRaw,
             choices: normalized.choices, creditName: normalized.creditName,
@@ -144,9 +161,40 @@ final class CatalogStore {
             placeholder: normalized.placeholder,
             inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
         )
+<<<<<<< HEAD
         let recorded = throttle.recording(now: now)
         submissionTimestamps = recorded.timestamps
         UserDefaults.standard.set(recorded.timestamps, forKey: Self.submissionTimestampsKey)
+=======
+        Self.recordSubmittedFingerprint(fingerprint)
+    }
+
+    // MARK: - Own-submission memory (plan 42)
+
+    /// Fingerprints of prompts this device successfully submitted, newest
+    /// last, capped. Per-device friction against accidental resubmission
+    /// (like plan 38's throttle, honest about being bypassable) — a distinct
+    /// UserDefaults key from the throttle's timestamps.
+    static let submittedFingerprintsKey = "catalog.submittedFingerprints"
+    static let submittedFingerprintsCap = 50
+
+    static func submittedFingerprints(
+        defaults: UserDefaults = .standard
+    ) -> [String] {
+        defaults.stringArray(forKey: submittedFingerprintsKey) ?? []
+    }
+
+    static func recordSubmittedFingerprint(
+        _ fingerprint: String, defaults: UserDefaults = .standard
+    ) {
+        var fingerprints = submittedFingerprints(defaults: defaults)
+        guard !fingerprints.contains(fingerprint) else { return }
+        fingerprints.append(fingerprint)
+        if fingerprints.count > submittedFingerprintsCap {
+            fingerprints.removeFirst(fingerprints.count - submittedFingerprintsCap)
+        }
+        defaults.set(fingerprints, forKey: submittedFingerprintsKey)
+>>>>>>> ef64989 (feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47))
     }
 
     func flag(catalogRecordName: String, reason: String) async throws {

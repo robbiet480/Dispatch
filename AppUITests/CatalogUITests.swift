@@ -208,6 +208,103 @@ final class CatalogUITests: XCTestCase {
                       "expected the reset-time footer, got: \(quota.label)")
     }
 
+    /// Plan 42: submitting a prompt that duplicates a catalog entry (the
+    /// stubbed "Did you drink water today?" — matched case/whitespace/
+    /// punctuation-insensitively) blocks with an "already in the catalog"
+    /// section whose Add to My Questions button creates the local question.
+    @MainActor
+    func testSubmitDuplicatePromptOffersAddInstead() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        app.buttons["settings-button"].firstMatch.tap()
+        let questionsLink = app.buttons["questions-settings-link"]
+        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
+        questionsLink.tap()
+        let catalogLink = app.buttons["question-catalog-link"]
+        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
+        catalogLink.tap()
+
+        let submitButton = app.buttons["catalog-submit-button"]
+        XCTAssertTrue(submitButton.waitForExistence(timeout: 10))
+        submitButton.tap()
+
+        let promptField = app.textFields["catalog-submit-prompt"]
+            .exists ? app.textFields["catalog-submit-prompt"] : app.textViews["catalog-submit-prompt"]
+        XCTAssertTrue(promptField.waitForExistence(timeout: 10))
+        promptField.tap()
+        // Messy variant of the stub entry: normalization must still match.
+        promptField.typeText("did you DRINK water today?!")
+
+        app.buttons["catalog-submit-send"].tap()
+
+        // No confirmation — the duplicate section appears instead.
+        let duplicateNote = app.staticTexts["catalog-submit-duplicate"]
+        XCTAssertTrue(duplicateNote.waitForExistence(timeout: 10))
+        XCTAssertTrue(duplicateNote.label.contains("Did you drink water today?"),
+                      "expected the existing entry's prompt, got: \(duplicateNote.label)")
+        XCTAssertFalse(app.otherElements["catalog-submit-confirmation"].exists)
+        XCTAssertFalse(app.staticTexts["Thanks!"].exists)
+
+        let addInstead = app.buttons["catalog-submit-duplicate-add"]
+        XCTAssertTrue(addInstead.exists)
+        addInstead.tap()
+        XCTAssertTrue(app.staticTexts["catalog-submit-duplicate-added"].waitForExistence(timeout: 10))
+
+        // Dismiss the sheet, leave the catalog: the local question exists.
+        app.buttons["Cancel"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let newRow = app.staticTexts["DID YOU DRINK WATER TODAY?"]
+        XCTAssertTrue(newRow.waitForExistence(timeout: 10),
+                      "expected the added duplicate to appear in the local Questions list")
+    }
+
+    /// Plan 42: resubmitting a prompt this device already submitted (same
+    /// launch, stub provider) is refused with the already-submitted message.
+    @MainActor
+    func testResubmittingOwnPromptIsRefused() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        app.buttons["settings-button"].firstMatch.tap()
+        let questionsLink = app.buttons["questions-settings-link"]
+        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
+        questionsLink.tap()
+        let catalogLink = app.buttons["question-catalog-link"]
+        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
+        catalogLink.tap()
+
+        // Unique prompt per run: the fingerprint memory persists in
+        // UserDefaults across launches on the same simulator.
+        let prompt = "Did you water plant \(Int(Date().timeIntervalSince1970))?"
+
+        func submitPrompt() {
+            let submitButton = app.buttons["catalog-submit-button"]
+            XCTAssertTrue(submitButton.waitForExistence(timeout: 10))
+            submitButton.tap()
+            let promptField = app.textFields["catalog-submit-prompt"]
+                .exists ? app.textFields["catalog-submit-prompt"] : app.textViews["catalog-submit-prompt"]
+            XCTAssertTrue(promptField.waitForExistence(timeout: 10))
+            promptField.tap()
+            promptField.typeText(prompt)
+            app.buttons["catalog-submit-send"].tap()
+        }
+
+        submitPrompt()
+        let confirmation = app.otherElements["catalog-submit-confirmation"]
+            .exists ? app.otherElements["catalog-submit-confirmation"] : app.staticTexts["Thanks!"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        app.buttons["Done"].tap()
+
+        submitPrompt()
+        let error = app.staticTexts["catalog-submit-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 10))
+        XCTAssertTrue(error.label.contains("already submitted"),
+                      "expected the already-submitted refusal, got: \(error.label)")
+    }
+
     /// The question editor exposes a "Submit to Catalog" button, disabled
     /// while the draft can't pass catalog validation (here: an empty prompt on
     /// a brand-new question).

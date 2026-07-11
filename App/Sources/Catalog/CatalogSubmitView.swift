@@ -1,4 +1,5 @@
 import DispatchKit
+import SwiftData
 import SwiftUI
 
 /// "Submit a question" form: writes a SubmittedQuestion record to the public
@@ -10,6 +11,7 @@ struct CatalogSubmitView: View {
 
     @Environment(ThemeStore.self) private var themeStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @State private var prompt: String
     @State private var type: QuestionType
@@ -28,6 +30,10 @@ struct CatalogSubmitView: View {
     @State private var errorMessage: String?
     @State private var isSubmitting = false
     @State private var submitted = false
+    /// Plan 42: the catalog entry this prompt duplicates, when the pre-check
+    /// hit. Shown as an "add it instead" section; rewording clears it.
+    @State private var duplicate: CatalogQuestion?
+    @State private var addedDuplicate = false
 
     /// Blank by default (the catalog browser's "Submit a Question" entry);
     /// the question editor passes its current prompt/type/choices — and,
@@ -199,6 +205,34 @@ struct CatalogSubmitView: View {
                     .listRowBackground(Color.clear)
             }
 
+            if let duplicate {
+                Section {
+                    Text("\u{201C}\(duplicate.prompt)\u{201D} is already in the catalog.")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .listRowBackground(Color.white.opacity(0.12))
+                        .accessibilityIdentifier("catalog-submit-duplicate")
+                    if addedDuplicate {
+                        Text("Added to your questions.")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .listRowBackground(Color.white.opacity(0.12))
+                            .accessibilityIdentifier("catalog-submit-duplicate-added")
+                    } else {
+                        Button("Add to My Questions") { addDuplicateToMyQuestions(duplicate) }
+                            .foregroundStyle(.white)
+                            .fontWeight(.semibold)
+                            .listRowBackground(Color.white.opacity(0.12))
+                            .accessibilityIdentifier("catalog-submit-duplicate-add")
+                    }
+                } footer: {
+                    Text("Reword your prompt to submit a different question.")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .listRowBackground(Color.clear)
+                }
+            }
+
             if let errorMessage {
                 Section {
                     Text(errorMessage)
@@ -275,9 +309,18 @@ struct CatalogSubmitView: View {
     /// Style/bounds/default gated to number questions, parsed with the
     /// editor's discipline: finite Doubles only, step > 0, an inverted
     /// min/max pair sends neither, `.textField` sends no style at all.
+    /// "Add it instead": the existing add-from-catalog path — a LOCAL
+    /// Question with a fresh UUID; adding twice is a no-op (plan 42).
+    private func addDuplicateToMyQuestions(_ entry: CatalogQuestion) {
+        _ = store.addToMyQuestions(entry, context: modelContext)
+        addedDuplicate = true
+    }
+
     private func submit() {
         isSubmitting = true
         errorMessage = nil
+        duplicate = nil
+        addedDuplicate = false
         let prompt = prompt
         let typeRaw = type.rawValue
         let choices = type == .multipleChoice ? choices : []
@@ -308,6 +351,8 @@ struct CatalogSubmitView: View {
                     inputMin: minValue, inputMax: maxValue, inputStep: stepValue
                 )
                 submitted = true
+            } catch let CatalogProviderError.duplicate(existing) {
+                duplicate = existing
             } catch {
                 errorMessage = error.localizedDescription
             }
