@@ -273,7 +273,9 @@ private final class VisitDelegateProxy: NSObject, CLLocationManagerDelegate {
 /// double-fired on OS betas before — the build-8 crash) — so the
 /// continuation is resumed through the shared OneShotResumeGuard, never
 /// directly.
-private final class AlwaysAuthorizationRequester: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
+/// Shared by VisitObserver and MonitorObserver (plan 45) — both request the
+/// Always upgrade the same way.
+final class AlwaysAuthorizationRequester: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
     private let manager = CLLocationManager()
     private let resumeGuard = OneShotResumeGuard()
     private let state = OSAllocatedUnfairLock<CheckedContinuation<CLAuthorizationStatus, Never>?>(initialState: nil)

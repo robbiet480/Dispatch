@@ -781,7 +781,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             guard group.isEnabled else { return false }
             switch group.schedule {
             case .everyNHours, .timesPerDay, .dailyAt: return true
-            case .workoutEnd, .visitArrival, .calendarEventEnd, .disabled: return false
+            case .workoutEnd, .visitArrival, .calendarEventEnd,
+                 .placeTrigger, .beaconTrigger, .disabled: return false
             }
         }
     }
@@ -880,6 +881,39 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         return UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
     }
 
+    /// Delayed (or immediate) group prompt for the CLMonitor observer (plan
+    /// 43). Uses the `mprompt-` prefix — a DISTINCT identifier family from
+    /// `gprompt-` so it SURVIVES the replan's remove-before-add batch (which
+    /// sweeps gprompt-) during the delay window; MonitorObserver owns its
+    /// lifecycle (cancel-by-prefix on a contradiction, orphan sweep on
+    /// refresh). Content-addressed by the FIRE minute so a duplicate CLMonitor
+    /// delivery of the same event dedupes. `fireDate` in the past / within the
+    /// same minute ⇒ nil trigger (deliver now); otherwise a one-shot
+    /// `UNTimeIntervalNotificationTrigger` the OS holds even if Dispatch is
+    /// terminated.
+    static func makeMonitorPromptRequest(
+        group: PromptGroup, in context: ModelContext, fireDate: Date, now: Date = Date(),
+        extraUserInfo: [String: String] = [:]
+    ) -> UNNotificationRequest {
+        let content = makeGroupContent(
+            groupID: group.uniqueIdentifier, body: groupBody(for: group, in: context),
+            extraUserInfo: extraUserInfo)
+        let stamp = groupStamp(groupID: group.uniqueIdentifier, date: fireDate)
+        let identifier = "\(NotificationIdentifiers.monitorPromptPrefix)\(stamp)"
+        let interval = fireDate.timeIntervalSince(now)
+        let trigger: UNNotificationTrigger? = interval >= 1
+            ? UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+            : nil
+        return UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+    }
+
+    /// The `mprompt-<groupID>-` identifier prefix for one group, used by
+    /// MonitorObserver to remove that group's pending delayed prompt on a
+    /// contradicting event or when the group is disabled/over budget.
+    static func monitorPromptIdentifierPrefix(forGroupID groupID: String) -> String {
+        "\(NotificationIdentifiers.monitorPromptPrefix)\(groupID)-"
+    }
+
     // MARK: - Next alert readout
 
     /// Reads the soonest pending DISPATCH_PROMPT (or snooze) trigger date,
@@ -975,6 +1009,12 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
             .userInfo[NotificationIdentifiers.visitArrivalKey] != nil
         let firedByCalendarEventEnd = response.notification.request.content
             .userInfo[NotificationIdentifiers.calendarEventEndKey] != nil
+        // Plan 45 place/beacon markers (exactly one set per mprompt-).
+        let monitorUserInfo = response.notification.request.content.userInfo
+        let firedByPlaceArrival = monitorUserInfo[NotificationIdentifiers.placeArrivalKey] != nil
+        let firedByPlaceDeparture = monitorUserInfo[NotificationIdentifiers.placeDepartureKey] != nil
+        let firedByBeaconArrival = monitorUserInfo[NotificationIdentifiers.beaconArrivalKey] != nil
+        let firedByBeaconDeparture = monitorUserInfo[NotificationIdentifiers.beaconDepartureKey] != nil
         // Missing/unknown period → .week — also covers stale pre-plan-40
         // `digest-weekly` requests (no period payload).
         let digestPeriod = DigestPeriod(rawValue: response.notification.request.content
@@ -1016,6 +1056,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
                     .visitArrival
                 } else if firedByCalendarEventEnd {
                     .calendarEventEnd
+                } else if firedByPlaceArrival {
+                    .placeArrival
+                } else if firedByPlaceDeparture {
+                    .placeDeparture
+                } else if firedByBeaconArrival {
+                    .beaconArrival
+                } else if firedByBeaconDeparture {
+                    .beaconDeparture
                 } else {
                     .notification
                 }

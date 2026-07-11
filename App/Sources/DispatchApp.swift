@@ -28,6 +28,7 @@ struct DispatchApp: App {
     let awakeAutoController: AwakeAutoController
     let sleepObserver: SleepObserver
     let visitObserver: VisitObserver
+    let monitorObserver: MonitorObserver
     let calendarEventObserver: CalendarEventObserver
     let backupManager: BackupManager
     let webhookManager: WebhookManager
@@ -147,6 +148,16 @@ struct DispatchApp: App {
         )
         visitObserver = madeVisitObserver
 
+        // Place/beacon observer (plan 45, #56/#60): CLMonitor conditions for
+        // enabled place/beacon groups, same lifecycle as the visit observer
+        // (launch registration, refresh on group edits + remote-change sync),
+        // test-gated internally. Reuses the plan-16 Always authorization.
+        let madeMonitorObserver = MonitorObserver(
+            container: container, awakeStore: awakeStore,
+            focusFilterDefaults: focusFilterDefaults, isTestEnvironment: isTestEnvironment
+        )
+        monitorObserver = madeMonitorObserver
+
         // Automatic rotating backups (plan 16): foreground-scheduled (scene
         // active + report save), off-main export, no background tasks.
         // storeCreatedAt (the store file's on-disk creation date — the
@@ -239,6 +250,7 @@ struct DispatchApp: App {
                 scheduler.replan(prefs: prefsForReplan, awakeStore: awakeForReplan)
                 workoutObserver.refresh()
                 madeVisitObserver.refresh()
+                madeMonitorObserver.refresh()
                 madeCalendarObserver.refresh()
             },
             onDiagnosticsEvent: { event in diagnostics.record(event) },
@@ -374,6 +386,10 @@ struct DispatchApp: App {
         // that re-registration (self-gating for tests / no visit groups /
         // missing Always authorization).
         visitObserver.refresh()
+        // Place/beacon observer launch refresh (plan 45): re-registers
+        // CLMonitor conditions (self-gating for tests / no groups / missing
+        // Always authorization).
+        monitorObserver.refresh()
 
         // Calendar observer launch refresh (plan 31): subscribes to
         // .EKEventStoreChanged when an enabled calendar group + full access
@@ -424,6 +440,7 @@ struct DispatchApp: App {
                 .environment(awakeAutoController)
                 .environment(sleepObserver)
                 .environment(visitObserver)
+                .environment(monitorObserver)
                 .environment(calendarEventObserver)
                 .environment(backupManager)
                 .environment(webhookManager)
@@ -462,6 +479,7 @@ struct DispatchApp: App {
                     workoutEndObserver.refresh()
                     sleepObserver.refresh()
                     visitObserver.refresh()
+                    monitorObserver.refresh()
                     calendarEventObserver.refresh()
                     // Cold launch with lock enabled (or the --enable-app-lock
                     // forced-lock UI-test path): the window scene is connected

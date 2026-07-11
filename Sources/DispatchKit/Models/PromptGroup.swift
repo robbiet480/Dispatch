@@ -26,10 +26,10 @@ public enum GroupSchedule: Equatable, Sendable {
     /// A matching calendar event ends (plan 31) — the first event kind with
     /// an associated value: the matching rules are per-group configuration.
     case calendarEventEnd(CalendarEventMatchRule)
-    /// Arrival at / departure from a picked place (plan 43, #56) via CLMonitor
+    /// Arrival at / departure from a picked place (plan 45, #56) via CLMonitor
     /// `CircularGeographicCondition`, with a configurable delay + cancel.
     case placeTrigger(PlaceTrigger)
-    /// Enter/leave range of a registered iBeacon (plan 43, #60) via CLMonitor
+    /// Enter/leave range of a registered iBeacon (plan 45, #60) via CLMonitor
     /// `BeaconIdentityCondition`; shares the delay/cancel semantics of #56.
     case beaconTrigger(BeaconTrigger)
     case disabled
@@ -67,7 +67,7 @@ public final class PromptGroup {
     public var calendarIdentifiersJSON: String?
     /// The `.titleContains` filter string.
     public var calendarTitleFilter: String?
-    /// CLMonitor place/beacon trigger storage (plan 43), all additive
+    /// CLMonitor place/beacon trigger storage (plan 45), all additive
     /// optionals (CloudKit-safe). `monitorDirectionRaw` is
     /// "arrival"/"departure"; `monitorDelayMinutes` a `MonitorDelay` preset;
     /// `monitorCancelsOnContradiction` defaults to true when nil. The

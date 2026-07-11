@@ -79,6 +79,12 @@ struct SettingsView: View {
             .accessibilityIdentifier("prompt-groups-link")
             .listRowBackground(Color.white.opacity(0.12))
 
+            NavigationLink(destination: BeaconsSettingsView()) {
+                settingsLabel("Beacons")
+            }
+            .accessibilityIdentifier("settings-beacons")
+            .listRowBackground(Color.white.opacity(0.12))
+
             NavigationLink(destination: WeeklyDigestView()) {
                 settingsLabel("Weekly Digest")
             }

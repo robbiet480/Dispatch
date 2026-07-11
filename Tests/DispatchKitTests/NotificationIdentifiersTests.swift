@@ -58,7 +58,7 @@ private func components(hour: Int, minute: Int) -> DateComponents {
 }
 
 @Test func monitorPromptYieldsItsGroupID() {
-    // Plan 43: `mprompt-` (place/beacon) shares the gprompt- stamp shape and
+    // Plan 45: `mprompt-` (place/beacon) shares the gprompt- stamp shape and
     // is classified as a group prompt for the "next notification" hero.
     let groupID = "1B9D6BCD-BBFD-4B2D-9B5D-AB8DFBBD4BED"
     let source = NotificationIdentifiers.promptSource(

@@ -21,7 +21,7 @@ public enum NotificationIdentifiers {
     /// Group prompts: `gprompt-<groupID>-<yyyyMMdd-HHmm>` (plan 12). Their
     /// nags reuse `nag-` with the `<groupID>-<stamp>` parent stamp embedded.
     public static let groupPromptPrefix = "gprompt-"
-    /// Monitor-triggered group prompts (plan 43): `mprompt-<groupID>-<stamp>`.
+    /// Monitor-triggered group prompts (plan 45): `mprompt-<groupID>-<stamp>`.
     /// A DISTINCT prefix from `gprompt-` on purpose — a place/beacon prompt is
     /// scheduled reactively by MonitorObserver (event + delay) and must
     /// SURVIVE the replan's remove-before-add batch, which sweeps
@@ -56,7 +56,7 @@ public enum NotificationIdentifiers {
     /// userInfo marker ("1") on prompts scheduled at a calendar event's end
     /// (plan 31) — tap-through reports get the `.calendarEventEnd` trigger.
     public static let calendarEventEndKey = "triggeredByCalendarEventEnd"
-    /// userInfo markers ("1") on CLMonitor place/beacon prompts (plan 43) —
+    /// userInfo markers ("1") on CLMonitor place/beacon prompts (plan 45) —
     /// exactly one is set per prompt so the delegate maps the tap-through
     /// report to the matching `ReportTrigger` (place/beacon × arrival/depart).
     public static let placeArrivalKey = "triggeredByPlaceArrival"

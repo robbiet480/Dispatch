@@ -148,7 +148,7 @@ public enum V2Importer {
             group.calendarIdentifiersJSON = dto.calendarIdentifiers.flatMap(
                 CalendarEventMatchRule.json(fromIdentifiers:))
             group.calendarTitleFilter = dto.calendarTitleFilter
-            // CLMonitor place/beacon trigger (plan 43): scalars verbatim (an
+            // CLMonitor place/beacon trigger (plan 45): scalars verbatim (an
             // unknown direction raw resolves to a never-firing schedule); the
             // region/beacon structs re-encode to their JSON storage form.
             group.monitorDirectionRaw = dto.monitorDirection
