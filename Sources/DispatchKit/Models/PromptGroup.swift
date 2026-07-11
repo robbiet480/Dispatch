@@ -9,6 +9,7 @@ public enum GroupScheduleKind: String, Codable, CaseIterable, Sendable {
     case dailyAt
     case workoutEnd
     case visitArrival
+    case calendarEventEnd
 }
 
 /// A prompt group's resolved schedule. `disabled` is the fallback for an
@@ -20,6 +21,9 @@ public enum GroupSchedule: Equatable, Sendable {
     case dailyAt([DateComponents])
     case workoutEnd
     case visitArrival
+    /// A matching calendar event ends (plan 31) — the first event kind with
+    /// an associated value: the matching rules are per-group configuration.
+    case calendarEventEnd(CalendarEventMatchRule)
     case disabled
 }
 
@@ -45,6 +49,16 @@ public final class PromptGroup {
     public var scheduledTimesJSON: String?
     public var isEnabled: Bool = true
     public var sortOrder: Int = 0
+    /// Calendar-event match rule storage (plan 31), all additive optionals
+    /// (CloudKit-safe). Raws "allEvents"/"calendars"/"titleContains" —
+    /// `.allEvents` is stored as ALL-NIL fields; an unknown kind raw (a
+    /// future rule from a newer build) resolves the schedule to `.disabled`.
+    public var calendarMatchKindRaw: String?
+    /// JSON-encoded `[String]` of EKCalendar identifiers for `.calendars`
+    /// (the `scheduledTimesJSON` codec pattern).
+    public var calendarIdentifiersJSON: String?
+    /// The `.titleContains` filter string.
+    public var calendarTitleFilter: String?
 
     public init() {}
 
@@ -64,6 +78,15 @@ public final class PromptGroup {
                 return .workoutEnd
             case .visitArrival:
                 return .visitArrival
+            case .calendarEventEnd:
+                // Unknown match-kind raw (future rule from a newer build) →
+                // .disabled: never fires rather than misfires; raws preserved
+                // by the .disabled setter no-op below.
+                guard let rule = CalendarEventMatchRule(
+                    kindRaw: calendarMatchKindRaw,
+                    identifiersJSON: calendarIdentifiersJSON,
+                    titleFilter: calendarTitleFilter) else { return .disabled }
+                return .calendarEventEnd(rule)
             case nil:
                 return .disabled
             }
@@ -84,6 +107,12 @@ public final class PromptGroup {
                 scheduleKindRaw = GroupScheduleKind.workoutEnd.rawValue
             case .visitArrival:
                 scheduleKindRaw = GroupScheduleKind.visitArrival.rawValue
+            case .calendarEventEnd(let rule):
+                scheduleKindRaw = GroupScheduleKind.calendarEventEnd.rawValue
+                // .allEvents nils all three fields (its storage form).
+                calendarMatchKindRaw = rule.kindRaw
+                calendarIdentifiersJSON = rule.identifiersJSON
+                calendarTitleFilter = rule.titleFilter
             case .disabled:
                 // Not a storable kind: `.disabled` only arises from an
                 // unknown raw value, so writing it back preserves the

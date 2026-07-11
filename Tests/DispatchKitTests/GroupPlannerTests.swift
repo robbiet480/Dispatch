@@ -92,6 +92,10 @@ private func group(schedule: GroupSchedule, id: String = "pg-test") -> PromptGro
                               awakeStart: start, awakeEnd: end, seed: 1, calendar: calendar).isEmpty)
     #expect(GroupPlanner.plan(group: group(schedule: .visitArrival),
                               awakeStart: start, awakeEnd: end, seed: 1, calendar: calendar).isEmpty)
+    // Calendar-event groups get their dates from EventKit via the scheduler's
+    // CalendarEventPlanner path, never from the timer distribution machinery.
+    #expect(GroupPlanner.plan(group: group(schedule: .calendarEventEnd(.allEvents)),
+                              awakeStart: start, awakeEnd: end, seed: 1, calendar: calendar).isEmpty)
     let unknown = PromptGroup()
     unknown.scheduleKindRaw = "someFutureKind"
     #expect(GroupPlanner.plan(group: unknown,

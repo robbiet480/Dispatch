@@ -133,6 +133,13 @@ public enum V2Importer {
             group.scheduledTimeStrings = dto.scheduledTimes ?? []
             group.isEnabled = dto.isEnabled
             group.sortOrder = dto.sortOrder
+            // Calendar match rule (plan 31): raws assigned verbatim — an
+            // unknown future kind imports intact and resolves to a
+            // never-firing schedule (`.disabled`) on this build.
+            group.calendarMatchKindRaw = dto.calendarMatchKind
+            group.calendarIdentifiersJSON = dto.calendarIdentifiers.flatMap(
+                CalendarEventMatchRule.json(fromIdentifiers:))
+            group.calendarTitleFilter = dto.calendarTitleFilter
             summary.promptGroupsImported += 1
         }
 

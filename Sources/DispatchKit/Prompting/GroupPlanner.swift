@@ -16,7 +16,9 @@ public enum GroupPlanner {
     /// - `dailyAt`: materializes each time within the window, retrying on
     ///   the next calendar day for windows that cross midnight (same
     ///   semantics as the global scheduledTimes).
-    /// - `workoutEnd` / `visitArrival` / `disabled`: [] — event-driven or inert.
+    /// - `workoutEnd` / `visitArrival` / `calendarEventEnd` / `disabled`:
+    ///   [] — event-driven or inert (calendar dates come from EventKit via
+    ///   the scheduler's CalendarEventPlanner path, not this machinery).
     public static func plan(
         group: PromptGroup,
         awakeStart: Date,
@@ -48,7 +50,7 @@ public enum GroupPlanner {
                 awakeStart: awakeStart, awakeEnd: awakeEnd,
                 seed: seed, calendar: calendar)
 
-        case .workoutEnd, .visitArrival, .disabled:
+        case .workoutEnd, .visitArrival, .calendarEventEnd, .disabled:
             return []
         }
     }
