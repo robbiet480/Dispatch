@@ -20,6 +20,10 @@ struct InsightsView: View {
     /// nil = not yet computed (first appearance); [] = computed, nothing
     /// passed the honesty guards.
     @State private var insights: [Insight]?
+    /// Plan 34: questions eligible for the per-question correlation
+    /// drill-in, recomputed in the same task. nil = not yet computed.
+    @State private var correlationQuestions: [(id: String, prompt: String,
+                                               answeredCount: Int)]?
 
     private var theme: Theme { themeStore.theme }
 
@@ -69,6 +73,10 @@ struct InsightsView: View {
                                 }
                             }
                         }
+                        // Plan 34: per-question correlations are independent
+                        // of the top-8 feed — either can be populated while
+                        // the other is empty.
+                        correlationsSection
                     }
                 }
                 .padding()
@@ -86,7 +94,96 @@ struct InsightsView: View {
         .task(id: insightsTaskID) {
             insights = InsightsEngine.compute(reports: reports, questions: questions,
                                               people: people)
+            // Plan 34: the drill-in list shares the fingerprint — report
+            // count/newest/identity + question count + people already cover
+            // its inputs.
+            let byID = Dictionary(questions.map { ($0.uniqueIdentifier, $0) },
+                                  uniquingKeysWith: { first, _ in first })
+            correlationQuestions = CorrelationEngine
+                .eligibleQuestionIDs(reports: reports, questions: questions)
+                .compactMap { id in
+                    guard let question = byID[id] else { return nil }
+                    return (id: id, prompt: question.prompt,
+                            answeredCount: answeredCount(for: question))
+                }
         }
+    }
+
+    /// Filed reports carrying an answered response for this question — the
+    /// caption under each drill-in row.
+    private func answeredCount(for question: Question) -> Int {
+        reports.filter { report in
+            guard !report.isDraft else { return false }
+            return (report.responses ?? []).contains { response in
+                let matches = response.questionIdentifier == question.uniqueIdentifier
+                    || (response.questionIdentifier == nil
+                        && response.questionPrompt == question.prompt)
+                guard matches else { return false }
+                return response.answeredOptions?.isEmpty == false
+                    || response.numericResponse != nil
+                    || response.tokens != nil
+            }
+        }.count
+    }
+
+    /// Plan 34: CORRELATIONS drill-in list. Hidden entirely when no question
+    /// clears the eligibility gate — a one-line unlock footnote renders
+    /// instead so the feature is discoverable.
+    @ViewBuilder
+    private var correlationsSection: some View {
+        if let correlationQuestions {
+            if correlationQuestions.isEmpty {
+                Text("Per-question correlations unlock at \(CorrelationEngine.minimumEligibleAnswers) answers to a question.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .accessibilityIdentifier("correlations-unlock-footnote")
+            } else {
+                Text("Correlations")
+                    .font(.caption.weight(.semibold))
+                    .kerning(0.5)
+                    .textCase(.uppercase)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.top, 8)
+                VStack(spacing: 8) {
+                    ForEach(correlationQuestions, id: \.id) { entry in
+                        NavigationLink {
+                            QuestionCorrelationView(questionID: entry.id,
+                                                    prompt: entry.prompt)
+                        } label: {
+                            correlationRow(entry)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("correlation-question-row")
+                    }
+                }
+            }
+        }
+    }
+
+    private func correlationRow(_ entry: (id: String, prompt: String,
+                                          answeredCount: Int)) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.prompt)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(entry.answeredCount) answers")
+                    .font(.caption2.weight(.semibold))
+                    .kerning(0.5)
+                    .foregroundStyle(.white.opacity(0.55))
+                    .textCase(.uppercase)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.4))
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .combine)
     }
 
     /// Plan 27: adaptive card columns on regular width; compact stays one
