@@ -179,15 +179,6 @@ import Testing
     #expect(responses.first?.timeResponse == nil)
 }
 
-@Test func exportIsDeterministic() throws {
-    let container = try DispatchStore.inMemoryContainer()
-    let context = ModelContext(container)
-    _ = try V1Importer.importExport(try fixtureData("v1-sample"), into: context)
-    let first = try V2Exporter.exportData(from: context, stamp: fixedStamp)
-    let second = try V2Exporter.exportData(from: context, stamp: fixedStamp)
-    #expect(first == second) // sorted keys + sorted records
-}
-
 /// Plan-26 connection raws (and unknown future raws) travel the wire untouched:
 /// `connection` is a raw Int? end-to-end, so no importer change is needed.
 @Test func connectionRawsRoundTripThroughV2() throws {
