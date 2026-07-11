@@ -6,6 +6,9 @@ public enum SensorKind: String, Codable, CaseIterable, Sendable {
     case healthSteps, healthFlights, healthHeart, healthHRV, healthRestingHeart
     case healthSleep, healthWorkouts, healthCaffeine, healthMedications
     case healthActivityRings
+    /// Windowed heart-rate statistics since the previous report (plan 43,
+    /// issue #48). Additive raw value.
+    case healthHeartRange
 }
 
 public enum TemperatureUnit: String, Codable, Sendable { case fahrenheit, celsius }
