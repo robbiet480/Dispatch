@@ -76,6 +76,12 @@ targets:
         # ATS key in App/Info.plist.
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Dispatch delivers report webhooks to servers on your network when you configure one."
         INFOPLIST_KEY_NSMotionUsageDescription: "Dispatch counts flights of stairs you walked down (via the motion coprocessor) to pair with the flights climbed from Health."
+        # Plan 31 calendar prompts: purpose string only, NOT an entitlement
+        # (com.apple.security.personal-information.calendars is
+        # macOS-sandbox-only; iOS gates on this plist key). On iOS 17+ a
+        # MISSING key silently AUTO-DENIES requestFullAccessToEvents, so the
+        # built product is verified to carry it (plan-16 plutil pattern).
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Dispatch reads your calendar only to prompt you when a matching event ends. Event details never leave your device."
         # Plan 27 (iPad): per-idiom orientation keys. iPhone stays
         # portrait-only (unchanged); iPad supports all four — required for
         # App Store submission without UIRequiresFullScreen, and it keeps

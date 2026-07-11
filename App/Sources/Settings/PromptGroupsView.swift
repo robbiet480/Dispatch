@@ -13,6 +13,7 @@ struct PromptGroupsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(WorkoutEndObserver.self) private var workoutEndObserver
     @Environment(VisitObserver.self) private var visitObserver
+    @Environment(CalendarEventObserver.self) private var calendarEventObserver
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
     private var theme: Theme { themeStore.theme }
@@ -26,7 +27,7 @@ struct PromptGroupsView: View {
                 if groups.isEmpty {
                     Text("Group questions together and give each group its own schedule — "
                         + "every few hours, a few times a day, at set times, when a workout ends, "
-                        + "or when you arrive somewhere. "
+                        + "when you arrive somewhere, or when a calendar event ends. "
                         + "Ungrouped questions keep using the main notification schedule.")
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.8))
@@ -89,11 +90,13 @@ struct PromptGroupsView: View {
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
         workoutEndObserver.refresh()
         visitObserver.refresh()
+        calendarEventObserver.refresh()
     }
 }
 
 struct PromptGroupRowView: View {
     @Environment(VisitObserver.self) private var visitObserver
+    @Environment(CalendarEventObserver.self) private var calendarEventObserver
     let group: PromptGroup
     let onChange: () -> Void
 
@@ -117,6 +120,14 @@ struct PromptGroupRowView: View {
                             .foregroundStyle(.yellow)
                             .accessibilityIdentifier("group-row-needs-always")
                     }
+                    // A calendar group without full calendar access likewise
+                    // simply doesn't fire (plan 31) — say so in place.
+                    if isCalendarGroup, !calendarEventObserver.hasFullAccess {
+                        Text("Needs calendar access — won't fire")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                            .accessibilityIdentifier("group-row-needs-calendar")
+                    }
                 }
 
                 Spacer()
@@ -126,6 +137,11 @@ struct PromptGroupRowView: View {
                     .tint(.white.opacity(0.4))
             }
         }
+    }
+
+    private var isCalendarGroup: Bool {
+        if case .calendarEventEnd = group.schedule { return true }
+        return false
     }
 
     private var displayName: String {
@@ -166,6 +182,8 @@ extension GroupSchedule {
             "When a workout ends"
         case .visitArrival:
             "When I arrive somewhere"
+        case .calendarEventEnd:
+            "When a calendar event ends"
         case .disabled:
             "Unknown schedule"
         }
@@ -178,7 +196,7 @@ extension GroupSchedule {
 /// deliberately not offered; editing such a group defaults the picker to
 /// timesPerDay and saving overwrites the unknown kind.
 private enum EditableScheduleKind: String, CaseIterable, Identifiable {
-    case everyNHours, timesPerDay, dailyAt, workoutEnd, visitArrival
+    case everyNHours, timesPerDay, dailyAt, workoutEnd, visitArrival, calendarEventEnd
     var id: String { rawValue }
 
     var displayName: String {
@@ -188,6 +206,22 @@ private enum EditableScheduleKind: String, CaseIterable, Identifiable {
         case .dailyAt: "Daily at times"
         case .workoutEnd: "When a workout ends"
         case .visitArrival: "When I arrive somewhere"
+        case .calendarEventEnd: "When a calendar event ends"
+        }
+    }
+}
+
+/// The editor's draft of a calendar group's match rule kind (plan 31);
+/// committed to a `CalendarEventMatchRule` on save.
+private enum CalendarMatchKindDraft: String, CaseIterable, Identifiable {
+    case allEvents, calendars, titleContains
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .allEvents: "All events"
+        case .calendars: "Specific calendars"
+        case .titleContains: "Title contains"
         }
     }
 }
@@ -201,6 +235,7 @@ struct PromptGroupEditorView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(WorkoutEndObserver.self) private var workoutEndObserver
     @Environment(VisitObserver.self) private var visitObserver
+    @Environment(CalendarEventObserver.self) private var calendarEventObserver
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
@@ -216,6 +251,9 @@ struct PromptGroupEditorView: View {
     @State private var timesPerDay: Int
     @State private var distribution: PromptDistribution
     @State private var dailyTimes: [String]
+    @State private var calendarMatchKind: CalendarMatchKindDraft
+    @State private var selectedCalendarIDs: [String]
+    @State private var titleFilter: String
     @State private var isEnabled: Bool
     @State private var newTime = Date()
 
@@ -232,6 +270,9 @@ struct PromptGroupEditorView: View {
         var count = 4
         var dist = PromptDistribution.semiRandom
         var times: [String] = []
+        var matchKind = CalendarMatchKindDraft.allEvents
+        var calendarIDs: [String] = []
+        var title = ""
         switch group?.schedule {
         case .everyNHours(let n):
             kind = .everyNHours; hours = n
@@ -244,6 +285,16 @@ struct PromptGroupEditorView: View {
             kind = .workoutEnd
         case .visitArrival:
             kind = .visitArrival
+        case .calendarEventEnd(let rule):
+            kind = .calendarEventEnd
+            switch rule {
+            case .allEvents:
+                matchKind = .allEvents
+            case .calendars(let ids):
+                matchKind = .calendars; calendarIDs = ids
+            case .titleContains(let filter):
+                matchKind = .titleContains; title = filter
+            }
         case .disabled, nil:
             break
         }
@@ -252,6 +303,9 @@ struct PromptGroupEditorView: View {
         _timesPerDay = State(initialValue: count)
         _distribution = State(initialValue: dist)
         _dailyTimes = State(initialValue: times)
+        _calendarMatchKind = State(initialValue: matchKind)
+        _selectedCalendarIDs = State(initialValue: calendarIDs)
+        _titleFilter = State(initialValue: title)
     }
 
     var body: some View {
@@ -410,18 +464,111 @@ struct PromptGroupEditorView: View {
                 if !visitObserver.hasAlwaysAuthorization {
                     visitAuthorizationHint
                 }
+            case .calendarEventEnd:
+                Text("Fires a prompt when a matching calendar event ends — "
+                    + "e.g. “How was the meeting?”. Needs full calendar access "
+                    + "to read your events.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                Picker("Match", selection: $calendarMatchKind) {
+                    ForEach(CalendarMatchKindDraft.allCases) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+                .foregroundStyle(.white)
+                .tint(.white.opacity(0.7))
+                .accessibilityIdentifier("group-calendar-match")
+                if calendarMatchKind == .calendars {
+                    calendarSelectionList
+                }
+                if calendarMatchKind == .titleContains {
+                    TextField("Title contains", text: $titleFilter)
+                        .foregroundStyle(.white)
+                        .tint(.white)
+                        .accessibilityIdentifier("group-calendar-title")
+                }
+                if !calendarEventObserver.hasFullAccess {
+                    calendarAuthorizationHint
+                }
             }
         } header: {
             sectionHeader("SCHEDULE")
         }
         .listRowBackground(Color.white.opacity(0.12))
-        // Editor-contextual Always upgrade (plan 16): the ONLY place the app
-        // ever asks — picking the visit schedule is the moment the section
-        // text above has just explained why. Never part of onboarding.
+        // Editor-contextual permission asks (plans 16 + 31): the ONLY places
+        // the app ever asks — picking the visit/calendar schedule is the
+        // moment the section text above has just explained why. Never part
+        // of onboarding.
         .onChange(of: scheduleKind) { _, newKind in
             if newKind == .visitArrival, !visitObserver.hasAlwaysAuthorization {
                 Task { await visitObserver.requestAlwaysAuthorization() }
             }
+            if newKind == .calendarEventEnd, !calendarEventObserver.hasFullAccess {
+                Task { await calendarEventObserver.requestFullAccess() }
+            }
+        }
+    }
+
+    /// Multi-select over the user's event calendars for the
+    /// `.calendars` match rule (the questionsSection checkmark pattern).
+    /// Empty WITH full access (no calendars at all) gets its own footnote;
+    /// without access the list is empty and the authorization hint below
+    /// explains why.
+    @ViewBuilder
+    private var calendarSelectionList: some View {
+        let calendars = calendarEventObserver.eventCalendars()
+        if calendars.isEmpty {
+            if calendarEventObserver.hasFullAccess {
+                Text("No calendars found.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        } else {
+            ForEach(calendars, id: \.id) { calendar in
+                Button {
+                    toggleCalendarSelection(of: calendar.id)
+                } label: {
+                    HStack {
+                        Text(calendar.title)
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                        Spacer()
+                        if selectedCalendarIDs.contains(calendar.id) {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.white)
+                        }
+                    }
+                }
+                .accessibilityAddTraits(
+                    selectedCalendarIDs.contains(calendar.id) ? [.isSelected] : [])
+            }
+            .accessibilityIdentifier("group-calendar-list")
+        }
+    }
+
+    /// Inline "needs calendar access" state while the calendar schedule is
+    /// selected: denied/restricted/write-only points at Settings (write-only
+    /// CANNOT read events — EventKit returns none); anything else re-offers
+    /// the system prompt.
+    @ViewBuilder
+    private var calendarAuthorizationHint: some View {
+        switch calendarEventObserver.authorizationStatus {
+        case .denied, .restricted, .writeOnly:
+            Text("Calendar access is off — allow full access in Settings → "
+                + "Privacy & Security → Calendars → Dispatch, or this group "
+                + "won't fire. Add-only access can't read events.")
+                .font(.footnote)
+                .foregroundStyle(.yellow)
+                .accessibilityIdentifier("group-calendar-needs-access")
+        default:
+            Button {
+                Task { await calendarEventObserver.requestFullAccess() }
+            } label: {
+                Text("Needs full calendar access — tap to allow")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.yellow)
+            }
+            .accessibilityIdentifier("group-calendar-needs-access")
         }
     }
 
@@ -446,6 +593,14 @@ struct PromptGroupEditorView: View {
                     .foregroundStyle(.yellow)
             }
             .accessibilityIdentifier("group-visit-needs-always")
+        }
+    }
+
+    private func toggleCalendarSelection(of calendarID: String) {
+        if let index = selectedCalendarIDs.firstIndex(of: calendarID) {
+            selectedCalendarIDs.remove(at: index)
+        } else {
+            selectedCalendarIDs.append(calendarID)
         }
     }
 
@@ -479,6 +634,24 @@ struct PromptGroupEditorView: View {
             .workoutEnd
         case .visitArrival:
             .visitArrival
+        case .calendarEventEnd:
+            .calendarEventEnd(draftCalendarRule)
+        }
+    }
+
+    /// Commits the calendar drafts to a rule. An empty (trimmed) title
+    /// filter normalizes to `.allEvents` on save (plan-31 design decision:
+    /// degenerate configs are prevented here; `.calendars([])` remains
+    /// storable and matches nothing — fails safe).
+    private var draftCalendarRule: CalendarEventMatchRule {
+        switch calendarMatchKind {
+        case .allEvents:
+            return .allEvents
+        case .calendars:
+            return .calendars(selectedCalendarIDs)
+        case .titleContains:
+            let trimmed = titleFilter.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? .allEvents : .titleContains(trimmed)
         }
     }
 
@@ -497,6 +670,7 @@ struct PromptGroupEditorView: View {
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
         workoutEndObserver.refresh()
         visitObserver.refresh()
+        calendarEventObserver.refresh()
         dismiss()
     }
 
