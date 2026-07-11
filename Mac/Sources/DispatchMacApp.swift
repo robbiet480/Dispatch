@@ -17,6 +17,7 @@ struct DispatchMacApp: App {
     let visualizationFilterStore: VisualizationFilterStore
     let remoteChangeObserver: RemoteChangeObserver
     let exportController: MacExportController
+    @State private var navigation = MacNavigation()
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
 
@@ -121,6 +122,7 @@ struct DispatchMacApp: App {
                 .environment(visualizationFilterStore)
                 .environment(remoteChangeObserver)
                 .environment(exportController)
+                .environment(navigation)
                 .environment(\.appDefaults, appDefaults)
                 .frame(minWidth: 900, minHeight: 560)
                 .onAppear { pinScreenshotWindowIfRequested() }
@@ -143,7 +145,26 @@ struct DispatchMacApp: App {
                     Divider()
                     Button("Dispatch JSON…") { exportController.exportDispatchJSON() }
                     Button("CSV…") { exportController.exportCSV() }
+                    Divider()
+                    Button("Questions (JSON)…") { exportController.exportQuestionsJSON() }
+                    Button("Questions (CSV)…") { exportController.exportQuestionsCSV() }
                 }
+            }
+            // Plan 47: the Manage menu drives the shared navigation model so
+            // the setup surfaces are reachable by keyboard, not only the
+            // segmented picker.
+            CommandMenu("Manage") {
+                Button("Dashboard") { navigation.show(.dashboard) }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Insights") { navigation.show(.insights) }
+                    .keyboardShortcut("2", modifiers: .command)
+                Divider()
+                Button("Questions") { navigation.show(.questions) }
+                    .keyboardShortcut("3", modifiers: .command)
+                Button("Prompt Groups") { navigation.show(.groups) }
+                    .keyboardShortcut("4", modifiers: .command)
+                Button("Question Catalog") { navigation.show(.catalog) }
+                    .keyboardShortcut("5", modifiers: .command)
             }
         }
 
