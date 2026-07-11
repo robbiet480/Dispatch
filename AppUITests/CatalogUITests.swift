@@ -130,6 +130,9 @@ final class CatalogUITests: XCTestCase {
         promptField.tap()
         promptField.typeText("How loud was it?")
 
+        // Fresh install: the quota footer must not advertise itself (plan 38).
+        XCTAssertFalse(app.staticTexts["catalog-submit-quota"].exists)
+
         // Default (yesNo): no input-style/default sections, placeholder shown.
         XCTAssertFalse(app.buttons["catalog-submit-input-style"].exists)
         XCTAssertFalse(app.textFields["catalog-submit-default-answer"].exists)
@@ -166,6 +169,43 @@ final class CatalogUITests: XCTestCase {
         let confirmation = app.otherElements["catalog-submit-confirmation"]
             .exists ? app.otherElements["catalog-submit-confirmation"] : app.staticTexts["Thanks!"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+    }
+
+    /// Plan 38: with the per-device quota exhausted (seeded via the
+    /// CATALOG_SEEDED_SUBMISSIONS launch hook — no five round-trips), the
+    /// submit form shows the quota footer with a reset time and disables
+    /// Send. A fresh install (every other test in this file: seed 0) shows
+    /// no quota UI at all.
+    @MainActor
+    func testSubmitQuotaExhaustedShowsFooterAndDisablesSend() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launchEnvironment["CATALOG_SEEDED_SUBMISSIONS"] = "5"
+        app.launch()
+
+        app.buttons["settings-button"].firstMatch.tap()
+        let questionsLink = app.buttons["questions-settings-link"]
+        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
+        questionsLink.tap()
+        let catalogLink = app.buttons["question-catalog-link"]
+        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
+        catalogLink.tap()
+
+        let submitButton = app.buttons["catalog-submit-button"]
+        XCTAssertTrue(submitButton.waitForExistence(timeout: 10))
+        submitButton.tap()
+
+        let send = app.buttons["catalog-submit-send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        XCTAssertFalse(send.isEnabled, "an exhausted quota should disable Send")
+
+        // The footer sits at the bottom of the form — scroll to it.
+        let quota = app.staticTexts["catalog-submit-quota"]
+        var scrolls = 6
+        while !quota.exists, scrolls > 0 { app.swipeUp(); scrolls -= 1 }
+        XCTAssertTrue(quota.waitForExistence(timeout: 10))
+        XCTAssertTrue(quota.label.contains("Daily limit reached"),
+                      "expected the reset-time footer, got: \(quota.label)")
     }
 
     /// The question editor exposes a "Submit to Catalog" button, disabled
