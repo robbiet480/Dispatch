@@ -30,12 +30,26 @@ public struct FocusFilterState: Codable, Equatable, Sendable {
     /// When the filter activated — diagnostic/display only, never used in
     /// scheduling arithmetic.
     public var activatedAt: Date
+    /// Opt-in "This Focus means I'm asleep" flag (plan 39, Signal 1). When
+    /// true, activating a Focus with this filter marks Dispatch asleep and
+    /// deactivating it marks awake. Additive and lenient: `Bool?` so old
+    /// persisted blobs (and processes running old code) decode with nil, and
+    /// read sites treat nil as false. Never affects `filterPlan` — it gates
+    /// the awake-state signal only, never the schedule.
+    public var indicatesSleep: Bool?
 
-    public init(label: String, allowedGroupIDs: [String]?, pauseGlobal: Bool, activatedAt: Date = Date()) {
+    public init(
+        label: String,
+        allowedGroupIDs: [String]?,
+        pauseGlobal: Bool,
+        activatedAt: Date = Date(),
+        indicatesSleep: Bool? = nil
+    ) {
         self.label = label
         self.allowedGroupIDs = allowedGroupIDs
         self.pauseGlobal = pauseGlobal
         self.activatedAt = activatedAt
+        self.indicatesSleep = indicatesSleep
     }
 
     /// Whether prompts for `groupID` may fire while this filter is active.

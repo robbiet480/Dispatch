@@ -116,3 +116,57 @@ private func group(id: String) -> PromptGroup {
     #expect(FocusFilterState.read(from: defaults) == nil)
     #expect(!FocusFilterState.isActive(in: defaults))
 }
+
+// MARK: - indicatesSleep (plan 39, Signal 1)
+
+// (a) A filter marked as a sleep signal round-trips the flag through defaults.
+@Test func indicatesSleepRoundTripsThroughDefaults() throws {
+    let suiteName = "focus-filter-state-sleep-tests"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defaults.removePersistentDomain(forName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let state = FocusFilterState(
+        label: "Sleep", allowedGroupIDs: [], pauseGlobal: true, indicatesSleep: true
+    )
+    state.write(to: defaults)
+    let readBack = FocusFilterState.read(from: defaults)
+    #expect(readBack == state)
+    #expect(readBack?.indicatesSleep == true)
+}
+
+// (b) LENIENCY — a verbatim old-format blob (no indicatesSleep key) decodes
+// with indicatesSleep == nil. The fail-open contract is untouched: old
+// persisted blobs and processes running old code decode unchanged.
+@Test func oldBlobWithoutSleepKeyDecodesAsNil() throws {
+    let suiteName = "focus-filter-state-legacy-tests"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defaults.removePersistentDomain(forName: suiteName)
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    // Verbatim pre-plan-39 JSON, NOT re-encoded (activatedAt is a Date encoded
+    // as a reference-date Double by JSONEncoder's default strategy).
+    let legacy = #"{"label":"Work","allowedGroupIDs":["a","b"],"pauseGlobal":false,"activatedAt":760000000}"#
+    defaults.set(Data(legacy.utf8), forKey: FocusFilterState.defaultsKey)
+
+    let readBack = try #require(FocusFilterState.read(from: defaults))
+    #expect(readBack.indicatesSleep == nil)
+    #expect(readBack.label == "Work")
+    #expect(readBack.allowedGroupIDs == ["a", "b"])
+}
+
+// (c) filterPlan output is unaffected by the sleep flag — it only gates the
+// awake-state signal, never the schedule.
+@Test func indicatesSleepDoesNotAffectFilterPlan() {
+    let groups = [group(id: "a"), group(id: "b")]
+    let marker = FocusFilterState(
+        label: "Sleep", allowedGroupIDs: ["a"], pauseGlobal: false, indicatesSleep: true
+    )
+    let plain = FocusFilterState(
+        label: "Sleep", allowedGroupIDs: ["a"], pauseGlobal: false, indicatesSleep: nil
+    )
+    let markerResult = FocusFilterState.filterPlan(groups: groups, state: marker)
+    let plainResult = FocusFilterState.filterPlan(groups: groups, state: plain)
+    #expect(markerResult.groups.map(\.uniqueIdentifier) == plainResult.groups.map(\.uniqueIdentifier))
+    #expect(markerResult.planGlobal == plainResult.planGlobal)
+}
