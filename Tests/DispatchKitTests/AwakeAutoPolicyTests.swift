@@ -45,12 +45,22 @@ private func minutes(_ m: Double) -> TimeInterval { m * 60 }
 }
 
 @Test func healthSleepEndedStaleIgnores() {
-    // Older than healthRecencyWindow (90m) — history, not a signal.
-    let endedAt = t0.addingTimeInterval(-minutes(200))
+    // Older than healthRecencyWindow (12h) — prior-night history, not a signal.
+    let endedAt = t0.addingTimeInterval(-minutes(13 * 60))
     let d = AwakeAutoPolicy.decide(
         event: .healthSleepEnded(at: endedAt), isAwake: false, lastManualChangeAt: nil, now: t0)
     guard case .ignore(let reason) = d else { Issue.record("expected ignore, got \(d)"); return }
     #expect(reason.hasPrefix("stale sample"))
+}
+
+// The measured case (plan 39 Task 0): the night's sleepAnalysis batch lands
+// ≈4h after wake. A state stranded asleep MUST flip AWAKE when it arrives —
+// this is exactly what a 90m window would have (wrongly) discarded as stale.
+@Test func healthSleepEndedFourHoursAgoWhileAsleepTransitionsAwake() {
+    let endedAt = t0.addingTimeInterval(-minutes(4 * 60))
+    let d = AwakeAutoPolicy.decide(
+        event: .healthSleepEnded(at: endedAt), isAwake: false, lastManualChangeAt: nil, now: t0)
+    #expect(d == .transition(toAwake: true, reason: "health sleep period ended"))
 }
 
 @Test func healthSleepEndedWhileAlreadyAwakeIgnores() {
@@ -70,7 +80,7 @@ private func minutes(_ m: Double) -> TimeInterval { m * 60 }
 }
 
 @Test func healthSleepStartedStaleIgnores() {
-    let startedAt = t0.addingTimeInterval(-minutes(200))
+    let startedAt = t0.addingTimeInterval(-minutes(13 * 60))
     let d = AwakeAutoPolicy.decide(
         event: .healthSleepStarted(at: startedAt), isAwake: true, lastManualChangeAt: nil, now: t0)
     guard case .ignore(let reason) = d else { Issue.record("expected ignore, got \(d)"); return }
@@ -136,13 +146,14 @@ private func minutes(_ m: Double) -> TimeInterval { m * 60 }
     #expect(r1.hasPrefix("manual cooldown"))
 
     // HealthKit sleep-ended-06:05 delivered 07:45 — cooldown has expired
-    // (>90m) but the state is already awake, so still a no-op.
+    // (>90m) and the sample is well within the recency window, but the state
+    // is already awake, so it's still a correct no-op.
     let delivery = t0.addingTimeInterval(minutes(105))
     let endedAt = t0.addingTimeInterval(minutes(5))
     let d2 = AwakeAutoPolicy.decide(
         event: .healthSleepEnded(at: endedAt), isAwake: true,
         lastManualChangeAt: manualWake, now: delivery)
-    // Stale by recency (ended 100m ago) — ignore either way; assert it's an ignore.
+    // Already awake ⇒ ignore; assert it's an ignore.
     guard case .ignore = d2 else { Issue.record("expected ignore, got \(d2)"); return }
 }
 
@@ -175,7 +186,9 @@ private func minutes(_ m: Double) -> TimeInterval { m * 60 }
     #expect(d == .transition(toAwake: true, reason: "health sleep period ended"))
 }
 
-@Test func cooldownConstantsAreNinetyMinutes() {
+@Test func policyTimingConstants() {
+    // manualCooldown stays 90m; healthRecencyWindow is decoupled and sized to
+    // the measured hours-scale sleepAnalysis delivery lag (plan 39 Task 0).
     #expect(AwakeAutoPolicy.manualCooldown == 90 * 60)
-    #expect(AwakeAutoPolicy.healthRecencyWindow == 90 * 60)
+    #expect(AwakeAutoPolicy.healthRecencyWindow == 12 * 60 * 60)
 }

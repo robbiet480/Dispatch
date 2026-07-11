@@ -15,8 +15,15 @@ public enum AwakeAutoPolicy {
     /// survive Sleep Focus's scheduled flip and a straggling HealthKit
     /// delivery, short enough that automation recovers the same night.
     public static let manualCooldown: TimeInterval = 90 * 60
-    /// HealthKit samples older than this are history, not a signal.
-    public static let healthRecencyWindow: TimeInterval = 90 * 60
+    /// A HealthKit "sleep ended" sample is *this morning's* wake only if it
+    /// ended within this window; older samples are prior-night history, not a
+    /// signal. Sized from the Task 0 device measurement (plan 39, 2026-07-11):
+    /// the night's sleepAnalysis batch arrives ≈4h after wake and can land as
+    /// late as the same afternoon, so the window must still accept an
+    /// hours-old sample as fresh while rejecting a full prior night (~24h).
+    /// Deliberately NOT tied to manualCooldown — the pre-measurement draft
+    /// leaned on their coincidental equality; the measurement broke it.
+    public static let healthRecencyWindow: TimeInterval = 12 * 60 * 60
 
     public enum Event: Equatable, Sendable {
         case focusSleepActivated
@@ -51,7 +58,7 @@ public enum AwakeAutoPolicy {
             return .transition(toAwake: true, reason: "health sleep period ended")
         case .healthSleepStarted(let startedAt):
             guard now.timeIntervalSince(startedAt) < healthRecencyWindow else {
-                return .ignore(reason: "stale sample")
+                return .ignore(reason: "stale sample (started \(Int(now.timeIntervalSince(startedAt) / 60))m ago)")
             }
             guard isAwake else { return .ignore(reason: "already asleep") }
             return .transition(toAwake: false, reason: "health sleep period started")
