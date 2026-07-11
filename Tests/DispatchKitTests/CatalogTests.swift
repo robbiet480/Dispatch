@@ -17,6 +17,18 @@ import Testing
     #expect(CatalogChoicesJSON.decode("{\"a\":1}") == [])
 }
 
+// MARK: - Field values (plan 41 adds .double for the input-style bounds)
+
+@Test func catalogFieldValueDoubleAccessor() {
+    #expect(CatalogFieldValue.double(2.5).doubleValue == 2.5)
+    #expect(CatalogFieldValue.double(2.5).stringValue == nil)
+    #expect(CatalogFieldValue.double(2.5).intValue == nil)
+    #expect(CatalogFieldValue.double(2.5).dateValue == nil)
+    #expect(CatalogFieldValue.double(2.5).stringListValue == nil)
+    #expect(CatalogFieldValue.string("2.5").doubleValue == nil)
+    #expect(CatalogFieldValue.int(2).doubleValue == nil)
+}
+
 // MARK: - Field mapping round trips (kit stays CloudKit-import-free)
 
 @Test func catalogQuestionFieldsRoundTrip() throws {
@@ -75,6 +87,72 @@ import Testing
     #expect(catalog.credit == "Robbie")
     #expect(catalog.approvedAt == approvedAt)
     #expect(catalog.tags == ["habits"])
+}
+
+// MARK: - Input configuration fields (plan 41)
+
+@Test func submittedQuestionInputConfigRoundTrips() throws {
+    let original = SubmittedQuestion(
+        recordName: "sub-41", prompt: "How was it?", typeRaw: QuestionType.number.rawValue,
+        choices: [], creditName: nil, submittedAt: Date(timeIntervalSince1970: 1_700_000_000),
+        inputStyle: "scale", defaultAnswer: "3", placeholder: "1–5",
+        inputMin: 1, inputMax: 5, inputStep: 1
+    )
+    let restored = try #require(SubmittedQuestion(recordName: "sub-41", fields: original.fields))
+    #expect(restored == original)
+    #expect(restored.inputStyle == "scale")
+    #expect(restored.defaultAnswer == "3")
+    #expect(restored.placeholder == "1–5")
+    #expect(restored.inputMin == 1)
+    #expect(restored.inputMax == 5)
+    #expect(restored.inputStep == 1)
+}
+
+@Test func submittedQuestionOmitsNilInputConfig() throws {
+    let plain = SubmittedQuestion(
+        recordName: "sub-42", prompt: "Coffee?", typeRaw: QuestionType.yesNo.rawValue,
+        choices: [], creditName: nil, submittedAt: .now
+    )
+    for key in ["inputStyle", "defaultAnswer", "placeholder", "inputMin", "inputMax", "inputStep"] {
+        #expect(plain.fields[key] == nil, "nil \(key) must be omitted from the field dictionary")
+    }
+    let restored = try #require(SubmittedQuestion(recordName: "sub-42", fields: plain.fields))
+    #expect(restored == plain)
+}
+
+@Test func catalogQuestionInputConfigRoundTrips() throws {
+    let original = CatalogQuestion(
+        recordName: "cat-41", prompt: "Stress level?", typeRaw: QuestionType.number.rawValue,
+        choices: [], credit: "Robbie", approvedAt: Date(timeIntervalSince1970: 1_700_000_000),
+        tags: ["mood"], inputStyle: "slider", defaultAnswer: "50", placeholder: "0–100",
+        inputMin: 0, inputMax: 100, inputStep: 5
+    )
+    let restored = try #require(CatalogQuestion(recordName: "cat-41", fields: original.fields))
+    #expect(restored == original)
+
+    let plain = CatalogQuestion(
+        recordName: "cat-42", prompt: "Water?", typeRaw: QuestionType.yesNo.rawValue,
+        choices: [], credit: nil, approvedAt: .now, tags: []
+    )
+    for key in ["inputStyle", "defaultAnswer", "placeholder", "inputMin", "inputMax", "inputStep"] {
+        #expect(plain.fields[key] == nil, "nil \(key) must be omitted from the field dictionary")
+    }
+}
+
+@Test func approvalCarriesInputConfigOntoCatalogEntry() {
+    let submission = SubmittedQuestion(
+        recordName: "sub-43", prompt: "Energy?", typeRaw: QuestionType.number.rawValue,
+        choices: [], creditName: "Angela", submittedAt: .now,
+        inputStyle: "dial", defaultAnswer: "7", placeholder: "spin it",
+        inputMin: 0, inputMax: 10, inputStep: 0.5
+    )
+    let catalog = submission.approved(recordName: "cat-43", approvedAt: .now, tags: [])
+    #expect(catalog.inputStyle == "dial")
+    #expect(catalog.defaultAnswer == "7")
+    #expect(catalog.placeholder == "spin it")
+    #expect(catalog.inputMin == 0)
+    #expect(catalog.inputMax == 10)
+    #expect(catalog.inputStep == 0.5)
 }
 
 @Test func questionFlagFieldsRoundTrip() throws {

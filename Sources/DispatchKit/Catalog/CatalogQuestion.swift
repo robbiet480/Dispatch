@@ -26,11 +26,17 @@ public enum CatalogRecordType {
 public enum CatalogFieldValue: Equatable, Sendable {
     case string(String)
     case int(Int)
+    case double(Double)
     case date(Date)
     case stringList([String])
 
     public var stringValue: String? {
         if case .string(let value) = self { return value }
+        return nil
+    }
+
+    public var doubleValue: Double? {
+        if case .double(let value) = self { return value }
         return nil
     }
 
@@ -77,13 +83,26 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
     public var credit: String?
     public var approvedAt: Date
     public var tags: [String]
+    /// Input configuration (plan 41) — all optional and lenient so
+    /// pre-plan-41 records keep decoding unchanged. `inputStyle` is the raw
+    /// `NumberInputStyle` string (unknown raws resolve to a text field, like
+    /// `Question.inputStyle`); the bounds only mean anything alongside it.
+    public var inputStyle: String?
+    public var defaultAnswer: String?
+    public var placeholder: String?
+    public var inputMin: Double?
+    public var inputMax: Double?
+    public var inputStep: Double?
 
     public var id: String { recordName }
 
     public var type: QuestionType? { QuestionType(rawValue: typeRaw) }
 
     public init(recordName: String, prompt: String, typeRaw: Int, choices: [String],
-                credit: String? = nil, approvedAt: Date, tags: [String] = []) {
+                credit: String? = nil, approvedAt: Date, tags: [String] = [],
+                inputStyle: String? = nil, defaultAnswer: String? = nil,
+                placeholder: String? = nil, inputMin: Double? = nil,
+                inputMax: Double? = nil, inputStep: Double? = nil) {
         self.recordName = recordName
         self.prompt = prompt
         self.typeRaw = typeRaw
@@ -91,6 +110,12 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
         self.credit = credit
         self.approvedAt = approvedAt
         self.tags = tags
+        self.inputStyle = inputStyle
+        self.defaultAnswer = defaultAnswer
+        self.placeholder = placeholder
+        self.inputMin = inputMin
+        self.inputMax = inputMax
+        self.inputStep = inputStep
     }
 
     /// Field dictionary for record creation — used only by `dispatch-mod`'s
@@ -104,6 +129,12 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
         ]
         if let credit, !credit.isEmpty { fields["credit"] = .string(credit) }
         if !tags.isEmpty { fields["tags"] = .stringList(tags) }
+        if let inputStyle, !inputStyle.isEmpty { fields["inputStyle"] = .string(inputStyle) }
+        if let defaultAnswer, !defaultAnswer.isEmpty { fields["defaultAnswer"] = .string(defaultAnswer) }
+        if let placeholder, !placeholder.isEmpty { fields["placeholder"] = .string(placeholder) }
+        if let inputMin { fields["inputMin"] = .double(inputMin) }
+        if let inputMax { fields["inputMax"] = .double(inputMax) }
+        if let inputStep { fields["inputStep"] = .double(inputStep) }
         return fields
     }
 
@@ -118,7 +149,13 @@ public struct CatalogQuestion: Equatable, Sendable, Identifiable {
             choices: CatalogChoicesJSON.decode(fields["choicesJSON"]?.stringValue ?? "[]"),
             credit: fields["credit"]?.stringValue,
             approvedAt: approvedAt,
-            tags: fields["tags"]?.stringListValue ?? []
+            tags: fields["tags"]?.stringListValue ?? [],
+            inputStyle: fields["inputStyle"]?.stringValue,
+            defaultAnswer: fields["defaultAnswer"]?.stringValue,
+            placeholder: fields["placeholder"]?.stringValue,
+            inputMin: fields["inputMin"]?.doubleValue,
+            inputMax: fields["inputMax"]?.doubleValue,
+            inputStep: fields["inputStep"]?.doubleValue
         )
     }
 }
@@ -134,19 +171,35 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
     public var choices: [String]
     public var creditName: String?
     public var submittedAt: Date
+    /// Input configuration (plan 41) — see the `CatalogQuestion` doc comment.
+    public var inputStyle: String?
+    public var defaultAnswer: String?
+    public var placeholder: String?
+    public var inputMin: Double?
+    public var inputMax: Double?
+    public var inputStep: Double?
 
     public var id: String { recordName }
 
     public var type: QuestionType? { QuestionType(rawValue: typeRaw) }
 
     public init(recordName: String, prompt: String, typeRaw: Int, choices: [String],
-                creditName: String? = nil, submittedAt: Date) {
+                creditName: String? = nil, submittedAt: Date,
+                inputStyle: String? = nil, defaultAnswer: String? = nil,
+                placeholder: String? = nil, inputMin: Double? = nil,
+                inputMax: Double? = nil, inputStep: Double? = nil) {
         self.recordName = recordName
         self.prompt = prompt
         self.typeRaw = typeRaw
         self.choices = choices
         self.creditName = creditName
         self.submittedAt = submittedAt
+        self.inputStyle = inputStyle
+        self.defaultAnswer = defaultAnswer
+        self.placeholder = placeholder
+        self.inputMin = inputMin
+        self.inputMax = inputMax
+        self.inputStep = inputStep
     }
 
     public var fields: [String: CatalogFieldValue] {
@@ -157,6 +210,12 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
             "submittedAt": .date(submittedAt),
         ]
         if let creditName, !creditName.isEmpty { fields["creditName"] = .string(creditName) }
+        if let inputStyle, !inputStyle.isEmpty { fields["inputStyle"] = .string(inputStyle) }
+        if let defaultAnswer, !defaultAnswer.isEmpty { fields["defaultAnswer"] = .string(defaultAnswer) }
+        if let placeholder, !placeholder.isEmpty { fields["placeholder"] = .string(placeholder) }
+        if let inputMin { fields["inputMin"] = .double(inputMin) }
+        if let inputMax { fields["inputMax"] = .double(inputMax) }
+        if let inputStep { fields["inputStep"] = .double(inputStep) }
         return fields
     }
 
@@ -170,7 +229,13 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
             typeRaw: typeRaw,
             choices: CatalogChoicesJSON.decode(fields["choicesJSON"]?.stringValue ?? "[]"),
             creditName: fields["creditName"]?.stringValue,
-            submittedAt: submittedAt
+            submittedAt: submittedAt,
+            inputStyle: fields["inputStyle"]?.stringValue,
+            defaultAnswer: fields["defaultAnswer"]?.stringValue,
+            placeholder: fields["placeholder"]?.stringValue,
+            inputMin: fields["inputMin"]?.doubleValue,
+            inputMax: fields["inputMax"]?.doubleValue,
+            inputStep: fields["inputStep"]?.doubleValue
         )
     }
 
@@ -179,7 +244,9 @@ public struct SubmittedQuestion: Equatable, Sendable, Identifiable {
     public func approved(recordName: String, approvedAt: Date, tags: [String] = []) -> CatalogQuestion {
         CatalogQuestion(
             recordName: recordName, prompt: prompt, typeRaw: typeRaw, choices: choices,
-            credit: creditName, approvedAt: approvedAt, tags: tags
+            credit: creditName, approvedAt: approvedAt, tags: tags,
+            inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder,
+            inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
         )
     }
 }
