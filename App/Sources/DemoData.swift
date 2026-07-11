@@ -220,11 +220,65 @@ enum DemoData {
         postWorkout.sortOrder = 1
         context.insert(postWorkout)
 
+        // Two more groups so the prompt-groups shot fills larger canvases
+        // (the 13" iPad list looked sparse with only two rows).
+        let eveningReflection = PromptGroup()
+        eveningReflection.uniqueIdentifier = "demo-group-evening-reflection"
+        eveningReflection.name = "Evening reflection"
+        eveningReflection.questionIDs = [question("what-did-you-learn"), question("who-are-you-with")]
+            .compactMap { $0?.uniqueIdentifier }
+        eveningReflection.schedule = .timesPerDay(count: 1, distribution: .semiRandom)
+        eveningReflection.sortOrder = 2
+        context.insert(eveningReflection)
+
+        let weekendCheckIn = PromptGroup()
+        weekendCheckIn.uniqueIdentifier = "demo-group-weekend-check-in"
+        weekendCheckIn.name = "Weekend check-in"
+        weekendCheckIn.questionIDs = [question("where-are-you"), question("what-are-you-doing")]
+            .compactMap { $0?.uniqueIdentifier }
+        weekendCheckIn.schedule = .visitArrival
+        weekendCheckIn.sortOrder = 3
+        context.insert(weekendCheckIn)
+
         try context.save()
 
         // Token/people autocomplete in the survey shot draws from vocabulary.
         try VocabularyBuilder.rebuild(in: context)
     }
+
+    #if os(iOS)
+    /// Backup fixture for the data-settings shot: a caption reading
+    /// "No backups yet. 0 backups kept" photographs as a broken state, so
+    /// seed a plausible nightly rotation — three backup files (newest last
+    /// night) in a throwaway directory that DispatchApp injects into
+    /// BackupManager, plus the matching lastBackupDate/installID defaults.
+    /// Test-environment-gated at the call site like `seed`.
+    @MainActor
+    static func seedBackupFixture(defaults: UserDefaults) throws -> URL {
+        defaults.set("demofixt", forKey: BackupManager.installIDKey)
+        defaults.set(true, forKey: BackupManager.enabledKey)
+        let slug = BackupRotation.deviceSlug(model: DeviceIdentity.model, installID: "demofixt")
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dispatch-demo-backups", isDirectory: true)
+        try? FileManager.default.removeItem(at: directory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let calendar = Calendar.current
+        let minutes = [4, 47, 12] // varied "nightly auto-backup" stamps
+        var newest: Date?
+        for daysAgo in 1...3 {
+            guard let day = calendar.date(byAdding: .day, value: -daysAgo, to: Date()),
+                  let stamp = calendar.date(bySettingHour: 21, minute: minutes[daysAgo - 1],
+                                            second: 0, of: day) else { continue }
+            let name = BackupRotation.backupFilename(for: stamp, slug: slug)
+            try Data("{}".utf8).write(to: directory.appendingPathComponent(name))
+            if newest == nil { newest = stamp }
+        }
+        if let newest {
+            defaults.set(newest.timeIntervalSince1970, forKey: BackupManager.lastBackupKey)
+        }
+        return directory
+    }
+    #endif
 
     /// `--demo-many-questions` (PR #41 review): pads the enabled-question
     /// list to 15 so the home pager renders 15 page dots — the tiered

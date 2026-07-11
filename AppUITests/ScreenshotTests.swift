@@ -33,15 +33,60 @@ final class ScreenshotTests: XCTestCase {
 
     /// Fresh launch for shot number `shotIndex` (1-based): deterministic
     /// demo fixture + the shot's cycled theme.
+    ///
+    /// Review-pass hardening: a springboard permission alert is dismissed if
+    /// present (one leaked into a captured hero shot), and the applied theme
+    /// is VERIFIED via the app's test-only `active-theme` AX marker — one
+    /// wrong-theme shot slipped through when a relaunch didn't take the
+    /// launch argument; a mismatch now relaunches once and then fails loudly.
     @MainActor
     private func launchApp(shotIndex: Int) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "--mock-sensors", "--ui-testing", "--skip-onboarding", "--demo-data",
-            "--theme", Self.themes[(shotIndex - 1) % Self.themes.count],
-        ]
-        app.launch()
+        let themeName = Self.themes[(shotIndex - 1) % Self.themes.count]
+        var app = XCUIApplication()
+        for attempt in 0..<2 {
+            app = XCUIApplication()
+            app.launchArguments = [
+                "--mock-sensors", "--ui-testing", "--skip-onboarding", "--demo-data",
+                "--theme", themeName,
+            ]
+            app.launch()
+            dismissSystemPermissionAlertIfPresent()
+            let marker = app.staticTexts["active-theme"]
+            if marker.waitForExistence(timeout: 15), marker.label == themeName {
+                return app
+            }
+            XCTAssertTrue(attempt == 0, "theme \(themeName) did not apply after relaunch "
+                + "(marker: \(marker.exists ? marker.label : "missing"))")
+            app.terminate()
+        }
         return app
+    }
+
+    /// Any springboard-level permission dialog (e.g. notifications) blocks
+    /// dead-center over the app. Allow is tapped so the grant persists and
+    /// the dialog can't reappear later in the run.
+    @MainActor
+    private func dismissSystemPermissionAlertIfPresent() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.buttons["Allow"]
+        if allow.waitForExistence(timeout: 2) {
+            allow.tap()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+    }
+
+    /// The survey checklist's sensor rows show "GETTING …" while the (mock)
+    /// providers resolve; a mid-collection capture photographs as broken.
+    /// Mock sensors settle deterministically — wait them out.
+    @MainActor
+    private func awaitSensorRowsSettled(_ app: XCUIApplication, timeout: TimeInterval = 20) {
+        let gettingRows = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH[c] 'GETTING'"))
+        let deadline = Date().addingTimeInterval(timeout)
+        while gettingRows.count > 0 && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertEqual(gettingRows.count, 0, "sensor rows still collecting after \(Int(timeout))s")
     }
 
     /// Full-screen capture — the extraction script keys on the `shot-` prefix
@@ -97,7 +142,8 @@ final class ScreenshotTests: XCTestCase {
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
                       || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
-        Thread.sleep(forTimeInterval: 1.5)
+        awaitSensorRowsSettled(app)
+        Thread.sleep(forTimeInterval: 1)
         snap("03-survey-checklist")
         app.terminate()
 
