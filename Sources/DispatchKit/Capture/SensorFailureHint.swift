@@ -27,7 +27,7 @@ public enum SensorFailureHint {
             return "Allow photo access for Dispatch in Settings."
         case .focus:
             return "Allow Focus status access for Dispatch in Settings."
-        case .altitude, .battery, .connection, .media:
+        case .altitude, .battery, .connection, .media, .speed, .course, .heading:
             if let reason, !reason.isEmpty {
                 return reason
             }
@@ -40,6 +40,9 @@ public enum SensorFailureHint {
         case .location: "Location"
         case .weather: "Weather"
         case .altitude: "Altitude"
+        case .speed: "Speed"
+        case .course: "Course"
+        case .heading: "Heading"
         case .photos: "Photos"
         case .audio: "Audio"
         case .battery: "Battery"

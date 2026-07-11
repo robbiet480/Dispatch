@@ -17,6 +17,13 @@ public final class Report {
     public var wasInBackground: Bool = false
     public var battery: Double?
     public var altitudeMeters: Double?
+    /// Location-fix-derived motion sensors (plan 43, #61): meters/second and
+    /// degrees respectively, mirroring `altitudeMeters`'s raw-storage rule.
+    public var speedMPS: Double?
+    public var courseDegrees: Double?
+    /// Magnetometer-derived compass heading in degrees (plan 43, #61),
+    /// iPhone-only capture.
+    public var headingDegrees: Double?
     public var connection: Int?
     public var audio: AudioSample?
     public var location: LocationSnapshot?
