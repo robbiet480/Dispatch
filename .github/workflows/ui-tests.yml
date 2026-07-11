@@ -1,0 +1,105 @@
+name: UI Tests
+on:
+  pull_request:
+  # Nightly full run on main per the testing-tiers doc (the local merge gate
+  # runs the smoke tier; this is the full-suite backstop).
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC ≈ 3am ET
+  workflow_dispatch:
+
+# One run per PR head; a new push cancels the stale run.
+concurrency:
+  group: ui-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-ui-suite:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+      - name: Ensure iOS platform
+        # Same rationale + retry as ci.yml's build-app job.
+        run: |
+          if xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator; then
+            echo "iOS simulator SDK pre-installed; skipping download"
+            exit 0
+          fi
+          for i in 1 2 3; do
+            sudo xcodebuild -downloadPlatform iOS && exit 0
+            echo "downloadPlatform attempt $i failed; retrying in 30s"
+            sleep 30
+          done
+          echo "iOS platform download failed after 3 attempts"; exit 1
+      - name: Install XcodeGen + xcbeautify
+        run: brew install xcodegen xcbeautify
+      - name: Generate project
+        run: xcodegen generate
+      - name: Capture Xcode version for cache keys
+        id: xcode
+        run: echo "v=$(xcodebuild -version | tr '\n' '-' | tr -d ' ')" >> "$GITHUB_OUTPUT"
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: DerivedData
+          key: dd-ui-${{ runner.os }}-${{ steps.xcode.outputs.v }}-${{ hashFiles('project.yml', 'Package.swift', 'App/**', 'AppUITests/**', 'Widgets/**', 'Sources/**', 'Shared/**') }}
+          restore-keys: |
+            dd-ui-${{ runner.os }}-${{ steps.xcode.outputs.v }}-
+      - name: Ensure simulator
+        # The suite pins iPhone 17 Pro (docs/testing-tiers.md). Create it if
+        # the image's default device set lacks one.
+        run: |
+          if ! xcrun simctl list devices available | grep -q "iPhone 17 Pro ("; then
+            RUNTIME=$(xcrun simctl list runtimes | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
+            xcrun simctl create "iPhone 17 Pro" "iPhone 17 Pro" "$RUNTIME"
+          fi
+          xcrun simctl list devices available | grep "iPhone 17 Pro"
+      - name: Run full UI suite
+        # -retry-tests-on-failure absorbs the known swift-testing signal-11
+        # runner flake (one retry, matching the local merge-gate convention).
+        run: |
+          xcodebuild test \
+            -project Dispatch.xcodeproj \
+            -scheme DispatchApp \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            -derivedDataPath DerivedData \
+            -resultBundlePath ui-tests.xcresult \
+            -retry-tests-on-failure \
+            | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
+      - name: Upload result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-tests-xcresult
+          path: ui-tests.xcresult
+          retention-days: 7
+
+  mac-ui-smoke:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+      - name: Install XcodeGen + xcbeautify
+        run: brew install xcodegen xcbeautify
+      - name: Generate project
+        run: xcodegen generate
+      - name: Run Mac UI smoke
+        run: |
+          xcodebuild test \
+            -project Dispatch.xcodeproj \
+            -scheme DispatchMac \
+            -destination 'platform=macOS' \
+            -resultBundlePath mac-smoke.xcresult \
+            CODE_SIGN_IDENTITY=- \
+            | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
+      - name: Upload result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-smoke-xcresult
+          path: mac-smoke.xcresult
+          retention-days: 7
