@@ -267,4 +267,85 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["When I arrive somewhere – 1 question"].waitForExistence(timeout: 10))
     }
+
+    /// Plan 31: a calendar event-end group with a title-contains match rule
+    /// can be created entirely through the editor under --mock-sensors (the
+    /// observer reads as full access with an empty calendar list — no system
+    /// dialog) and lands in the list with its schedule label and NO
+    /// needs-access hint.
+    @MainActor
+    func testCreateCalendarEventGroupShowsScheduleLabelWithoutAccessHint() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        let settingsButton = app.buttons["settings-button"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
+        settingsButton.tap()
+
+        let groupsLink = app.buttons["prompt-groups-link"]
+        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
+        groupsLink.tap()
+
+        let addButton = app.buttons["group-add"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+        var scrollsRemaining = 8
+        while !addButton.isHittable, scrollsRemaining > 0 {
+            app.swipeUp()
+            scrollsRemaining -= 1
+        }
+        addButton.tap()
+
+        let groupName = "Meetings \(Int(Date().timeIntervalSince1970) % 100_000)"
+        addTeardownBlock { @MainActor in
+            let row = app.staticTexts[groupName.uppercased()]
+            guard row.exists else { return }
+            row.swipeLeft()
+            let deleteButton = app.buttons["Delete"]
+            if deleteButton.waitForExistence(timeout: 5) {
+                deleteButton.tap()
+            }
+        }
+
+        let nameField = app.textFields["group-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
+        nameField.tap()
+        nameField.typeText(groupName)
+
+        let questionRow = app.buttons["Are you working?"]
+        XCTAssertTrue(questionRow.waitForExistence(timeout: 10))
+        questionRow.tap()
+
+        // Form pickers render as a menu: open it, choose the calendar schedule.
+        let schedulePicker = app.buttons["group-schedule-kind"]
+        XCTAssertTrue(schedulePicker.waitForExistence(timeout: 10))
+        schedulePicker.tap()
+        let calendarOption = app.buttons["When a calendar event ends"]
+        XCTAssertTrue(calendarOption.waitForExistence(timeout: 10))
+        calendarOption.tap()
+
+        // Match rule: Title contains, with a filter. The test posture reads
+        // as full access, so no authorization hint appears in the editor.
+        let matchPicker = app.buttons["group-calendar-match"]
+        XCTAssertTrue(matchPicker.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["group-calendar-needs-access"].exists)
+        XCTAssertFalse(app.buttons["group-calendar-needs-access"].exists)
+        matchPicker.tap()
+        let titleOption = app.buttons["Title contains"]
+        XCTAssertTrue(titleOption.waitForExistence(timeout: 10))
+        titleOption.tap()
+
+        let titleField = app.textFields["group-calendar-title"]
+        XCTAssertTrue(titleField.waitForExistence(timeout: 10))
+        titleField.tap()
+        titleField.typeText("standup")
+
+        app.buttons["group-save"].tap()
+
+        // Back on the list: the calendar group shows with its schedule label
+        // and NO needs-access hint (full-access test posture).
+        XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["When a calendar event ends – 1 question"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["group-row-needs-calendar"].exists)
+    }
 }
