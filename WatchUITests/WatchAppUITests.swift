@@ -94,10 +94,13 @@ final class WatchAppUITests: XCTestCase {
         XCTAssertTrue(app.buttons["watch-quick-answer-no"].exists)
 
         // The questions List container renders.
+        // Single any-element-type query: watchOS may expose a SwiftUI List
+        // as a collectionView, table, or plain element depending on OS — one
+        // descendant match means one wait, not stacked timeouts.
+        let questionList = app.descendants(matching: .any)
+            .matching(identifier: "watch-question-list").firstMatch
         XCTAssertTrue(
-            app.collectionViews["watch-question-list"].waitForExistence(timeout: uiTimeout)
-            || app.tables["watch-question-list"].waitForExistence(timeout: 1)
-            || app.otherElements["watch-question-list"].exists,
+            questionList.waitForExistence(timeout: uiTimeout),
             "the questions list should exist"
         )
 
@@ -157,9 +160,14 @@ final class WatchAppUITests: XCTestCase {
         // first tap (the sub-button re-renders on value change) while the label
         // stays stable — so match by label and re-resolve `app.buttons["Add"]`
         // fresh for each tap to exercise repeated crown-style increments.
-        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: uiTimeout), "stepper increment button should render")
-        app.buttons["Add"].tap()
-        app.buttons["Add"].tap()
+        for i in 1...2 {
+            let add = app.buttons["Add"]
+            XCTAssertTrue(
+                add.waitForExistence(timeout: uiTimeout),
+                "stepper increment button should be present for tap \(i) (it re-renders per value change)"
+            )
+            add.tap()
+        }
 
         let file = app.buttons["watch-file-number"]
         XCTAssertTrue(file.waitForExistence(timeout: uiTimeout))
@@ -222,14 +230,20 @@ final class WatchAppUITests: XCTestCase {
             "sync-status line should render in settings"
         )
 
-        // At least one sensor toggle exists and flips.
+        // At least one sensor toggle exists and flips — HARD requirements:
+        // this test exists to prove settings interactivity, so a missing
+        // toggle or an unchanged value is a failure, not a skip.
         let toggle = app.switches.firstMatch
-        if toggle.waitForExistence(timeout: uiTimeout) {
-            let before = toggle.value as? String
-            toggle.tap()
-            if let before, let after = toggle.value as? String {
-                XCTAssertNotEqual(before, after, "sensor toggle should flip")
-            }
-        }
+        XCTAssertTrue(toggle.waitForExistence(timeout: uiTimeout),
+                      "settings should expose at least one sensor toggle")
+        let before = toggle.value as? String
+        XCTAssertNotNil(before, "toggle should expose a String value")
+        toggle.tap()
+        // The flip is async on watchOS — wait for the value to change rather
+        // than sampling immediately.
+        let flipped = NSPredicate(format: "value != %@", before ?? "")
+        let changed = XCTNSPredicateExpectation(predicate: flipped, object: toggle)
+        XCTAssertEqual(XCTWaiter().wait(for: [changed], timeout: uiTimeout), .completed,
+                       "sensor toggle value should change after tapping")
     }
 }
