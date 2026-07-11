@@ -72,7 +72,16 @@ public enum V2Exporter {
                                   fromJSON: g.calendarIdentifiersJSON)
                               return ids.isEmpty ? nil : ids
                           }(),
-                          calendarTitleFilter: g.calendarTitleFilter)
+                          calendarTitleFilter: g.calendarTitleFilter,
+                          // CLMonitor place/beacon trigger (plan 43): the
+                          // scalars ride verbatim; the JSON payloads decode
+                          // back to their structs (exactly one present for a
+                          // monitor group, both nil otherwise).
+                          monitorDirection: g.monitorDirectionRaw,
+                          monitorDelayMinutes: g.monitorDelayMinutes,
+                          monitorCancelsOnContradiction: g.monitorCancelsOnContradiction,
+                          placeRegion: MonitorPlaceRegion(json: g.placeRegionJSON),
+                          beaconIdentity: MonitorBeaconIdentity(json: g.beaconIdentityJSON))
         }
         export.promptGroups = groupDTOs.isEmpty ? nil : groupDTOs
 

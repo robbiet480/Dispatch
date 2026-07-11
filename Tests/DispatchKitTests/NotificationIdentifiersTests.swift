@@ -57,6 +57,18 @@ private func components(hour: Int, minute: Int) -> DateComponents {
     #expect(source == .promptGroup(groupID: groupID))
 }
 
+@Test func monitorPromptYieldsItsGroupID() {
+    // Plan 43: `mprompt-` (place/beacon) shares the gprompt- stamp shape and
+    // is classified as a group prompt for the "next notification" hero.
+    let groupID = "1B9D6BCD-BBFD-4B2D-9B5D-AB8DFBBD4BED"
+    let source = NotificationIdentifiers.promptSource(
+        forIdentifier: "mprompt-\(groupID)-20260710-0845",
+        fireDate: date(hour: 8, minute: 45),
+        scheduledTimes: [],
+        calendar: calendar)
+    #expect(source == .promptGroup(groupID: groupID))
+}
+
 @Test func malformedGroupPromptIsNotAPrompt() {
     // A gprompt with no group segment before the stamp parses to nil
     // rather than inventing an empty group ID.
