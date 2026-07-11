@@ -6,6 +6,7 @@ import Testing
     let healthKinds: [SensorKind] = [
         .healthSteps, .healthFlights, .healthHeart, .healthHRV, .healthRestingHeart,
         .healthSleep, .healthWorkouts, .healthCaffeine, .healthMedications,
+        .healthHeartRange,
     ]
     for kind in healthKinds {
         #expect(SensorFailureHint.hint(for: kind, reason: "some error") == "Check Health → Data Access & Devices → Dispatch.")
@@ -40,6 +41,11 @@ import Testing
 @Test func disabledHintPointsAtSensorSettings() {
     #expect(SensorFailureHint.disabledHint(for: .weather) == "Turn Weather back on in Settings → Sensors.")
     #expect(SensorFailureHint.disabledHint(for: .healthSteps) == "Turn Steps back on in Settings → Sensors.")
+}
+
+@Test func heartRangeDisabledHintNamesHeartRateRange() {
+    #expect(SensorFailureHint.disabledHint(for: .healthHeartRange)
+        == "Turn Heart Rate Range back on in Settings → Sensors.")
 }
 
 @Test func mediaHintPassesReasonThrough() {
