@@ -162,7 +162,10 @@ private func respond(_ report: Report, prompt: String, _ configure: (Response) -
     #expect(!contents.hasSuffix("\n\n"))
 }
 
-@Test func markdownOutputIsDeterministic() throws {
+/// Prompt headings render in stable alphabetical order regardless of the order
+/// responses were attached. Byte-for-byte determinism across all four
+/// exporters is covered by ExporterDeterminismTests.
+@Test func markdownSortsPromptHeadingsAlphabetically() throws {
     let context = try makeContext()
     let report = makeReport()
     for prompt in ["Zebra?", "Apple?", "Mango?"] {
@@ -170,13 +173,8 @@ private func respond(_ report: Report, prompt: String, _ configure: (Response) -
     }
     context.insert(report)
 
-    let reports = try context.fetch(FetchDescriptor<Report>())
-    let first = MarkdownExporter.export(reports: reports)
-    let second = MarkdownExporter.export(reports: reports)
-    #expect(first.map(\.contents) == second.map(\.contents))
-    #expect(first.map(\.filename) == second.map(\.filename))
-
-    let body = try #require(first.first?.contents)
+    let files = MarkdownExporter.export(reports: try context.fetch(FetchDescriptor<Report>()))
+    let body = try #require(files.first?.contents)
     let apple = try #require(body.range(of: "## Apple?"))
     let mango = try #require(body.range(of: "## Mango?"))
     let zebra = try #require(body.range(of: "## Zebra?"))

@@ -200,7 +200,10 @@ private func entries(_ data: Data) throws -> [[String: Any]] {
     #expect(list[1]["tags"] == nil)
 }
 
-@Test func dayOneOutputIsDeterministic() throws {
+/// Prompt headings render in stable alphabetical order regardless of the order
+/// responses were attached. Byte-for-byte determinism across all four
+/// exporters is covered by ExporterDeterminismTests.
+@Test func dayOneSortsPromptHeadingsAlphabetically() throws {
     let context = try makeContext()
     let report = Report()
     report.uniqueIdentifier = "r-1"
@@ -216,12 +219,8 @@ private func entries(_ data: Data) throws -> [[String: Any]] {
     }
     context.insert(report)
 
-    let reports = try context.fetch(FetchDescriptor<Report>())
-    let first = try DayOneExporter.export(reports: reports)
-    let second = try DayOneExporter.export(reports: reports)
-    #expect(first == second)
-
-    let text = try #require(try entries(first).first?["text"] as? String)
+    let data = try DayOneExporter.export(reports: try context.fetch(FetchDescriptor<Report>()))
+    let text = try #require(try entries(data).first?["text"] as? String)
     let zebra = try #require(text.range(of: "## Zebra?"))
     let apple = try #require(text.range(of: "## Apple?"))
     let mango = try #require(text.range(of: "## Mango?"))
