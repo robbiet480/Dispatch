@@ -922,9 +922,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Current notification authorization, for the hero's empty state
-    /// ("Notifications are off" vs "No prompts scheduled").
+    /// ("Notifications are off" vs "No prompts scheduled"). Test
+    /// environments report authorized — UI tests never grant permission
+    /// (the dialog would block the runner, the same rationale as the
+    /// replan gate's bypass above) but must still exercise the authorized
+    /// empty states (awake/asleep captions, plan 39).
     func authorizationStatus() async -> UNAuthorizationStatus {
-        await center.notificationSettings().authorizationStatus
+        guard !isTestEnvironment else { return .authorized }
+        return await center.notificationSettings().authorizationStatus
     }
 
     // MARK: - Delegate

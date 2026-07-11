@@ -55,7 +55,15 @@ final class NotificationSettingsUITests: XCTestCase {
     func testNagStepperRowsRespondToTaps() throws {
         let app = launchToNotificationSettings()
 
+        // The nag section sits below the fold since the SLEEP section landed
+        // (plan 39) — scroll it into view (off-screen SwiftUI List rows
+        // aren't in the AX tree; the digest-suite precedent).
         let nagToggle = app.switches["nag-enabled"]
+        var scrolls = 0
+        while !nagToggle.exists && scrolls < 4 {
+            app.swipeUp()
+            scrolls += 1
+        }
         XCTAssertTrue(nagToggle.waitForExistence(timeout: 10))
         if (nagToggle.value as? String) != "1" {
             nagToggle.switches.firstMatch.tap()
