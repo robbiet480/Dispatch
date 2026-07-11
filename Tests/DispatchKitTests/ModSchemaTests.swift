@@ -117,6 +117,19 @@ final class ModSchemaTests: XCTestCase {
         }
     }
 
+    func testPromptFingerprintColumn() {
+        // Plan 42: content-identity dedupe. The fingerprint lives ONLY on
+        // CatalogQuestion (written by dispatch-mod, the sole writer of the
+        // type) and is QUERYABLE so the app's pre-submit duplicate check can
+        // run a targeted equality query. SubmittedQuestion carries none —
+        // the mod tool recomputes from prompts; client-supplied fingerprints
+        // would be untrusted anyway.
+        XCTAssertTrue(block("CatalogQuestion").contains("promptFingerprint STRING QUERYABLE"))
+        XCTAssertFalse(block("CatalogQuestion").contains("promptFingerprint STRING QUERYABLE SORTABLE"))
+        XCTAssertFalse(block("SubmittedQuestion").contains("promptFingerprint"))
+        XCTAssertFalse(block("QuestionFlag").contains("promptFingerprint"))
+    }
+
     func testNoSearchableIndexes() {
         // App search is client-side over loaded entries (docs §3b).
         XCTAssertFalse(Self.schema.contains("SEARCHABLE"))

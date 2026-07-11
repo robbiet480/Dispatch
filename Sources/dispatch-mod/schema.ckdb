@@ -19,6 +19,7 @@ DEFINE SCHEMA
         inputStyle      STRING,
         placeholder     STRING,
         prompt          STRING,
+        promptFingerprint STRING QUERYABLE,
         tags            LIST<STRING>,
         typeRaw         INT64,
         GRANT CREATE, WRITE TO moderator,
