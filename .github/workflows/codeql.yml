@@ -19,19 +19,15 @@ jobs:
     # Swift needs manual build mode: the .xcodeproj is XcodeGen-generated
     # (never committed), so CodeQL's autobuild has nothing to discover —
     # its default-setup run failed with "unable to automatically build".
-    # NOTE: requires CodeQL DEFAULT SETUP to be DISABLED in repo settings
-    # (Settings → Advanced Security), or GitHub rejects these results.
+    # Tooling installs run BEFORE CodeQL init: the injected tracer forces
+    # subsequent brew invocations under Rosetta, which Homebrew refuses on
+    # the ARM prefix. Only the build itself needs (and gets) the tracer.
     runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: swift
-          build-mode: manual
       - name: Ensure iOS platform
         # Same guard + retry as ci.yml/ui-tests.yml — image regressions here
         # have happened before, and a failed build skips the CodeQL upload.
@@ -46,11 +42,17 @@ jobs:
           exit 1
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: swift
+          build-mode: manual
       - name: Build (traced)
         # Building the iOS app target compiles app + kit + widget Swift under
         # CodeQL's tracer. Generic destination avoids needing a booted sim.
         run: |
-          xcodegen generate
           xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build
