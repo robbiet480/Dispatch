@@ -1,6 +1,6 @@
 # Dispatch Plan 42: Catalog duplicate-submission prevention
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Issue:** #47 — *Catalog: prevent duplicate question submissions.*
 
@@ -51,9 +51,9 @@
 - `CatalogDedupe.isDuplicate(_ a: String, _ b: String) -> Bool`
 - `CatalogDedupe.firstMatch(prompt: String, in entries: [CatalogQuestion]) -> CatalogQuestion?`
 
-- [ ] **Step 1: failing tests.** Normalization: case fold, internal whitespace/newline collapse, trim, trailing `.?!…‽` run stripped (but internal punctuation kept: `"Coffee? Tea?"` keeps the first `?`), curly quotes/apostrophes folded (`"Who’d you meet?"` ≡ `"who'd you meet"`), NFC (composed vs decomposed `é` equal), no diacritic folding (`"café"` ≠ `"cafe"`), empty/whitespace-only → empty string. Fingerprint: pinned hex vector for a known input; equal for normalization-equivalent inputs; different for different prompts. `firstMatch` finds a stub entry by messy prompt; nil when absent.
-- [ ] **Step 2: `swift test` — expect FAIL.** Implement (pure functions, CryptoKit). **Step 3: `swift test` — PASS.**
-- [ ] **Step 4: commit** `feat(kit): CatalogDedupe — normalized-prompt identity + SHA-256 fingerprint (plan 42, #47)`.
+- [x] **Step 1: failing tests.** Normalization: case fold, internal whitespace/newline collapse, trim, trailing `.?!…‽` run stripped (but internal punctuation kept: `"Coffee? Tea?"` keeps the first `?`), curly quotes/apostrophes folded (`"Who’d you meet?"` ≡ `"who'd you meet"`), NFC (composed vs decomposed `é` equal), no diacritic folding (`"café"` ≠ `"cafe"`), empty/whitespace-only → empty string. Fingerprint: pinned hex vector for a known input; equal for normalization-equivalent inputs; different for different prompts. `firstMatch` finds a stub entry by messy prompt; nil when absent.
+- [x] **Step 2: `swift test` — expect FAIL.** Implement (pure functions, CryptoKit). **Step 3: `swift test` — PASS.**
+- [x] **Step 4: commit** `feat(kit): CatalogDedupe — normalized-prompt identity + SHA-256 fingerprint (plan 42, #47)`.
 
 ### Task 2: Kit — seed import dedupe uses the shared normalizer
 
@@ -61,18 +61,18 @@
 - Modify: `Sources/DispatchKit/Catalog/CatalogSeed.swift` (`parse`'s in-file `seenPrompts` keys on `CatalogDedupe.normalizedPrompt`)
 - Test: extend `Tests/DispatchKitTests/CatalogSeedTests.swift`
 
-- [ ] Failing test: a seed file containing `"Did you exercise today?"` and `"did you   exercise today"` fails with a per-line duplicate-prompt problem (today's `.lowercased()` check misses it). Implement, `swift test` green.
-- [ ] Commit `feat(kit): seed-file duplicate check uses CatalogDedupe normalization (plan 42, #47)`.
+- [x] Failing test: a seed file containing `"Did you exercise today?"` and `"did you   exercise today"` fails with a per-line duplicate-prompt problem (today's `.lowercased()` check misses it). Implement, `swift test` green.
+- [x] Commit `feat(kit): seed-file duplicate check uses CatalogDedupe normalization (plan 42, #47)`.
 
 ### Task 3: Schema — `promptFingerprint STRING QUERYABLE` + docs + Development import
 
 **Files:**
 - Modify: `Sources/dispatch-mod/schema.ckdb` (CatalogQuestion block only), `Tests/DispatchKitTests/ModSchemaTests.swift` (pin), `docs/moderation.md` (record shape, dedupe section, Production deploy call-out)
 
-- [ ] Failing `ModSchemaTests` assertion: CatalogQuestion block contains `promptFingerprint STRING QUERYABLE`; SubmittedQuestion block does NOT contain `promptFingerprint`. Edit `schema.ckdb` (alphabetical placement, grants untouched). Test green.
-- [ ] Docs: document the field (mod-tool-written, backfillable, client uses it for the pre-check query), the duplicate workflow (`list` markers → `approve` refusal → `--allow-duplicate`), `backfill-fingerprints`, and the deploy reality: **field auto-creates in Dev on write, the QUERYABLE index does not — run the export→merge→validate→import flow for Development; Production = OWNER Console deploy (§3c).**
-- [ ] Development deploy (live, team UTQFCBPQRF, container iCloud.io.robbie.Dispatch): `cktool export-schema` fresh from Dev → merge the field line → `validate-schema` → `import-schema`. Record the result in the completion note (skip gracefully if no management token available; note it).
-- [ ] Commit `feat(schema): CatalogQuestion.promptFingerprint (QUERYABLE) + dedupe docs (plan 42, #47)`.
+- [x] Failing `ModSchemaTests` assertion: CatalogQuestion block contains `promptFingerprint STRING QUERYABLE`; SubmittedQuestion block does NOT contain `promptFingerprint`. Edit `schema.ckdb` (alphabetical placement, grants untouched). Test green.
+- [x] Docs: document the field (mod-tool-written, backfillable, client uses it for the pre-check query), the duplicate workflow (`list` markers → `approve` refusal → `--allow-duplicate`), `backfill-fingerprints`, and the deploy reality: **field auto-creates in Dev on write, the QUERYABLE index does not — run the export→merge→validate→import flow for Development; Production = OWNER Console deploy (§3c).**
+- [x] Development deploy (live, team UTQFCBPQRF, container iCloud.io.robbie.Dispatch): `cktool export-schema` fresh from Dev → merge the field line → `validate-schema` → `import-schema`. Record the result in the completion note (skip gracefully if no management token available; note it).
+- [x] Commit `feat(schema): CatalogQuestion.promptFingerprint (QUERYABLE) + dedupe docs (plan 42, #47)`.
 
 ### Task 4: dispatch-mod — approve refusal, import fingerprints, list markers, backfill, dashboard badge
 
@@ -80,10 +80,10 @@
 - Modify: `Sources/DispatchKit/Catalog/CatalogQuestion.swift` (`CatalogQuestion.promptFingerprint: String?` stored prop, carried via `fields`/`init?(recordName:fields:)`, nil-omitted; `approved(...)` computes it via `CatalogDedupe`), `Sources/dispatch-mod/CloudKitWebClient.swift` (`approve` dup check + `allowDuplicate:` param; `catalogQuestions()` reuse; `backfillFingerprints()` with forceUpdate + per-record verify), `Sources/dispatch-mod/DispatchMod.swift` (`--allow-duplicate` flag, `backfill-fingerprints` subcommand, `list` duplicate markers, help text), `Sources/dispatch-mod/Dashboard.swift` (duplicate badge on pending rows), `Sources/dispatch-mod/CloudKitWebClient+Import.swift` / import path (normalizer skip; fingerprint rides `fields` automatically)
 - Test: extend `Tests/DispatchKitTests/CatalogTests.swift` (fingerprint round-trips `fields` ↔ `init?`; nil-omission; `approved(...)` sets it) — mod-side network paths stay live-verified, not unit-mocked (existing convention)
 
-- [ ] Kit failing tests first: `CatalogQuestion` carries `promptFingerprint` through the field dictionary (present when set, absent when nil); `submission.approved(...)` returns an entry whose fingerprint equals `CatalogDedupe.promptFingerprint(prompt)`. Green, then the mod-tool wiring.
-- [ ] `approve`: fetch catalog entries, `CatalogDedupe.firstMatch` on the submission's prompt (computed from fetched prompts, never stored fingerprints); refuse with recordName + prompt of the existing entry unless `--allow-duplicate`. `import`: skip-set keys on `normalizedPrompt`. `list`: catalog-dup and pending-dup markers. `backfill-fingerprints`: forceUpdate only records missing the field, per-record verified, prints count. Dashboard: escaped badge.
-- [ ] Verify: `swift test`, `swift build`, `swift run dispatch-mod --help`. Optional live Dev smoke: submit a dup of a catalog prompt, see the `list` marker, watch `approve` refuse, `--allow-duplicate` succeed, `backfill-fingerprints` no-op afterwards.
-- [ ] Commit `feat(mod): duplicate-aware approve/list/import + fingerprint backfill (plan 42, #47)`.
+- [x] Kit failing tests first: `CatalogQuestion` carries `promptFingerprint` through the field dictionary (present when set, absent when nil); `submission.approved(...)` returns an entry whose fingerprint equals `CatalogDedupe.promptFingerprint(prompt)`. Green, then the mod-tool wiring.
+- [x] `approve`: fetch catalog entries, `CatalogDedupe.firstMatch` on the submission's prompt (computed from fetched prompts, never stored fingerprints); refuse with recordName + prompt of the existing entry unless `--allow-duplicate`. `import`: skip-set keys on `normalizedPrompt`. `list`: catalog-dup and pending-dup markers. `backfill-fingerprints`: forceUpdate only records missing the field, per-record verified, prints count. Dashboard: escaped badge.
+- [x] Verify: `swift test`, `swift build`, `swift run dispatch-mod --help`. Optional live Dev smoke: submit a dup of a catalog prompt, see the `list` marker, watch `approve` refuse, `--allow-duplicate` succeed, `backfill-fingerprints` no-op afterwards.
+- [x] Commit `feat(mod): duplicate-aware approve/list/import + fingerprint backfill (plan 42, #47)`.
 
 ### Task 5: App — provider fingerprint lookup, store pre-check, resubmit guard, submit-view UX
 
@@ -91,13 +91,77 @@
 - Modify: `App/Sources/Catalog/CatalogProvider.swift` (`CatalogProviderError.duplicate(existing:)` + `.alreadySubmitted`; protocol + CloudKit + stub `catalogQuestion(fingerprint:) async -> CatalogQuestion?`; `catalogQuestion(from:)` reads `promptFingerprint`), `App/Sources/Catalog/CatalogStore.swift` (pre-check order: validate → loaded-entries scan → fingerprint query → own-fingerprint guard → provider.submit; record fingerprint on success), `App/Sources/Catalog/CatalogSubmitView.swift` (duplicate section: existing entry + Add to My Questions via `store.addToMyQuestions` + modelContext, and the already-submitted message), UI test in the catalog suite
 - Note: `catalogQuestion(fingerprint:)` returns nil on ANY error (missing index/record type/offline) — UX-only check, never blocks submission.
 
-- [ ] Stub provider resolves fingerprints against `stubEntries` (computed via `CatalogDedupe`), so the UI test drives the whole flow: submit `"did you DRINK water today?!"` → duplicate section appears naming "Did you drink water today?" → Add to My Questions → confirmation; second flow: a fresh prompt submits, resubmitting the same prompt shows the already-submitted message. Existing `catalog-submit-*` identifiers unchanged; new ones `catalog-submit-duplicate`, `catalog-submit-duplicate-add`.
-- [ ] Verify: `swift test`, `xcodegen`, `xcodebuild build-for-testing` (iPhone 17 Pro sim), the new UI test(s) if runnable in isolation.
-- [ ] Commit `feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47)`.
+- [x] Stub provider resolves fingerprints against `stubEntries` (computed via `CatalogDedupe`), so the UI test drives the whole flow: submit `"did you DRINK water today?!"` → duplicate section appears naming "Did you drink water today?" → Add to My Questions → confirmation; second flow: a fresh prompt submits, resubmitting the same prompt shows the already-submitted message. Existing `catalog-submit-*` identifiers unchanged; new ones `catalog-submit-duplicate`, `catalog-submit-duplicate-add`.
+- [x] Verify: `swift test`, `xcodegen`, `xcodebuild build-for-testing` (iPhone 17 Pro sim), the new UI test(s) if runnable in isolation.
+- [x] Commit `feat: catalog submit pre-checks duplicates — add-instead UX + resubmit guard (plan 42, #47)`.
 
 ### Task 6: Wrap + self-review
 
-- [ ] Full suites green (`swift test`, `swift build` dispatch-mod, app `build-for-testing`); note the test-count delta.
-- [ ] Self-review the branch diff: (a) normalizer used by seed parse, import skip, approve check, list markers, store pre-check — no second normalization implementation anywhere; (b) `promptFingerprint` nil-omitted, absent on SubmittedQuestion, pinned in `ModSchemaTests`; (c) pre-check failure paths all fall through to submit; (d) every new `records/modify` write verified per-record; (e) plan-38 collision surface (submit/store/view/list/dashboard/docs) kept additive.
-- [ ] **Production reminder for the completion note (do NOT skip):** OWNER must Console-deploy `CatalogQuestion.promptFingerprint` (String + QUERYABLE index) to Production before running `backfill-fingerprints`/duplicate-writing approves against Production; client pre-check silently no-ops until then.
-- [ ] Completion note in this doc: shipped/divergences/test counts/live-verification results/pending OWNER deploy.
+- [x] Full suites green (`swift test`, `swift build` dispatch-mod, app `build-for-testing`); note the test-count delta.
+- [x] Self-review the branch diff: (a) normalizer used by seed parse, import skip, approve check, list markers, store pre-check — no second normalization implementation anywhere; (b) `promptFingerprint` nil-omitted, absent on SubmittedQuestion, pinned in `ModSchemaTests`; (c) pre-check failure paths all fall through to submit; (d) every new `records/modify` write verified per-record; (e) plan-38 collision surface (submit/store/view/list/dashboard/docs) kept additive.
+- [x] **Production reminder for the completion note (do NOT skip):** OWNER must Console-deploy `CatalogQuestion.promptFingerprint` (String + QUERYABLE index) to Production before running `backfill-fingerprints`/duplicate-writing approves against Production; client pre-check silently no-ops until then.
+- [x] Completion note in this doc: shipped/divergences/test counts/live-verification results/pending OWNER deploy.
+
+---
+
+## Completion note (2026-07-11)
+
+**Shipped** — all six tasks, one commit each on `plan-42-doc` (branched from
+origin/main), same PR as the plan doc (#55):
+
+1. `CatalogDedupe` (kit): `normalizedPrompt` / `promptFingerprint` (pinned
+   hex vector) / `isDuplicate` / `firstMatch` / `duplicateMatches` — the one
+   definition of "the same question", pure and CryptoKit-only.
+2. `CatalogSeed.parse` in-file duplicate check keys on the normalizer
+   (whitespace/punctuation variants now caught); the shipped-seed overlap
+   test upgraded too (both seed files still pass — no latent overlap).
+3. `schema.ckdb`: `promptFingerprint STRING QUERYABLE` on CatalogQuestion
+   only; `ModSchemaTests` pins presence there and absence on
+   SubmittedQuestion/QuestionFlag; docs/moderation.md documents the field,
+   the duplicate workflow, and both deploy paths. **Development deployed
+   live** via export→merge→validate→import ("Schema is valid", post-import
+   export confirms the field + index).
+4. dispatch-mod: `approve` refuses catalog duplicates (DUPLICATE_PROMPT,
+   `--allow-duplicate` overrides), recomputing from a fresh catalog fetch
+   (never stored fingerprints); `list` + dashboard mark catalog/pending
+   duplicates (oldest pending is the unmarked original); `import` skip-set
+   uses the normalizer; new `backfill-fingerprints` (forceUpdate, per-record
+   verified). **Live-verified against Development:** backfill stamped 101
+   entries; re-run no-ops (0 stamped / 101 already).
+5. App: `CatalogProviderError.duplicate(existing:)` + `.alreadySubmitted`;
+   provider `catalogQuestion(matchingFingerprint:)` (CloudKit equality
+   query, resultsLimit 1, nil on ANY error — pre-check never blocks);
+   `CatalogStore.submit` order: validate → loaded-entries scan → fingerprint
+   query → own-fingerprint guard → write → record fingerprint
+   (`catalog.submittedFingerprints`, cap 50); `CatalogSubmitView` duplicate
+   section with Add to My Questions (existing add path) + reword hint.
+   Two new UI tests (messy-variant duplicate → add-instead → local question
+   exists; own resubmit refused), both passing on iPhone 17 Pro sim.
+
+**Test counts:** DispatchKit swift-testing 597 → 602 on this branch (+13 new
+kit tests net of none removed; XCTest suites incl. the new
+`testPromptFingerprintColumn` all green). `swift build` (dispatch-mod),
+`xcodegen`, `xcodebuild build-for-testing` (iPhone 17 Pro) pass; full UI
+suite reserved for the merge gate.
+
+**⚠️ Pending OWNER action — Production schema deploy:** CloudKit Console →
+Schema → **Deploy Schema Changes → Production** must carry
+`CatalogQuestion.promptFingerprint` (String) **with its QUERYABLE index**
+(docs/moderation.md §3c; cktool cannot). Then run
+`swift run dispatch-mod backfill-fingerprints --env production` once. Until
+deployed: Production approves/imports that write the field would fail
+(hold them), and the client pre-check silently no-ops (harmless).
+
+**Known merge overlap with plan 38 (PR #32, `plan-38-doc`, implemented
+concurrently):** both branches touch `DispatchMod.swift`'s `list` case
+(their Submitters/flood summary vs. my per-line DUPLICATE markers — both
+additive, keep both), `Dashboard.swift` (their Submitters table +
+`/api/reject-user` vs. my `duplicateOf` field + badge in `/api/pending` —
+disjoint sections), `CloudKitWebClient.swift` (their `queryRecords` →
+`QueriedRecord` return-type change will require mechanical rebasing of my
+untouched call sites; their surfaced `createdUserRecordName` could later
+enrich duplicate grouping), `CatalogStore.submit` (their throttle + my
+pre-checks: resolve as validate → duplicate checks → throttle → write, so a
+blocked duplicate never burns a quota slot), and `CatalogSubmitView`
+(their quota footer vs. my duplicate section — disjoint). Whichever PR
+lands second rebases; every collision is additive-vs-additive.
