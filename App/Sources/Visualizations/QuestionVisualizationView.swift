@@ -122,65 +122,20 @@ struct OptionSharesBarsView: View {
         .accessibilityIdentifier("viz-option-shares")
     }
 
-    /// Index 0 lightens 8% off the theme background so the first block reads
-    /// against it; each later block darkens 10% per index (plan 29 shading).
-    /// Contrast pass (plan 29 Task 4): verified in the sim across all five
-    /// themes — white labels stay legible on the lightened index-0 block,
-    /// including the flagged chartreuse/gray risks (chartreuse is the low
-    /// end but matches every other white-on-chartreuse home element), so
-    /// the uniform no-lighten fallback was NOT needed.
+    /// Plan-29 shading direction (index 0 lighter, later blocks darker per
+    /// index), with the blend math in kit-side `BlockShading` so each fill
+    /// keeps a minimum contrast step from the visualization card background.
+    /// The old fixed 8% lighten was IDENTICAL to the card's
+    /// `white.opacity(0.08)` overlay, leaving the first block invisible on
+    /// the dashboard grids (worst on the tomato/pink review shots).
     private func tint(for index: Int) -> Color {
-        let base = ThemeColor.color(theme)
-        return index == 0
-            ? base.blended(withWhite: 0.08)
-            : base.blended(withBlack: Double(index) * 0.10)
+        guard let background = RGBValue(hex: theme.backgroundHex) else { return .black }
+        let fill = BlockShading.fill(forIndex: index, background: background)
+        return Color(red: fill.red, green: fill.green, blue: fill.blue)
     }
 
     private func percentString(_ share: Double) -> String {
         "\(Int((share * 100).rounded()))%"
-    }
-}
-
-private extension Color {
-    /// sRGB components via the native color type — the file's one platform
-    /// seam (plan 36): UIColor answers getRed directly; NSColor must be
-    /// converted to an sRGB color space first or getRed raises.
-    var rgbaComponents: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        #if canImport(UIKit)
-        UIColor(self).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        #else
-        (NSColor(self).usingColorSpace(.sRGB) ?? .black)
-            .getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        #endif
-        return (red, green, blue, alpha)
-    }
-
-    /// Blends toward black by `amount` (0...1), used to produce per-index darker tints.
-    func blended(withBlack amount: Double) -> Color {
-        guard amount > 0 else { return self }
-        let (red, green, blue, alpha) = rgbaComponents
-        let clampedAmount = min(max(amount, 0), 0.9)
-        return Color(
-            red: red * (1 - clampedAmount),
-            green: green * (1 - clampedAmount),
-            blue: blue * (1 - clampedAmount),
-            opacity: alpha
-        )
-    }
-
-    /// Blends toward white by `amount` (0...1) — the index-0 block lightens
-    /// off the theme background so it reads against it (plan 29).
-    func blended(withWhite amount: Double) -> Color {
-        guard amount > 0 else { return self }
-        let (red, green, blue, alpha) = rgbaComponents
-        let clampedAmount = min(max(amount, 0), 0.9)
-        return Color(
-            red: red + (1 - red) * clampedAmount,
-            green: green + (1 - green) * clampedAmount,
-            blue: blue + (1 - blue) * clampedAmount,
-            opacity: alpha
-        )
     }
 }
 
