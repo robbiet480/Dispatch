@@ -319,7 +319,7 @@ struct DispatchApp: App {
 
         // Control Center control: its OpenIntent's perform() runs in THIS
         // process (dual target membership) and routes through the same
-        // AppActions → SurveyPresenter path as StartReportIntent, so the
+        // AppActions → SurveyPresenter path as FileReportIntent, so the
         // survey presentation stays behind ContentView's lock-gated cover.
         StartReportControlIntent.startReportInApp = {
             AppActions.shared.surveyPresenter?.request = SurveyRequest(kind: .regular, trigger: .control)

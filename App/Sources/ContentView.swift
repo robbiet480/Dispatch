@@ -73,7 +73,7 @@ struct ContentView: View {
         // so it can never appear simultaneously with the lock cover below. The
         // underlying request is preserved (only the setter clears it on dismiss),
         // so a request set while locked — via notification tap, cold-launch drain,
-        // or StartReportIntent — presents automatically once isLocked flips false,
+        // or FileReportIntent — presents automatically once isLocked flips false,
         // since isLocked is @Observable state read inside this getter.
         //
         // Mid-survey lock engagement (e.g. backgrounding past the grace interval
