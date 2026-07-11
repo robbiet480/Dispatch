@@ -50,6 +50,19 @@ The forum-grade timing claim in decision 1 is load-bearing for Signal 2's whole 
 - [ ] **Step 3: Record + adjust.** Append the measured timings to this plan (spike-findings subsection) and update decision 1's wake-lag expectation and Task 4's recency-window reasoning from measurement. If the measurement CONTRADICTS the forum claim (e.g. mid-night deliveries are real), revisit whether Signal 2 can carry more of the onset job — as a logged design-decision amendment, not silent scope growth.
 - [ ] **Step 4: Keep or strip.** Keep the probe permanently behind its flag (the `--dump-pending`/`--probe-focus-filter` precedent) — it's the re-measurement tool the design log tells future maintainers to run. Commit — `git commit -m "probe: sleepAnalysis background-delivery timing spike (plan 39 task 0)"` → push.
 
+### Task 0 spike findings (MEASURED 2026-07-10/11, two nights, iPhone + Apple Watch on current OS 26)
+
+Probe log: `sleep-probe.log` (Settings > Sensors > Diagnostics toggle build; owner device, America/New_York). Summary of the raw log Robbie pulled 2026-07-11:
+
+- **(a) Fires DO occur during the night with no user interaction** — genuine `appState=background`/`inactive` observer fires at 00:45Z, 02:03Z, and 06:07–06:12Z. The delivery MECHANISM works; forum claim 650330 (registration accepted) confirmed, and the ~hourly-wake cap is roughly consistent with observed fire spacing.
+- **(b) But the night's samples are NOT in those fires.** Every overnight fire still carried only the PREVIOUS night's samples (`samples(24h)=19`, unchanged). Night 2's sleep (06:16Z–12:27Z, wake ≈08:27 ET) first appeared in a fire at **16:24Z — ≈3h56m after wake** (`samples(24h)=28`, appState=background). Night 1's first appearance lagged ≥8.5h, but that datum is contaminated (probe enabled that afternoon; min observed lag 8h36m is an upper-bound artifact). The bottleneck is watch→phone sample sync, not delivery notification: HealthKit fires promptly on ARRIVAL, and arrival is hours late.
+- **(c) Arrival is one batch** — the full night (28 samples incl. core/deep/REM/awake stages, source "Robert's Apple Watch") landed in a single fire, not a trickle.
+
+**Consequences (confirming decision 1, tightening the numbers):**
+- Signal 2's honest label upgrades from "minutes-scale lag, best effort" to **"HOURS-scale lag (measured ≈4h post-wake on night 2); retrospective only."** HealthKit is authoritative for the true sleep WINDOW (stage-level detail is excellent once it arrives) and useless for live wake detection. Task 4's recency window must accept a same-day-afternoon arrival as "fresh."
+- **Signal 1 (Sleep Focus filter) carries BOTH onset and wake in real time, alone.** Do not revisit HealthKit for onset/wake without re-running this measurement (this section is the re-measurement baseline).
+- The forum-grade claim (763329) understated the lag: "minutes-or-longer after wake" measured as ~4 hours on a typical night.
+
 ### Task 1: Kit — FocusFilterState.indicatesSleep + AwakeStore source tracking
 
 **Files:**
