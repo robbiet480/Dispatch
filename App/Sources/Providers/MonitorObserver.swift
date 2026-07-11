@@ -281,6 +281,11 @@ final class MonitorObserver {
             } catch {
                 monitorLog.error("monitor event stream failed: \(error, privacy: .public)")
             }
+            // The stream finished or threw. Clear the handle so the NEXT
+            // refresh() (scene-active, group edit, remote-change) restarts the
+            // loop — otherwise a transient stream failure would silently stop
+            // monitoring until relaunch.
+            self?.eventLoopTask = nil
         }
     }
 
