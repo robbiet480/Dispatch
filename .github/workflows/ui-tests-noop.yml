@@ -3,6 +3,9 @@ name: UI Tests
 # branch protection's required checks must still resolve — this workflow
 # reports the SAME job names as instant no-ops on the INVERSE paths.
 # Keep the paths lists mirrored with ui-tests.yml when editing.
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths:

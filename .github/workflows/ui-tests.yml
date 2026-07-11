@@ -1,4 +1,7 @@
 name: UI Tests
+permissions:
+  contents: read
+
 on:
   pull_request:
     # Docs-only PRs (plan docs, notes) skip the heavy suites. A companion
