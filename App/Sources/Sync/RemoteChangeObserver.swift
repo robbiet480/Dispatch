@@ -84,6 +84,12 @@ final class RemoteChangeObserver {
     /// dropped — a genuine remote burst overlapping the pipeline would
     /// otherwise never be processed.
     @ObservationIgnored private var hasPendingEvent = false
+    /// Plan 47: the union of model-entity names touched by remote-change
+    /// bursts observed since the last pipeline pass, drained by
+    /// `handleChanges` and fed to `RemoteChangeImpact.classify`. Empty today
+    /// (⇒ the `.all` do-everything sentinel = the prior always-replan floor);
+    /// the seam for a future `NSPersistentHistory` entity-extraction pass.
+    @ObservationIgnored private var pendingChangedEntities: Set<String> = []
 
     private static let debounceInterval: TimeInterval = 2
     private static let postHandlerCooldown: TimeInterval = 1
@@ -178,11 +184,28 @@ final class RemoteChangeObserver {
             }
         }
 
+        // Plan 47 (issue #57): route the pipeline's replan/rebuild decisions
+        // through the kit's tested `RemoteChangeImpact` classifier — the ONE
+        // definition of "a remote edit that must replan" (a prompt group or
+        // question edited on the Mac must make this device replan). The
+        // changed-entity set is drained from `pendingChangedEntities`;
+        // extracting it precisely from `NSPersistentHistory` is a documented
+        // future refinement that needs a two-device runtime smoke, so today
+        // that set is empty and `classify` returns the `.all` do-everything
+        // sentinel — exactly the always-replan behavior that shipped before
+        // this seam. Wiring the decision through the classifier now means a
+        // future entity-aware pass gains selectivity through tested logic
+        // without disturbing this control flow.
+        let impact = RemoteChangeImpact.classify(changedEntityNames: pendingChangedEntities)
+        pendingChangedEntities.removeAll()
+
         // Heavy lifting on a background context (same cross-context pattern
         // as DataSettingsView's import): ModelContainer is Sendable, and
         // SpotlightIndexer snapshots its models before any async work.
         let container = self.container
         let fullPipeline = isSyncActive
+        let shouldReplan = fullPipeline && impact.shouldReplanNotifications
+        let shouldRebuildVocabulary = fullPipeline && impact.shouldRebuildVocabulary
         let lookbackStart = Date().addingTimeInterval(-Self.recentReportLookback)
         // Result carries either the pass outcome or a PRE-SANITIZED error
         // string (SyncEventRecord.sanitize) — sanitizing inside the detached
@@ -194,7 +217,9 @@ final class RemoteChangeObserver {
                     let context = ModelContext(container)
                     let summary = try SyncDedupe.run(in: context)
                     guard fullPipeline else { return .success((summary, [])) }
-                    try VocabularyBuilder.rebuild(in: context)
+                    if shouldRebuildVocabulary {
+                        try VocabularyBuilder.rebuild(in: context)
+                    }
                     let reports = try context.fetch(FetchDescriptor<Report>())
                     // Plan 36: this file is shared with DispatchMac, where
                     // Core Spotlight indexing is deferred (in-app search only
@@ -225,7 +250,7 @@ final class RemoteChangeObserver {
             // diagnostics dedupe totals accumulate and the timeline shows
             // "we ran and found nothing" as evidence.
             onDedupePass(result.summary, Date())
-            if fullPipeline {
+            if shouldReplan {
                 onRemoteChangesApplied(result.recentReportDates)
             }
         case .failure(let failure):
@@ -233,7 +258,7 @@ final class RemoteChangeObserver {
                 date: Date(), kindRaw: SyncEventKind.pipelineError.rawValue,
                 succeeded: false, detail: failure.sanitized
             ))
-            if fullPipeline {
+            if shouldReplan {
                 onRemoteChangesApplied([])
             }
         }
