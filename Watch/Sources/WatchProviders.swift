@@ -18,7 +18,10 @@ enum WatchProviders {
     /// The sensor kinds the watch can capture — drives both the provider
     /// array and the settings screen's toggle list.
     static let watchCapableKinds: [SensorKind] = [
-        .location, .altitude, .weather, .battery,
+        // Heading is deliberately absent: it's a separate CLLocationManager
+        // magnetometer read, phone-only (plan 43, #61) — speed/course ride
+        // the same location fix as altitude and work on both platforms.
+        .location, .altitude, .speed, .course, .weather, .battery,
         .healthSteps, .healthFlights, .healthHeart, .healthHeartRange, .healthHRV,
         .healthRestingHeart, .healthSleep, .healthWorkouts, .healthCaffeine,
         .healthMedications, .healthActivityRings,
@@ -38,6 +41,8 @@ enum WatchProviders {
         return [
             LocationProvider(store: fixStore),
             AltitudeFromLocationProvider(store: fixStore),
+            SpeedFromLocationProvider(store: fixStore),
+            CourseFromLocationProvider(store: fixStore),
             WeatherProvider(store: fixStore),
             BatteryProvider(),
             HealthMetricProvider(kind: .healthSteps, reader: health, since: since),
@@ -62,6 +67,8 @@ enum WatchProviders {
     private static let mocks: [any SensorProvider] = [
         Mock(kind: .battery, payload: .battery(0.8)),
         Mock(kind: .altitude, payload: .altitude(63)),
+        Mock(kind: .speed, payload: .speed(5.5)),
+        Mock(kind: .course, payload: .course(180)),
         Mock(kind: .healthSteps, payload: .health([HealthReading(type: "steps", value: 27851, unit: "count")])),
     ]
 
@@ -81,6 +88,11 @@ extension SensorKind {
         case .location: "Location"
         case .weather: "Weather"
         case .altitude: "Elevation"
+        case .speed: "Speed"
+        case .course: "Course"
+        // Heading is phone-only (plan 43, #61) — named here only because the
+        // switch is exhaustive; no watch provider exists for it.
+        case .heading: "Heading"
         case .photos: "Photos"
         case .audio: "Audio"
         case .battery: "Battery"
