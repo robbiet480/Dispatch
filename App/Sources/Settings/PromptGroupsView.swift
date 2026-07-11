@@ -166,29 +166,8 @@ struct PromptGroupRowView: View {
     }
 }
 
-extension GroupSchedule {
-    /// One-line schedule readout for the groups list.
-    var summary: String {
-        switch self {
-        case .everyNHours(let hours):
-            "Every \(hours)h"
-        case .timesPerDay(let count, _):
-            "\(count)× per day"
-        case .dailyAt(let times):
-            times.isEmpty
-                ? "Daily"
-                : "Daily at " + times.map(PromptGroup.timeString(fromComponents:)).joined(separator: ", ")
-        case .workoutEnd:
-            "When a workout ends"
-        case .visitArrival:
-            "When I arrive somewhere"
-        case .calendarEventEnd:
-            "When a calendar event ends"
-        case .disabled:
-            "Unknown schedule"
-        }
-    }
-}
+// GroupSchedule.summary moved to DispatchKit (QuestionDisplay.swift, plan 47)
+// so the iOS and macOS group lists share one definition.
 
 // MARK: - Editor
 
