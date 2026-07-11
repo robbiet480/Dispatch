@@ -15,17 +15,36 @@ struct CatalogSubmitView: View {
     @State private var type: QuestionType
     @State private var choicesText: String
     @State private var creditName = ""
+    /// Input configuration (plan 41), mirroring the question editor: style +
+    /// default answer only apply to number questions, placeholder to any
+    /// type. Config text is validated like the editor's — finite Doubles,
+    /// min < max, step > 0; invalid entries are simply not sent.
+    @State private var inputStyle: NumberInputStyle
+    @State private var inputMin: String
+    @State private var inputMax: String
+    @State private var inputStep: String
+    @State private var defaultAnswer: String
+    @State private var placeholder: String
     @State private var errorMessage: String?
     @State private var isSubmitting = false
     @State private var submitted = false
 
     /// Blank by default (the catalog browser's "Submit a Question" entry);
-    /// the question editor passes its current prompt/type/choices to pre-fill.
-    init(store: CatalogStore, prompt: String = "", type: QuestionType = .yesNo, choices: [String] = []) {
+    /// the question editor passes its current prompt/type/choices — and,
+    /// since plan 41, its input configuration — to pre-fill.
+    init(store: CatalogStore, prompt: String = "", type: QuestionType = .yesNo, choices: [String] = [],
+         inputStyle: NumberInputStyle = .textField, inputMin: String = "", inputMax: String = "",
+         inputStep: String = "", defaultAnswer: String = "", placeholder: String = "") {
         self.store = store
         _prompt = State(initialValue: prompt)
         _type = State(initialValue: type)
         _choicesText = State(initialValue: choices.joined(separator: "\n"))
+        _inputStyle = State(initialValue: inputStyle)
+        _inputMin = State(initialValue: inputMin)
+        _inputMax = State(initialValue: inputMax)
+        _inputStep = State(initialValue: inputStep)
+        _defaultAnswer = State(initialValue: defaultAnswer)
+        _placeholder = State(initialValue: placeholder)
     }
 
     private var theme: Theme { themeStore.theme }
@@ -79,6 +98,7 @@ struct CatalogSubmitView: View {
                 .foregroundStyle(.white)
                 .tint(.white.opacity(0.7))
                 .listRowBackground(Color.white.opacity(0.12))
+                .accessibilityIdentifier("catalog-submit-type")
             } header: {
                 sectionHeader("QUESTION")
             }
@@ -92,6 +112,74 @@ struct CatalogSubmitView: View {
                 } header: {
                     sectionHeader("CHOICES")
                 }
+            }
+
+            if type == .number {
+                Section {
+                    Picker("Input style", selection: $inputStyle) {
+                        ForEach(NumberInputStyle.allCases, id: \.self) { style in
+                            Text(style.displayName).tag(style)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .tint(.white.opacity(0.7))
+                    .listRowBackground(Color.white.opacity(0.12))
+                    .accessibilityIdentifier("catalog-submit-input-style")
+                    if configFields.min {
+                        TextField("Minimum", text: $inputMin)
+                            .keyboardType(.decimalPad)
+                            .foregroundStyle(.white)
+                            .listRowBackground(Color.white.opacity(0.12))
+                            .accessibilityIdentifier("catalog-submit-input-min")
+                    }
+                    if configFields.max {
+                        TextField("Maximum", text: $inputMax)
+                            .keyboardType(.decimalPad)
+                            .foregroundStyle(.white)
+                            .listRowBackground(Color.white.opacity(0.12))
+                            .accessibilityIdentifier("catalog-submit-input-max")
+                    }
+                    if configFields.step {
+                        TextField("Step", text: $inputStep)
+                            .keyboardType(.decimalPad)
+                            .foregroundStyle(.white)
+                            .listRowBackground(Color.white.opacity(0.12))
+                            .accessibilityIdentifier("catalog-submit-input-step")
+                    }
+                } header: {
+                    sectionHeader("INPUT STYLE")
+                } footer: {
+                    if inputStyle != .textField {
+                        Text("Blank fields use the style's defaults. Invalid values (minimum not below maximum, step of zero) are ignored.")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .listRowBackground(Color.clear)
+                    }
+                }
+
+                Section {
+                    TextField("Value for empty responses", text: $defaultAnswer)
+                        .keyboardType(.decimalPad)
+                        .foregroundStyle(.white)
+                        .listRowBackground(Color.white.opacity(0.12))
+                        .accessibilityIdentifier("catalog-submit-default-answer")
+                } header: {
+                    sectionHeader("DEFAULT ANSWER")
+                } footer: {
+                    Text("Filled automatically when the question is left empty.")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .listRowBackground(Color.clear)
+                }
+            }
+
+            Section {
+                TextField("Placeholder (optional)", text: $placeholder)
+                    .foregroundStyle(.white)
+                    .listRowBackground(Color.white.opacity(0.12))
+                    .accessibilityIdentifier("catalog-submit-placeholder")
+            } header: {
+                sectionHeader("PLACEHOLDER")
             }
 
             Section {
@@ -150,6 +238,15 @@ struct CatalogSubmitView: View {
             .filter { !$0.isEmpty }
     }
 
+    /// The shared exposure table (`NumberInputStyle.exposedConfigFields`) —
+    /// identical to the question editor's.
+    private var configFields: (min: Bool, max: Bool, step: Bool) {
+        inputStyle.exposedConfigFields
+    }
+
+    /// Style/bounds/default gated to number questions, parsed with the
+    /// editor's discipline: finite Doubles only, step > 0, an inverted
+    /// min/max pair sends neither, `.textField` sends no style at all.
     private func submit() {
         isSubmitting = true
         errorMessage = nil
@@ -157,6 +254,18 @@ struct CatalogSubmitView: View {
         let typeRaw = type.rawValue
         let choices = type == .multipleChoice ? choices : []
         let credit = creditName
+        let isNumber = type == .number
+        let styleRaw = (isNumber && inputStyle != .textField) ? inputStyle.rawValue : nil
+        var minValue = (isNumber && configFields.min) ? NumberInputStyle.parseConfigText(inputMin) : nil
+        var maxValue = (isNumber && configFields.max) ? NumberInputStyle.parseConfigText(inputMax) : nil
+        let stepValue = (isNumber && configFields.step)
+            ? NumberInputStyle.parseConfigText(inputStep).flatMap { $0 > 0 ? $0 : nil } : nil
+        if let low = minValue, let high = maxValue, low >= high {
+            minValue = nil
+            maxValue = nil
+        }
+        let defaultValue = isNumber ? defaultAnswer : ""
+        let placeholderValue = placeholder
         Task {
             defer { isSubmitting = false }
             if case .unavailable(let reason) = await store.accountStatus() {
@@ -165,7 +274,10 @@ struct CatalogSubmitView: View {
             }
             do {
                 try await store.submit(
-                    prompt: prompt, typeRaw: typeRaw, choices: choices, creditName: credit
+                    prompt: prompt, typeRaw: typeRaw, choices: choices, creditName: credit,
+                    inputStyle: styleRaw, defaultAnswer: defaultValue,
+                    placeholder: placeholderValue,
+                    inputMin: minValue, inputMax: maxValue, inputStep: stepValue
                 )
                 submitted = true
             } catch {

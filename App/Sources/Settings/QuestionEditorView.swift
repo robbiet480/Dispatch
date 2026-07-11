@@ -317,22 +317,22 @@ struct QuestionEditorView: View {
                 store: catalogStore,
                 prompt: prompt,
                 type: type,
-                choices: type == .multipleChoice ? choices : []
+                choices: type == .multipleChoice ? choices : [],
+                inputStyle: type == .number ? inputStyle : .textField,
+                inputMin: type == .number ? inputMin : "",
+                inputMax: type == .number ? inputMax : "",
+                inputStep: type == .number ? inputStep : "",
+                defaultAnswer: type == .number ? defaultAnswer : "",
+                placeholder: placeholder
             )
             .environment(themeStore)
         }
     }
 
-    /// Which config fields the chosen input style exposes (spec §Styles):
-    /// slider/dial/stepper take min/max/step, tapCounter an optional max,
-    /// scale its min/max point range, textField nothing.
+    /// Which config fields the chosen input style exposes — the shared
+    /// exposure table (`NumberInputStyle.exposedConfigFields`).
     private var configFields: (min: Bool, max: Bool, step: Bool) {
-        switch inputStyle {
-        case .textField: (min: false, max: false, step: false)
-        case .slider, .stepper, .dial: (min: true, max: true, step: true)
-        case .tapCounter: (min: false, max: true, step: false)
-        case .scale: (min: true, max: true, step: false)
-        }
+        inputStyle.exposedConfigFields
     }
 
     private var choicesSummary: String {
@@ -482,12 +482,10 @@ struct QuestionEditorView: View {
         target.inputStep = stepValue
     }
 
-    /// Parses a config text field to a FINITE Double, or nil (same rule as
-    /// the default answer — junk text or "inf"/"nan" must not persist).
+    /// Parses a config text field to a FINITE Double, or nil — the shared
+    /// rule (`NumberInputStyle.parseConfigText`).
     private func parseConfig(_ text: String) -> Double? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let value = Double(trimmed), value.isFinite else { return nil }
-        return value
+        NumberInputStyle.parseConfigText(text)
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -508,6 +506,28 @@ extension NumberInputStyle {
         case .tapCounter: "Tap Counter"
         case .scale: "Rating Scale"
         }
+    }
+
+    /// Which config fields the style exposes (spec §Styles): slider/dial/
+    /// stepper take min/max/step, tapCounter an optional max, scale its
+    /// min/max point range, textField nothing. Shared by the question editor
+    /// and the catalog submit form (plan 41) so the exposure table has one
+    /// definition.
+    var exposedConfigFields: (min: Bool, max: Bool, step: Bool) {
+        switch self {
+        case .textField: (min: false, max: false, step: false)
+        case .slider, .stepper, .dial: (min: true, max: true, step: true)
+        case .tapCounter: (min: false, max: true, step: false)
+        case .scale: (min: true, max: true, step: false)
+        }
+    }
+
+    /// Parses a config text field to a FINITE Double, or nil (same rule as
+    /// the default answer — junk text or "inf"/"nan" must not persist).
+    static func parseConfigText(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let value = Double(trimmed), value.isFinite else { return nil }
+        return value
     }
 }
 
