@@ -120,6 +120,12 @@ struct ReportDetailView: View {
             let label = AudioLevel.label(forDisplay: display)
             append("waveform", "Sound", String(format: "%.1f dB · %@", display, label))
         }
+        // Windowed change-since-last-report heart rate (plan 43): the
+        // formatter returns nil for reports without window readings (first
+        // report ever, pre-plan-43 reports, sensor off) — no row, no zeros.
+        if let heartWindow = HeartRateWindowFormatter.detailLine(from: report.health) {
+            append("heart.fill", "Heart rate", heartWindow)
+        }
         if let steps = healthValue("steps") {
             append("figure.walk", "Steps", String(format: "%.0f", steps))
         }
