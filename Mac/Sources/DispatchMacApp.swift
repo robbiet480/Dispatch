@@ -15,6 +15,7 @@ struct DispatchMacApp: App {
     let themeStore: ThemeStore
     let visualizationFilterStore: VisualizationFilterStore
     let remoteChangeObserver: RemoteChangeObserver
+    let exportController: MacExportController
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
 
@@ -54,6 +55,8 @@ struct DispatchMacApp: App {
             onRemoteChangesApplied: { _ in }
         )
 
+        exportController = MacExportController(container: container)
+
         // Deterministic UUIDv5 defaults (kit-side): a fresh Mac store before
         // the first CloudKit import seeds the SAME question IDs every device
         // seeds, so sync merges rather than duplicates.
@@ -72,8 +75,38 @@ struct DispatchMacApp: App {
                 .environment(themeStore)
                 .environment(visualizationFilterStore)
                 .environment(remoteChangeObserver)
+                .environment(exportController)
                 .environment(\.appDefaults, appDefaults)
                 .frame(minWidth: 900, minHeight: 560)
+        }
+        .modelContainer(container)
+        // File → Import…/Export (plan 36 DECISION 6). Everything routes
+        // through MacExportController's user-driven panels; results surface
+        // in MacRootView's alert. ⌘F (search) lives in the sidebar; ⌘,
+        // (Settings) is system-provided by the Settings scene below.
+        .commands {
+            CommandGroup(after: .newItem) {
+                Divider()
+                Button("Import Reporter/Dispatch JSON…") {
+                    exportController.importJSON()
+                }
+                .keyboardShortcut("i", modifiers: .command)
+                Menu("Export") {
+                    Button("Day One JSON…") { exportController.exportDayOne() }
+                    Button("Markdown Folder…") { exportController.exportMarkdown() }
+                    Divider()
+                    Button("Dispatch JSON…") { exportController.exportDispatchJSON() }
+                    Button("CSV…") { exportController.exportCSV() }
+                }
+            }
+        }
+
+        Settings {
+            MacSettingsView()
+                .environment(themeStore)
+                .environment(remoteChangeObserver)
+                .environment(exportController)
+                .environment(\.appDefaults, appDefaults)
         }
         .modelContainer(container)
     }
