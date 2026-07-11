@@ -103,8 +103,8 @@ scheduler replan/budget integration; app build intentionally red until the
 adjacent editor commit, the plan-26 convention), 0a30be5 (editor match
 rules, editor-contextual full-access flow, hints, purpose string), + the
 task-4 commit (UI test, this note). Suites at finish: **555 kit tests**
-green (546 before this plan — +9: 10 new CalendarEventPlanner tests, 5 new/
-extended PromptGroup/V2 tests, net of shared-file counting), app
+green (540 before this plan — +15: 10 new CalendarEventPlanner tests, 5
+new PromptGroup/V2 tests), app
 build-for-testing green, new UI test
 `testCreateCalendarEventGroupShowsScheduleLabelWithoutAccessHint` passing
 (full UI suite reserved for the merge gate as planned). NO new
