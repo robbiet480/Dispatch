@@ -161,7 +161,12 @@ final class CatalogUITests: XCTestCase {
         let defaultField = app.textFields["catalog-submit-default-answer"]
         defaultField.tap()
         defaultField.typeText("3")
+        // The number-question sections push PLACEHOLDER down; with the keyboard
+        // up it can sit below the fold (notably on the iPad sheet), where the
+        // List hasn't realized its row yet — scroll it into view first.
         let placeholderField = app.textFields["catalog-submit-placeholder"]
+        var placeholderScrolls = 6
+        while !placeholderField.exists, placeholderScrolls > 0 { app.swipeUp(); placeholderScrolls -= 1 }
         placeholderField.tap()
         placeholderField.typeText("1 to 5")
 

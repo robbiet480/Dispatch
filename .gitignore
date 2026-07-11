@@ -5,6 +5,7 @@
 # Xcode
 build/
 DerivedData/
+*.xcresult/
 *.xcuserstate
 xcuserdata/
 *.moved-aside
