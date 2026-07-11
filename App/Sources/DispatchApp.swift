@@ -77,6 +77,16 @@ struct DispatchApp: App {
         }
 
         themeStore = ThemeStore(defaults: appDefaults)
+        // Screenshot rig: `--theme <name>` pins the launch theme so each App
+        // Store shot can use a different palette color (the original Reporter
+        // listing look). Test-environment-gated like every launch argument —
+        // production launches ignore it entirely.
+        if isTestEnvironment,
+           let flagIndex = arguments.firstIndex(of: "--theme"),
+           arguments.indices.contains(flagIndex + 1),
+           let forced = Theme(rawValue: arguments[flagIndex + 1]) {
+            themeStore.theme = forced
+        }
         awakeStore = AwakeStore(defaults: appDefaults)
         notificationPrefs = NotificationPrefs(defaults: appDefaults)
         // Plan 40: migrate the single digestEnabled toggle to the schedules
