@@ -1,4 +1,4 @@
-# Dispatch Plan 43: Speed, course, and heading sensors
+# Dispatch Plan 44: Speed, course, and heading sensors
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -58,7 +58,7 @@
 
 - [x] Failing tests: negative speed/course degrade to nil, zero/positive pass through unchanged; mph conversion factor pinned; compass point for 0/90/180/270/348.75 degrees (wraparound) resolves N/E/S/W/N.
 - [x] Implement (pure, no imports beyond Foundation). `swift test` green.
-- [x] Commit `feat(kit): MotionFormatting — speed/course validity + mph/compass conversions (plan 43, #61)`.
+- [x] Commit `feat(kit): MotionFormatting — speed/course validity + mph/compass conversions (plan 44, #61)`.
 
 ### Task 2: Kit — `SensorKind`, `SensorPayload`, `Report`, `ReportBuilder` (TDD)
 
@@ -73,7 +73,7 @@
 
 - [x] Failing test: `ReportBuilder.save` with `.speed`/`.course`/`.heading` captured outcomes produces a `Report` with matching `speedMPS`/`courseDegrees`/`headingDegrees`; failing test for `SensorFailureHint.hint`/`disabledHint` on the new kinds (generic-fallback bucket, same shape as altitude/battery/connection/media).
 - [x] Implement. `swift test` green.
-- [x] Commit `feat(kit): speed/course/heading SensorKinds + Report fields + failure hints (plan 43, #61)`.
+- [x] Commit `feat(kit): speed/course/heading SensorKinds + Report fields + failure hints (plan 44, #61)`.
 
 ### Task 3: Kit — capture providers (TDD via mocks + `CaptureCoordinator`)
 
@@ -84,7 +84,7 @@
 - [x] Failing test: a stub provider yielding `.speed(-1)`/`.course(-1)` — verify the *kit-level* MotionFormatting-driven unavailable path a real provider would take (assert `MotionFormatting.validSpeed(-1) == nil` drives `.unavailable`, exercised via a small in-kit provider wrapper if needed) — keep this scoped to what's testable without CoreLocation.
 - [x] Implement `SpeedFromLocationProvider`/`CourseFromLocationProvider` (await `LocationFixStore`, degrade via `MotionFormatting`) and `HeadingProvider` (own `CLLocationManager`, `headingAvailable()` gate, single-sample delegate capture, `stopUpdatingHeading()` after resolving).
 - [x] `swift test` green (kit-level assertions only; CoreLocation providers verified by App build in Task 4/6).
-- [x] Commit `feat(kit): speed/course/heading capture providers (plan 43, #61)`.
+- [x] Commit `feat(kit): speed/course/heading capture providers (plan 44, #61)`.
 
 ### Task 4: App — provider wiring, settings, permissions, checklist, mocks
 
@@ -101,7 +101,7 @@
 - [x] `CaptureChecklistView.swift`: rows tuple entries + icon (`speedometer`, `location.north.line.fill`, `location.north.circle.fill` or similar) + `captured(_:label:)` cases formatting mph/degrees via `MotionFormatting`.
 - [x] `ReportDetailView.swift`: sensor rows reading `report.speedMPS`/`courseDegrees`/`headingDegrees`, mirroring the altitude row's `append(...)` call shape.
 - [x] Build: `xcodegen generate` (if needed) + `xcodebuild build` for the App scheme (no simulator launch) — confirms the exhaustive switches compile clean.
-- [x] Commit `feat(app): wire speed/course/heading sensors into settings, checklist, report detail (plan 43, #61)`.
+- [x] Commit `feat(app): wire speed/course/heading sensors into settings, checklist, report detail (plan 44, #61)`.
 
 ### Task 5: App — Mac report detail + Watch parity
 
@@ -113,7 +113,7 @@
 - [x] `MacReportDetailView.swift`: add Speed/Course/Heading rows (Mac target is a phone-report viewer — heading may appear read-only from synced iPhone reports even though the Mac itself never captures it).
 - [x] `WatchProviders.swift`: add `SpeedFromLocationProvider`/`CourseFromLocationProvider` to `watchCapableKinds` and the live provider list (after `AltitudeFromLocationProvider`); add mocks; extend `watchDisplayName`. Heading is deliberately absent (phone-only, per design decision).
 - [x] `swift build`/relevant target build green.
-- [x] Commit `feat(watch): speed/course sensors on watch capture (heading stays phone-only) (plan 43, #61)`.
+- [x] Commit `feat(watch): speed/course sensors on watch capture (heading stays phone-only) (plan 44, #61)`.
 
 ### Task 6: Kit — export parity (CSV, Markdown, DayOne, V2)
 
@@ -128,7 +128,7 @@
 
 - [x] Failing tests: CSV header includes the new columns in the fixed position after `altitudeMeters`; a report with `speedMPS`/`courseDegrees`/`headingDegrees` set round-trips through the row; Markdown front matter emits `speed_mps`/`course_degrees`/`heading_degrees` when present.
 - [x] Implement across all four exporters + V2 import. `swift test` green.
-- [x] Commit `feat(kit): export parity for speed/course/heading across CSV/Markdown/DayOne/V2 (plan 43, #61)`.
+- [x] Commit `feat(kit): export parity for speed/course/heading across CSV/Markdown/DayOne/V2 (plan 44, #61)`.
 
 ### Task 7: Final verification + PR
 
