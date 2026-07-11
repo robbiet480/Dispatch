@@ -467,14 +467,14 @@ struct HealthMetricProvider: SensorProvider {
             // boundary samples, and vice versa.
             if let extremes = try? await reader.minMax(.heartRate, unit: bpm,
                                                        from: captureWindow.start,
-                                                       to: captureWindow.end) ?? nil {
+                                                       to: captureWindow.end) {
                 readings.append(windowReading(HeartRateWindowFormatter.minType, extremes.min))
                 readings.append(windowReading(HeartRateWindowFormatter.maxType, extremes.max))
             }
             if let first = try? await reader.boundarySample(.heartRate, unit: bpm,
                                                             from: captureWindow.start,
                                                             to: captureWindow.end,
-                                                            newest: false) ?? nil {
+                                                            newest: false) {
                 readings.append(HealthReading(type: HeartRateWindowFormatter.startType,
                                               value: first.value, unit: "bpm",
                                               startDate: captureWindow.start, endDate: first.date))
@@ -482,7 +482,7 @@ struct HealthMetricProvider: SensorProvider {
             if let last = try? await reader.boundarySample(.heartRate, unit: bpm,
                                                            from: captureWindow.start,
                                                            to: captureWindow.end,
-                                                           newest: true) ?? nil {
+                                                           newest: true) {
                 readings.append(HealthReading(type: HeartRateWindowFormatter.endType,
                                               value: last.value, unit: "bpm",
                                               startDate: captureWindow.start, endDate: last.date))
