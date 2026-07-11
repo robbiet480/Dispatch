@@ -144,6 +144,19 @@ public enum BackupRotation {
         return backups.dropFirst(keep).map(\.name)
     }
 
+    /// Settings-footer line describing how many rotated backups exist.
+    /// Nil when there are none: "0 backups kept (newest 14)." rendered
+    /// alongside "No backups yet." read contradictory (visual review fix) —
+    /// the empty state says nothing about retention. Populated phrasing is
+    /// unchanged from the original caption.
+    public static func retentionCaption(count: Int, keep: Int = defaultKeepCount) -> String? {
+        switch count {
+        case ..<1: nil
+        case 1: "1 backup kept."
+        default: "\(count) backups kept (newest \(keep))."
+        }
+    }
+
     /// `yyyy-MM-dd-HHmm` — fixed gregorian/POSIX so device locale settings
     /// (12/24h, non-gregorian calendars) can't change the wire format.
     private static func stampFormatter(timeZone: TimeZone) -> DateFormatter {

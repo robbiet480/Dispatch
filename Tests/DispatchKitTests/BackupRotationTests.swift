@@ -200,3 +200,19 @@ private let slug = "iPhone17-1-ab12cd34"
         storeCreatedAt: now.addingTimeInterval(-120), syncEnabled: true,
         hasSyncedBefore: false, now: now, grace: 60))
 }
+
+// MARK: - Retention caption (review fix)
+
+@Test func retentionCaptionIsNilWithZeroBackups() {
+    // "No backups yet. 0 backups kept (newest 14)." was contradictory —
+    // the empty state must say nothing about retention.
+    #expect(BackupRotation.retentionCaption(count: 0) == nil)
+    #expect(BackupRotation.retentionCaption(count: -1) == nil)
+}
+
+@Test func retentionCaptionKeepsPopulatedPhrasing() {
+    #expect(BackupRotation.retentionCaption(count: 1) == "1 backup kept.")
+    #expect(BackupRotation.retentionCaption(count: 3) == "3 backups kept (newest 14).")
+    #expect(BackupRotation.retentionCaption(count: 14) == "14 backups kept (newest 14).")
+    #expect(BackupRotation.retentionCaption(count: 3, keep: 5) == "3 backups kept (newest 5).")
+}

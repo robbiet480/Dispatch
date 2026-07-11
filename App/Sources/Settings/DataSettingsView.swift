@@ -219,8 +219,11 @@ struct DataSettingsView: View {
         } else {
             lines.append("No backups yet.")
         }
-        let count = backupManager.backupCount
-        lines.append(count == 1 ? "1 backup kept." : "\(count) backups kept (newest 14).")
+        // Nil with zero backups — "No backups yet." already covers it, and
+        // "0 backups kept (newest 14)." beside it read contradictory.
+        if let retention = BackupRotation.retentionCaption(count: backupManager.backupCount) {
+            lines.append(retention)
+        }
         // Destination status (plan 25): unavailable/failed states first, then
         // the "Open in Files" hint matching where the files actually land.
         switch backupManager.iCloudAvailability {
