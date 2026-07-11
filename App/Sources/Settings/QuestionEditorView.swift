@@ -496,47 +496,6 @@ struct QuestionEditorView: View {
     }
 }
 
-extension NumberInputStyle {
-    var displayName: String {
-        switch self {
-        case .textField: "Text Field"
-        case .slider: "Slider"
-        case .stepper: "Stepper"
-        case .dial: "Dial"
-        case .tapCounter: "Tap Counter"
-        case .scale: "Rating Scale"
-        }
-    }
-
-    /// Which config fields the style exposes (spec §Styles): slider/dial/
-    /// stepper take min/max/step, tapCounter an optional max, scale its
-    /// min/max point range, textField nothing. Shared by the question editor
-    /// and the catalog submit form (plan 41) so the exposure table has one
-    /// definition.
-    var exposedConfigFields: (min: Bool, max: Bool, step: Bool) {
-        switch self {
-        case .textField: (min: false, max: false, step: false)
-        case .slider, .stepper, .dial: (min: true, max: true, step: true)
-        case .tapCounter: (min: false, max: true, step: false)
-        case .scale: (min: true, max: true, step: false)
-        }
-    }
-
-    /// Parses a config text field to a FINITE Double, or nil (same rule as
-    /// the default answer — junk text or "inf"/"nan" must not persist).
-    static func parseConfigText(_ text: String) -> Double? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let value = Double(trimmed), value.isFinite else { return nil }
-        return value
-    }
-}
-
-extension ReportKind {
-    var displayName: String {
-        switch self {
-        case .regular: "Regular"
-        case .wake: "Wake"
-        case .sleep: "Sleep"
-        }
-    }
-}
+// NumberInputStyle.displayName / .exposedConfigFields / .parseConfigText and
+// ReportKind.displayName moved to DispatchKit (QuestionDisplay.swift, plan 47)
+// so the iOS and macOS editors share one definition.

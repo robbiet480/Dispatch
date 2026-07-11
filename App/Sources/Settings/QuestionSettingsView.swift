@@ -118,17 +118,5 @@ struct QuestionRowView: View {
     }
 }
 
-extension QuestionType {
-    var displayName: String {
-        switch self {
-        case .tokens: "Tokens"
-        case .multipleChoice: "Multiple Choice"
-        case .yesNo: "Yes/No"
-        case .location: "Location"
-        case .people: "People"
-        case .number: "Number"
-        case .note: "Note"
-        case .time: "Time"
-        }
-    }
-}
+// QuestionType.displayName moved to DispatchKit (QuestionDisplay.swift,
+// plan 47) so the iOS and macOS surfaces share one definition.
