@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Plan 36 DECISION 2: sandbox is mandatory for Mac App Store;
+         network.client is required for CloudKit to reach the network at all
+         inside the sandbox. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- User-driven import/export: fileImporter/fileExporter and the
+         NSOpenPanel folder pick for Markdown export are powerbox-mediated,
+         but the app still needs the user-selected read-write entitlement to
+         use them at all. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <!-- Same CloudKit container as iOS/watchOS — CloudKit is the sole data
+         channel between platforms (DECISION 3: no App Group store on Mac). -->
+    <key>com.apple.developer.icloud-services</key>
+    <array>
+        <string>CloudKit</string>
+    </array>
+    <key>com.apple.developer.icloud-container-identifiers</key>
+    <array>
+        <string>iCloud.io.robbie.Dispatch</string>
+    </array>
+    <!-- macOS push entitlement key is PREFIXED with com.apple.developer.
+         (unlike iOS's bare aps-environment). SwiftData's CloudKit mirroring
+         registers for remote notifications to learn about server changes;
+         without this, macOS degrades to polling-ish staleness. -->
+    <key>com.apple.developer.aps-environment</key>
+    <string>development</string>
+</dict>
+</plist>
