@@ -412,7 +412,7 @@ struct PromptGroupEditorView: View {
                 // A group with no questions would fire prompts that open an
                 // empty survey — require at least one question to save.
                 Button("Save") { save() }
-                    .disabled(questionIDs.isEmpty)
+                    .disabled(questionIDs.isEmpty || scheduleValidationMessage != nil)
                     .accessibilityIdentifier("group-save")
             }
         }
@@ -574,6 +574,7 @@ struct PromptGroupEditorView: View {
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("group-place-radius")
                 monitorControls
+                monitorValidationHint
                 if !monitorObserver.hasAlwaysAuthorization {
                     monitorAuthorizationHint
                 }
@@ -601,6 +602,7 @@ struct PromptGroupEditorView: View {
                     .foregroundStyle(.white).tint(.white)
                     .accessibilityIdentifier("group-beacon-name")
                 monitorControls
+                monitorValidationHint
                 if !monitorObserver.hasAlwaysAuthorization {
                     monitorAuthorizationHint
                 }
@@ -624,6 +626,41 @@ struct PromptGroupEditorView: View {
                !monitorObserver.hasAlwaysAuthorization {
                 Task { await monitorObserver.requestAlwaysAuthorization() }
             }
+        }
+    }
+
+    /// Validation for the place/beacon coordinate & identity fields — gates
+    /// Save (and drives the inline hint) so a group can never be saved with a
+    /// (0,0) coordinate or an unparseable beacon that would silently monitor
+    /// the wrong thing / never fire. nil ⇒ valid (or a non-monitor schedule).
+    private var scheduleValidationMessage: String? {
+        switch scheduleKind {
+        case .placeTrigger:
+            guard let lat = Double(placeLatitude), (-90.0...90.0).contains(lat),
+                  let lon = Double(placeLongitude), (-180.0...180.0).contains(lon)
+            else { return "Enter a valid latitude (−90…90) and longitude (−180…180)." }
+            return nil
+        case .beaconTrigger:
+            guard UUID(uuidString: beaconUUID.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+            else { return "Enter a valid beacon UUID (e.g. E2C56DB5-DFFB-48D2-B060-D0F5A71096E0)." }
+            for value in [beaconMajor, beaconMinor] where !value.trimmingCharacters(in: .whitespaces).isEmpty {
+                guard let number = Int(value), (0...65_535).contains(number)
+                else { return "Major and minor must be whole numbers from 0 to 65535." }
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    /// Inline validation message for the current monitor schedule.
+    @ViewBuilder
+    private var monitorValidationHint: some View {
+        if let message = scheduleValidationMessage {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.yellow)
+                .accessibilityIdentifier("group-monitor-invalid")
         }
     }
 

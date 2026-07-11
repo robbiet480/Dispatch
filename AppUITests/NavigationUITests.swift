@@ -272,10 +272,16 @@ final class NavigationUITests: XCTestCase {
         placeOption.tap()
 
         // Full-access (Always) test posture: no needs-Always hint in editor.
-        let placeName = app.textFields["group-place-name"]
-        XCTAssertTrue(placeName.waitForExistence(timeout: 10))
+        // A valid coordinate is required for Save (guards the (0,0) fallback).
+        let latitude = app.textFields["group-place-latitude"]
+        XCTAssertTrue(latitude.waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["group-monitor-needs-always"].exists)
         XCTAssertFalse(app.buttons["group-monitor-needs-always"].exists)
+        latitude.tap()
+        latitude.typeText("37.3349")
+        app.textFields["group-place-longitude"].tap()
+        app.textFields["group-place-longitude"].typeText("-122.009")
+        let placeName = app.textFields["group-place-name"]
         placeName.tap()
         placeName.typeText("HQ")
 
