@@ -72,6 +72,9 @@ public enum V2Importer {
             report.wasInBackground = dto.wasInBackground
             report.battery = dto.battery
             report.altitudeMeters = dto.altitudeMeters
+            report.speedMPS = dto.speedMPS
+            report.courseDegrees = dto.courseDegrees
+            report.headingDegrees = dto.headingDegrees
             report.connection = dto.connection
             report.audio = dto.audio
             report.location = dto.location

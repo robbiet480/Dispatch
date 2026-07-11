@@ -106,6 +106,9 @@ public enum V2Exporter {
         dto.wasInBackground = r.wasInBackground
         dto.battery = r.battery
         dto.altitudeMeters = r.altitudeMeters
+        dto.speedMPS = r.speedMPS
+        dto.courseDegrees = r.courseDegrees
+        dto.headingDegrees = r.headingDegrees
         dto.connection = r.connection
         dto.audio = r.audio
         dto.location = r.location
