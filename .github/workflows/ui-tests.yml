@@ -12,7 +12,7 @@ on:
 
 # One run per PR head; a new push cancels the stale run.
 concurrency:
-  group: ui-tests-${{ github.event.pull_request.number || github.ref }}
+  group: ui-tests-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:

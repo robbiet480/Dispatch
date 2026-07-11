@@ -11,7 +11,7 @@ on:
     - cron: "0 8 * * 1" # weekly full scan
 
 concurrency:
-  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  group: codeql-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
