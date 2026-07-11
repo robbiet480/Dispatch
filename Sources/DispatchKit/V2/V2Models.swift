@@ -56,12 +56,26 @@ public struct V2PromptGroup: Codable {
     public var calendarMatchKind: String?
     public var calendarIdentifiers: [String]?
     public var calendarTitleFilter: String?
+    /// CLMonitor place/beacon trigger (plan 43, placeTrigger/beaconTrigger
+    /// schedule kinds). All omitted when nil; import tolerates absence. The
+    /// region/beacon are nested Codable structs; exactly one is present for a
+    /// monitor group, both absent otherwise. Unknown direction raws import
+    /// intact and resolve to a never-firing schedule on this build.
+    public var monitorDirection: String?
+    public var monitorDelayMinutes: Int?
+    public var monitorCancelsOnContradiction: Bool?
+    public var placeRegion: MonitorPlaceRegion?
+    public var beaconIdentity: MonitorBeaconIdentity?
 
     public init(uniqueIdentifier: String, name: String, questionIDs: [String]?,
                 scheduleKind: String, scheduleHours: Int? = nil, scheduleCount: Int? = nil,
                 scheduleDistribution: String? = nil, scheduledTimes: [String]? = nil,
                 isEnabled: Bool, sortOrder: Int, calendarMatchKind: String? = nil,
-                calendarIdentifiers: [String]? = nil, calendarTitleFilter: String? = nil) {
+                calendarIdentifiers: [String]? = nil, calendarTitleFilter: String? = nil,
+                monitorDirection: String? = nil, monitorDelayMinutes: Int? = nil,
+                monitorCancelsOnContradiction: Bool? = nil,
+                placeRegion: MonitorPlaceRegion? = nil,
+                beaconIdentity: MonitorBeaconIdentity? = nil) {
         self.uniqueIdentifier = uniqueIdentifier
         self.name = name
         self.questionIDs = questionIDs
@@ -75,6 +89,11 @@ public struct V2PromptGroup: Codable {
         self.calendarMatchKind = calendarMatchKind
         self.calendarIdentifiers = calendarIdentifiers
         self.calendarTitleFilter = calendarTitleFilter
+        self.monitorDirection = monitorDirection
+        self.monitorDelayMinutes = monitorDelayMinutes
+        self.monitorCancelsOnContradiction = monitorCancelsOnContradiction
+        self.placeRegion = placeRegion
+        self.beaconIdentity = beaconIdentity
     }
 }
 

@@ -10,6 +10,8 @@ public enum GroupScheduleKind: String, Codable, CaseIterable, Sendable {
     case workoutEnd
     case visitArrival
     case calendarEventEnd
+    case placeTrigger
+    case beaconTrigger
 }
 
 /// A prompt group's resolved schedule. `disabled` is the fallback for an
@@ -24,6 +26,12 @@ public enum GroupSchedule: Equatable, Sendable {
     /// A matching calendar event ends (plan 31) — the first event kind with
     /// an associated value: the matching rules are per-group configuration.
     case calendarEventEnd(CalendarEventMatchRule)
+    /// Arrival at / departure from a picked place (plan 43, #56) via CLMonitor
+    /// `CircularGeographicCondition`, with a configurable delay + cancel.
+    case placeTrigger(PlaceTrigger)
+    /// Enter/leave range of a registered iBeacon (plan 43, #60) via CLMonitor
+    /// `BeaconIdentityCondition`; shares the delay/cancel semantics of #56.
+    case beaconTrigger(BeaconTrigger)
     case disabled
 }
 
@@ -59,6 +67,19 @@ public final class PromptGroup {
     public var calendarIdentifiersJSON: String?
     /// The `.titleContains` filter string.
     public var calendarTitleFilter: String?
+    /// CLMonitor place/beacon trigger storage (plan 43), all additive
+    /// optionals (CloudKit-safe). `monitorDirectionRaw` is
+    /// "arrival"/"departure"; `monitorDelayMinutes` a `MonitorDelay` preset;
+    /// `monitorCancelsOnContradiction` defaults to true when nil. The
+    /// condition payload is a JSON blob — `placeRegionJSON` for
+    /// `.placeTrigger`, `beaconIdentityJSON` for `.beaconTrigger` (the
+    /// `scheduledTimesJSON` codec pattern). A missing/corrupt payload for the
+    /// resolved kind → `.disabled` (never fires rather than misfires).
+    public var monitorDirectionRaw: String?
+    public var monitorDelayMinutes: Int?
+    public var monitorCancelsOnContradiction: Bool?
+    public var placeRegionJSON: String?
+    public var beaconIdentityJSON: String?
 
     public init() {}
 
@@ -87,6 +108,24 @@ public final class PromptGroup {
                     identifiersJSON: calendarIdentifiersJSON,
                     titleFilter: calendarTitleFilter) else { return .disabled }
                 return .calendarEventEnd(rule)
+            case .placeTrigger:
+                // Missing/corrupt payload (or a direction raw from a newer
+                // build) → .disabled, raws preserved by the setter no-op.
+                guard let trigger = PlaceTrigger(
+                    regionJSON: placeRegionJSON,
+                    directionRaw: monitorDirectionRaw,
+                    delayMinutes: monitorDelayMinutes,
+                    cancelOnContradiction: monitorCancelsOnContradiction)
+                else { return .disabled }
+                return .placeTrigger(trigger)
+            case .beaconTrigger:
+                guard let trigger = BeaconTrigger(
+                    beaconJSON: beaconIdentityJSON,
+                    directionRaw: monitorDirectionRaw,
+                    delayMinutes: monitorDelayMinutes,
+                    cancelOnContradiction: monitorCancelsOnContradiction)
+                else { return .disabled }
+                return .beaconTrigger(trigger)
             case nil:
                 return .disabled
             }
@@ -113,6 +152,20 @@ public final class PromptGroup {
                 calendarMatchKindRaw = rule.kindRaw
                 calendarIdentifiersJSON = rule.identifiersJSON
                 calendarTitleFilter = rule.titleFilter
+            case .placeTrigger(let trigger):
+                scheduleKindRaw = GroupScheduleKind.placeTrigger.rawValue
+                monitorDirectionRaw = trigger.direction.rawValue
+                monitorDelayMinutes = trigger.delayMinutes
+                monitorCancelsOnContradiction = trigger.cancelOnContradiction
+                placeRegionJSON = trigger.regionJSON
+                beaconIdentityJSON = nil
+            case .beaconTrigger(let trigger):
+                scheduleKindRaw = GroupScheduleKind.beaconTrigger.rawValue
+                monitorDirectionRaw = trigger.direction.rawValue
+                monitorDelayMinutes = trigger.delayMinutes
+                monitorCancelsOnContradiction = trigger.cancelOnContradiction
+                beaconIdentityJSON = trigger.beaconJSON
+                placeRegionJSON = nil
             case .disabled:
                 // Not a storable kind: `.disabled` only arises from an
                 // unknown raw value, so writing it back preserves the

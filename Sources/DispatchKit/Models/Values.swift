@@ -13,6 +13,10 @@ public enum ReportTrigger: String, Codable, Sendable, CaseIterable {
     /// Tap-through from a calendar event-end prompt (plan 31) — additive raw
     /// value; older builds decode it via the `.manual` raw-value fallback.
     case calendarEventEnd
+    /// Tap-through from a CLMonitor place/beacon prompt (plan 43, #56/#60) —
+    /// arrival/departure × place/beacon, so charts/insights can slice by
+    /// trigger. Additive raws; older builds fall back to `.manual`.
+    case placeArrival, placeDeparture, beaconArrival, beaconDeparture
 }
 
 /// Raw values 0–2 match the original Reporter export (gist.github.com/dbreunig/9315705).

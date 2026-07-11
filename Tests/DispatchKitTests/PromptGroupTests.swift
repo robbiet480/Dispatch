@@ -418,3 +418,151 @@ import Testing
     #expect(report.promptGroupID == nil)
     #expect(try context.fetch(FetchDescriptor<PromptGroup>()).isEmpty)
 }
+
+// MARK: - Place / beacon trigger (plan 43)
+
+@Test func promptGroupPlaceTriggerRoundTrips() throws {
+    let group = PromptGroup()
+    let region = MonitorPlaceRegion(latitude: 37.33, longitude: -122.03, radius: 150, name: "Office")
+    let trigger = PlaceTrigger(region: region, direction: .arrival,
+                               delayMinutes: 30, cancelOnContradiction: true)
+    group.schedule = .placeTrigger(trigger)
+    #expect(group.schedule == .placeTrigger(trigger))
+    #expect(group.scheduleKindRaw == "placeTrigger")
+    #expect(group.monitorDirectionRaw == "arrival")
+    #expect(group.monitorDelayMinutes == 30)
+    #expect(group.placeRegionJSON != nil)
+    #expect(group.beaconIdentityJSON == nil)
+}
+
+@Test func promptGroupBeaconTriggerRoundTrips() throws {
+    let group = PromptGroup()
+    let beacon = MonitorBeaconIdentity(
+        uuid: "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0", major: 1, minor: 2, name: "Desk")
+    let trigger = BeaconTrigger(beacon: beacon, direction: .departure,
+                                delayMinutes: 10, cancelOnContradiction: false)
+    group.schedule = .beaconTrigger(trigger)
+    #expect(group.schedule == .beaconTrigger(trigger))
+    #expect(group.scheduleKindRaw == "beaconTrigger")
+    #expect(group.monitorDirectionRaw == "departure")
+    #expect(group.monitorDelayMinutes == 10)
+    #expect(group.monitorCancelsOnContradiction == false)
+    #expect(group.beaconIdentityJSON != nil)
+    #expect(group.placeRegionJSON == nil)
+}
+
+/// A placeTrigger group with a corrupt region payload resolves `.disabled`
+/// (never fires) and write-back preserves the raws.
+@Test func promptGroupCorruptPlacePayloadResolvesDisabledAndPreservesRaws() throws {
+    let group = PromptGroup()
+    group.scheduleKindRaw = "placeTrigger"
+    group.monitorDirectionRaw = "arrival"
+    group.placeRegionJSON = "not json"
+    #expect(group.schedule == .disabled)
+    group.schedule = .disabled
+    #expect(group.scheduleKindRaw == "placeTrigger")
+    #expect(group.monitorDirectionRaw == "arrival")
+    #expect(group.placeRegionJSON == "not json")
+}
+
+@Test func placeAndBeaconGroupsRoundTripThroughV2() throws {
+    let containerA = try DispatchStore.inMemoryContainer()
+    let contextA = ModelContext(containerA)
+
+    let placeGroup = PromptGroup()
+    placeGroup.uniqueIdentifier = "pg-place"
+    placeGroup.name = "Office"
+    placeGroup.schedule = .placeTrigger(PlaceTrigger(
+        region: MonitorPlaceRegion(latitude: 37.33, longitude: -122.03, radius: 150, name: "Office"),
+        direction: .arrival, delayMinutes: 30, cancelOnContradiction: true))
+    placeGroup.sortOrder = 0
+    contextA.insert(placeGroup)
+
+    let beaconGroup = PromptGroup()
+    beaconGroup.uniqueIdentifier = "pg-beacon"
+    beaconGroup.name = "Desk"
+    beaconGroup.schedule = .beaconTrigger(BeaconTrigger(
+        beacon: MonitorBeaconIdentity(uuid: "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0", major: 1, minor: 2, name: "Desk"),
+        direction: .departure, delayMinutes: 0, cancelOnContradiction: false))
+    beaconGroup.sortOrder = 1
+    contextA.insert(beaconGroup)
+
+    let report = Report()
+    report.uniqueIdentifier = "r-place"
+    report.date = Date(timeIntervalSince1970: 1_700_000_000)
+    report.trigger = .placeArrival
+    report.promptGroupID = "pg-place"
+    contextA.insert(report)
+    try contextA.save()
+
+    let exportA = try V2Exporter.exportData(from: contextA, stamp: fixedStamp)
+    let json = try #require(String(data: exportA, encoding: .utf8))
+    #expect(json.contains("\"placeTrigger\""))
+    #expect(json.contains("\"beaconTrigger\""))
+    #expect(json.contains("\"placeRegion\""))
+    #expect(json.contains("\"beaconIdentity\""))
+    #expect(json.contains("\"placeArrival\""))
+
+    let containerB = try DispatchStore.inMemoryContainer()
+    let contextB = ModelContext(containerB)
+    _ = try V2Importer.importExport(exportA, into: contextB)
+
+    let groups = try contextB.fetch(
+        FetchDescriptor<PromptGroup>(sortBy: [SortDescriptor(\.sortOrder)]))
+    #expect(groups.count == 2)
+    #expect(groups[0].schedule == placeGroup.schedule)
+    #expect(groups[1].schedule == beaconGroup.schedule)
+    let importedReport = try #require(try contextB.fetch(FetchDescriptor<Report>()).first)
+    #expect(importedReport.trigger == .placeArrival)
+
+    // Deterministic re-export is byte-identical.
+    let exportB = try V2Exporter.exportData(from: contextB, stamp: fixedStamp)
+    #expect(exportA == exportB)
+}
+
+/// Monitor keys are absent for non-monitor groups — pre-plan-43 exports stay
+/// byte-identical.
+@Test func monitorKeysOmittedForNonMonitorGroups() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let timerGroup = PromptGroup()
+    timerGroup.uniqueIdentifier = "pg-timer"
+    timerGroup.schedule = .everyNHours(2)
+    context.insert(timerGroup)
+    try context.save()
+
+    let json = try #require(
+        String(data: try V2Exporter.exportData(from: context, stamp: fixedStamp), encoding: .utf8))
+    #expect(!json.contains("\"monitorDirection\""))
+    #expect(!json.contains("\"placeRegion\""))
+    #expect(!json.contains("\"beaconIdentity\""))
+}
+
+@Test func v2ImportAcceptsPlaceTriggerRawJSON() throws {
+    let fixture = Data("""
+    {"schemaVersion": 2, "questions": [], "reports": [], "promptGroups": [{
+        "uniqueIdentifier": "pg-p", "name": "Office",
+        "scheduleKind": "placeTrigger", "monitorDirection": "arrival",
+        "monitorDelayMinutes": 30, "monitorCancelsOnContradiction": true,
+        "placeRegion": {"latitude": 1.0, "longitude": 2.0, "radius": 150.0, "name": "Office"},
+        "isEnabled": true, "sortOrder": 0
+    }, {
+        "uniqueIdentifier": "pg-fut", "name": "Future direction",
+        "scheduleKind": "placeTrigger", "monitorDirection": "orbit",
+        "placeRegion": {"latitude": 1.0, "longitude": 2.0, "radius": 150.0},
+        "isEnabled": true, "sortOrder": 1
+    }]}
+    """.utf8)
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let summary = try V2Importer.importExport(fixture, into: context)
+    #expect(summary.promptGroupsImported == 2)
+    let groups = try context.fetch(
+        FetchDescriptor<PromptGroup>(sortBy: [SortDescriptor(\.sortOrder)]))
+    #expect(groups[0].schedule == .placeTrigger(PlaceTrigger(
+        region: MonitorPlaceRegion(latitude: 1, longitude: 2, radius: 150, name: "Office"),
+        direction: .arrival, delayMinutes: 30, cancelOnContradiction: true)))
+    // Unknown direction raw → .disabled, raw preserved.
+    #expect(groups[1].schedule == .disabled)
+    #expect(groups[1].monitorDirectionRaw == "orbit")
+}

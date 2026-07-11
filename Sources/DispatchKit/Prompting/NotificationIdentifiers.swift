@@ -21,6 +21,16 @@ public enum NotificationIdentifiers {
     /// Group prompts: `gprompt-<groupID>-<yyyyMMdd-HHmm>` (plan 12). Their
     /// nags reuse `nag-` with the `<groupID>-<stamp>` parent stamp embedded.
     public static let groupPromptPrefix = "gprompt-"
+    /// Monitor-triggered group prompts (plan 43): `mprompt-<groupID>-<stamp>`.
+    /// A DISTINCT prefix from `gprompt-` on purpose — a place/beacon prompt is
+    /// scheduled reactively by MonitorObserver (event + delay) and must
+    /// SURVIVE the replan's remove-before-add batch, which sweeps
+    /// prompt-/gprompt-/nag-/digest-/webhook-failed- but NOT this. The
+    /// observer owns its lifecycle: schedule on the fire event, remove by
+    /// `mprompt-<groupID>-` prefix on the contradicting event, sweep orphans
+    /// on refresh. `promptSource` still classifies it as a group prompt for
+    /// the "next notification" hero (same stamp shape as gprompt-).
+    public static let monitorPromptPrefix = "mprompt-"
     /// Digest reminders (plan 14, reworked plan 40): one request per schedule,
     /// `digest-<uuid>`; removals join the prompt-/gprompt-/nag- batch. Excluded
     /// from `promptSource` by fall-through — pinned by test. Stale pre-plan-40
@@ -46,6 +56,13 @@ public enum NotificationIdentifiers {
     /// userInfo marker ("1") on prompts scheduled at a calendar event's end
     /// (plan 31) — tap-through reports get the `.calendarEventEnd` trigger.
     public static let calendarEventEndKey = "triggeredByCalendarEventEnd"
+    /// userInfo markers ("1") on CLMonitor place/beacon prompts (plan 43) —
+    /// exactly one is set per prompt so the delegate maps the tap-through
+    /// report to the matching `ReportTrigger` (place/beacon × arrival/depart).
+    public static let placeArrivalKey = "triggeredByPlaceArrival"
+    public static let placeDepartureKey = "triggeredByPlaceDeparture"
+    public static let beaconArrivalKey = "triggeredByBeaconArrival"
+    public static let beaconDepartureKey = "triggeredByBeaconDeparture"
 }
 
 /// Where the next upcoming prompt notification comes from, for the settings
@@ -88,12 +105,13 @@ extension NotificationIdentifiers {
             }
             return matchesScheduled ? .scheduledTime : .distribution
         }
-        if identifier.hasPrefix(groupPromptPrefix) {
-            // `gprompt-<groupID>-<yyyyMMdd>-<HHmm>`: the group ID is a UUID
-            // and itself contains dashes, so the stamp's date is always the
-            // LAST two dash-separated segments and the group ID is
-            // everything before them.
-            let stamp = String(identifier.dropFirst(groupPromptPrefix.count))
+        // `gprompt-`/`mprompt-<groupID>-<yyyyMMdd>-<HHmm>`: the group ID is a
+        // UUID and itself contains dashes, so the stamp's date is always the
+        // LAST two dash-separated segments and the group ID is everything
+        // before them. Monitor prompts (mprompt-) are the same shape.
+        for prefix in [groupPromptPrefix, monitorPromptPrefix]
+        where identifier.hasPrefix(prefix) {
+            let stamp = String(identifier.dropFirst(prefix.count))
             let segments = stamp.split(separator: "-")
             guard segments.count > 2 else { return nil }
             return .promptGroup(groupID: segments.dropLast(2).joined(separator: "-"))
