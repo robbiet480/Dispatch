@@ -1,6 +1,14 @@
 name: UI Tests
 on:
   pull_request:
+    # Docs-only PRs (plan docs, notes) skip the heavy suites. A companion
+    # no-op workflow (ui-tests-noop.yml) reports the SAME job names green on
+    # the inverse paths so branch protection's required checks still resolve.
+    # Keep both workflows' paths lists in sync when editing.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".superpowers/**"
   # Nightly full run on main per the testing-tiers doc (the local merge gate
   # runs the smoke tier; this is the full-suite backstop).
   schedule:
