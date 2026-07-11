@@ -9,10 +9,20 @@ import XCTest
 /// `--demo-data` fixture; scripts/screenshots.sh extracts the PNGs from the
 /// xcresult and names them `<device>-<nn>-<name>.png`.
 ///
+/// Screenshots refresh: every shot launches the app fresh with a DIFFERENT
+/// theme (`--theme <name>`, test-gated in DispatchApp) cycling through the
+/// full palette — the original Reporter App Store listing look. The shot →
+/// theme assignment is a deterministic modulo over `themes`, so re-runs are
+/// pixel-identical.
+///
 /// Not capturable this way (documented limitation): the home/lock-screen
 /// widget gallery and Control Center — XCUITest cannot drive springboard's
 /// widget-add sheet for another app. Those shots, if wanted, are manual.
 final class ScreenshotTests: XCTestCase {
+    /// Matches Theme.allCases order in DispatchKit (tomato is the default,
+    /// so the hero shot keeps the app's stock look).
+    private static let themes = ["tomato", "teal", "gray", "pink", "chartreuse"]
+
     override func setUpWithError() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["SCREENSHOT_MODE"] == "1",
@@ -21,10 +31,15 @@ final class ScreenshotTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Fresh launch for shot number `shotIndex` (1-based): deterministic
+    /// demo fixture + the shot's cycled theme.
     @MainActor
-    private func launchApp() -> XCUIApplication {
+    private func launchApp(shotIndex: Int) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding", "--demo-data"]
+        app.launchArguments = [
+            "--mock-sensors", "--ui-testing", "--skip-onboarding", "--demo-data",
+            "--theme", Self.themes[(shotIndex - 1) % Self.themes.count],
+        ]
         app.launch()
         return app
     }
@@ -39,76 +54,92 @@ final class ScreenshotTests: XCTestCase {
         add(attachment)
     }
 
+    /// Waits for the home screen to be interactive after a fresh launch.
+    @MainActor
+    private func awaitHome(_ app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["report-count"].waitForExistence(timeout: 15))
+    }
+
+    /// Navigates home → Settings root.
+    @MainActor
+    private func openSettings(_ app: XCUIApplication) {
+        XCTAssertTrue(app.buttons["settings-button"].waitForExistence(timeout: 15))
+        app.buttons["settings-button"].tap()
+    }
+
     /// One deterministic pass over the money shots. A single ordered method
-    /// (not one test per screen) so the run boots the app once per flow and
-    /// the numbering is stable.
+    /// (not one test per screen) so the numbering is stable; each shot boots
+    /// the app fresh because the theme is a launch argument.
     @MainActor
     func testCaptureAppStoreScreenshots() throws {
-        var app = launchApp()
-
         // 01 — home visualization (proportion bands over the demo data).
-        XCTAssertTrue(app.staticTexts["report-count"].waitForExistence(timeout: 15))
+        var app = launchApp(shotIndex: 1)
+        awaitHome(app)
         // Let the paged viz settle (charts animate in).
         Thread.sleep(forTimeInterval: 2)
         snap("01-home-viz")
+        app.terminate()
 
         // 02 — report detail.
+        app = launchApp(shotIndex: 2)
+        awaitHome(app)
         app.buttons["reports-list-button"].tap()
         let firstRow = app.descendants(matching: .any).matching(identifier: "report-row").firstMatch
         XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
         firstRow.tap()
         Thread.sleep(forTimeInterval: 1)
         snap("02-report-detail")
-
-        // 03 — survey: capture checklist + first question. Relaunch for a
-        // clean navigation stack (cheaper than unwinding detail → list → home).
         app.terminate()
-        app = launchApp()
+
+        // 03 — survey: checklist + first question.
+        app = launchApp(shotIndex: 3)
         XCTAssertTrue(app.buttons["report-button"].waitForExistence(timeout: 15))
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
                       || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
         Thread.sleep(forTimeInterval: 1.5)
         snap("03-survey-checklist")
+        app.terminate()
 
-        // Cancel out (discard) so Settings is reachable.
-        app.buttons["survey-cancel"].tap()
-        let discardAlert = app.alerts["Are you sure you want to discard this report?"]
-        XCTAssertTrue(discardAlert.waitForExistence(timeout: 10))
-        discardAlert.buttons["Discard"].tap()
-
-        // 04/05 — prompt groups list + editor.
-        XCTAssertTrue(app.buttons["settings-button"].waitForExistence(timeout: 10))
-        app.buttons["settings-button"].tap()
+        // 04 — prompt groups list.
+        app = launchApp(shotIndex: 4)
+        openSettings(app)
         let groupsLink = app.buttons["prompt-groups-link"]
         XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
         groupsLink.tap()
         // Rows render group names uppercased.
-        let workdayRow = app.staticTexts["WORKDAY CHECK-IN"]
+        var workdayRow = app.staticTexts["WORKDAY CHECK-IN"]
         XCTAssertTrue(workdayRow.waitForExistence(timeout: 10))
         snap("04-prompt-groups")
+        app.terminate()
+
+        // 05 — prompt group editor.
+        app = launchApp(shotIndex: 5)
+        openSettings(app)
+        XCTAssertTrue(app.buttons["prompt-groups-link"].waitForExistence(timeout: 10))
+        app.buttons["prompt-groups-link"].tap()
+        workdayRow = app.staticTexts["WORKDAY CHECK-IN"]
+        XCTAssertTrue(workdayRow.waitForExistence(timeout: 10))
         workdayRow.tap()
         XCTAssertTrue(app.textFields["group-name"].waitForExistence(timeout: 10))
         snap("05-prompt-group-editor")
-        // Editor is a sheet/push with a save button; back out without saving.
-        if app.navigationBars.buttons["Cancel"].exists {
-            app.navigationBars.buttons["Cancel"].tap()
-        } else {
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-        }
-        app.navigationBars.buttons.element(boundBy: 0).tap() // groups → settings
+        app.terminate()
 
         // 06 — weekly digest (template path renders deterministically under
         // --mock-sensors; demo data fills the stats + narrative).
+        app = launchApp(shotIndex: 6)
+        openSettings(app)
         let digestLink = app.buttons["weekly-digest-link"]
         XCTAssertTrue(digestLink.waitForExistence(timeout: 10))
         digestLink.tap()
         XCTAssertTrue(app.staticTexts["digest-narrative"].waitForExistence(timeout: 15))
         Thread.sleep(forTimeInterval: 1)
         snap("06-weekly-digest")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.terminate()
 
         // 07 — insights over the demo data (bonus).
+        app = launchApp(shotIndex: 7)
+        openSettings(app)
         let insightsLink = app.buttons["insights-link"]
         XCTAssertTrue(insightsLink.waitForExistence(timeout: 10))
         insightsLink.tap()
@@ -117,14 +148,17 @@ final class ScreenshotTests: XCTestCase {
                       || app.scrollViews["insights-view"].waitForExistence(timeout: 15))
         Thread.sleep(forTimeInterval: 1)
         snap("07-insights")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.terminate()
 
         // 08 — data settings: export/import/backups/delete-all (bonus).
+        app = launchApp(shotIndex: 8)
+        openSettings(app)
         let dataLink = app.buttons["data-settings-link"]
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
         XCTAssertTrue(app.buttons["backup-now"].waitForExistence(timeout: 10)
                       || app.switches["backup-enabled"].waitForExistence(timeout: 10))
         snap("08-backups")
+        app.terminate()
     }
 }
