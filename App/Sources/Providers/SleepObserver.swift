@@ -183,11 +183,18 @@ final class SleepObserver {
     private func asleepSamples(endingAfter lastSeen: Date) async -> [(startDate: Date, endDate: Date)] {
         await withCheckedContinuation { continuation in
             let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-            // Limit-bounded like the workout fetch: a full night is ~30
-            // stage samples (Task 0 measured 28), so 200 covers several
-            // nights of backlog without an unbounded fetch.
+            // Pre-filter in HealthKit to samples whose endDate is after the
+            // last-seen marker (.strictEndDate ⇒ the sample's END, not just an
+            // overlap, must fall in the window) instead of pulling everything
+            // and filtering in memory. Sort stays DESCENDING so the limit
+            // keeps the NEWEST samples (deriveEvent needs the max endDate /
+            // covering-now sample); we re-sort ascending below. Limit-bounded
+            // like the workout fetch: a full night is ~30 stage samples
+            // (Task 0 measured 28), so 200 covers several nights of backlog.
+            let predicate = HKQuery.predicateForSamples(
+                withStart: lastSeen, end: nil, options: .strictEndDate)
             let query = HKSampleQuery(
-                sampleType: HKCategoryType(.sleepAnalysis), predicate: nil,
+                sampleType: HKCategoryType(.sleepAnalysis), predicate: predicate,
                 limit: 200, sortDescriptors: sort
             ) { _, samples, error in
                 if let error {
@@ -212,12 +219,16 @@ final class SleepObserver {
         }
     }
 
-    /// Persists the night's window (earliest asleep-stage start → latest end
-    /// among samples intersecting the last 18h — the
-    /// `sleepSeconds(sinceYesterdayEvening:)` lookback) for wake-report
-    /// context. v1 consumers: this log line and the hero caption's honesty;
-    /// no report-schema change (plan 39 constraint).
+    /// Persists the night's window (earliest asleep-stage start → latest end)
+    /// for wake-report context. The lookback starts 18h BEFORE the start of
+    /// today (≈yesterday evening), so its span is ~18–42h depending on the
+    /// time of day — deliberately identical to the
+    /// `sleepSeconds(sinceYesterdayEvening:)` precedent, not a rolling "last
+    /// 18h". v1 consumers: this log line and the hero caption's honesty; no
+    /// report-schema change (plan 39 constraint).
     private func recordSleepWindow(now: Date) async {
+        // Matches sleepSeconds(sinceYesterdayEvening:) exactly; the unwrap is
+        // total for this Gregorian date arithmetic (same as the precedent).
         let start = Calendar.current.date(
             byAdding: .hour, value: -18, to: Calendar.current.startOfDay(for: now))!
         let window: (start: Date, end: Date)? = await withCheckedContinuation { continuation in
