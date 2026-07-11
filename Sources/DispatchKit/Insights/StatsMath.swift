@@ -203,8 +203,9 @@ enum StatsMath {
     private static func regularizedIncompleteBeta(a: Double, b: Double, x: Double) -> Double {
         guard x > 0 else { return 0 }
         guard x < 1 else { return 1 }
-        let logPrefix = lgamma(a + b) - lgamma(a) - lgamma(b)
-            + a * log(x) + b * log(1 - x)
+        var logPrefix: Double = lgamma(a + b) - lgamma(a) - lgamma(b)
+        logPrefix += a * log(x)
+        logPrefix += b * log(1 - x)
         let prefix = exp(logPrefix)
         if x < (a + 1) / (a + b + 2) {
             return prefix * betaContinuedFraction(a: a, b: b, x: x) / a
