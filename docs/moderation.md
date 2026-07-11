@@ -220,6 +220,24 @@ Production. Writes that OMIT the new fields keep working before the deploy
 the Production deploy would fail. So the deploy gates real use of the
 feature in Production, not the merge.
 
+**Duplicate-identity fingerprint (plan 42):** `CatalogQuestion` additionally
+carries `promptFingerprint` String — the lowercase-hex SHA-256 of the
+**normalized** prompt (`CatalogDedupe` in DispatchKit: NFC, curly-quote
+folding, case folding, whitespace collapse, trailing-punctuation strip).
+Written ONLY by `dispatch-mod` (approve/import/backfill), so it is
+trustworthy; `SubmittedQuestion` carries no fingerprint — the tool recomputes
+from prompts, and client-supplied fingerprints would be untrusted anyway. The
+app uses it for a targeted pre-submit duplicate query (UX friction only —
+enforcement is the tool's approve refusal, §4). The **field** auto-creates in
+Development on the first fingerprinted write, but its **QUERYABLE index does
+not**: deploy to Development via the export→merge→validate→import flow
+(export fresh, merge, validate, import — `import-schema` REPLACES the
+environment schema), and to Production via the OWNER Console deploy (§3c).
+Old catalog records lack the field until `dispatch-mod backfill-fingerprints`
+runs (per environment); until then the client pre-check simply misses those
+entries — harmless, because moderation dedupe never reads stored
+fingerprints.
+
 ## 3. Console checklist (user actions — required before TestFlight)
 
 ### 3a. Record-type permission matrix
@@ -257,6 +275,7 @@ Console → Schema → Indexes (Development):
 | `QuestionFlag` | `flaggedAt` | Sortable *(mod tool list order)* |
 | `SubmittedQuestion` | `createdUserRecordName` | Queryable *(see below)* |
 | `QuestionFlag` | `createdUserRecordName` | Queryable *(see below)* |
+| `CatalogQuestion` | `promptFingerprint` | Queryable *(app's pre-submit duplicate check, plan 42)* |
 
 **Why (and the naming trap):** once §3a's Creator-scoped read permissions are
 applied, CloudKit injects an implicit creator filter into queries against those
@@ -395,6 +414,36 @@ Console-deployed anyway, §3c.)
 inputs, never public. If it ever matters, `QuestionFlag` already carries the
 same queryable `___createdBy` index (§3b), so the same detect-and-bulk-clean
 approach applies.
+
+### Duplicate submissions (plan 42)
+
+Duplicate identity is an **exact match over the shared normalization**
+(`CatalogDedupe.normalizedPrompt`): case, whitespace runs, curly quotes, and
+trailing terminal punctuation are folded, so "Did you exercise today?!" and
+"did you exercise today" are the same question. Identity is **prompt-only**
+(type/choices ignored) — a same-prompt-different-type submission is still a
+collision for a human to resolve. Near-duplicate (fuzzy) matching is a
+documented follow-up, not built.
+
+- **`list` marks duplicates** — `⚠️ DUPLICATE of <catalogRecordName>` for a
+  pending submission matching a published entry, `⚠️ DUPLICATE of pending
+  <recordName>` for one matching an earlier pending submission (the first
+  occurrence is unmarked). The dashboard shows the same badge.
+- **`approve` refuses duplicates** of existing catalog entries, naming the
+  existing record. Override with `--allow-duplicate` when the collision is
+  deliberate (e.g. same prompt, intentionally different type). The check
+  compares normalized prompts computed from a fresh catalog fetch — never
+  stored fingerprints — so it works even before a backfill.
+- **`import` skips duplicates** against the live catalog and rejects
+  duplicates within the seed file, both under the same normalization.
+- **`backfill-fingerprints`** stamps `promptFingerprint` onto catalog entries
+  that lack it (pre-plan-42 records), per-record verified, safe to re-run
+  (already-stamped entries are untouched). Run once per environment —
+  Production only AFTER the Console schema deploy (§3c).
+- **Client-side** the app pre-checks submissions (loaded entries + a targeted
+  `promptFingerprint` query) and offers "Add to My Questions" instead; it
+  also refuses re-submitting a prompt this device already submitted. Both are
+  friction, trivially bypassable — this tool is the enforcement.
 
 ## 5. Signature format (verified against Apple docs, 2026-07-09)
 
