@@ -91,6 +91,7 @@ jobs:
         # -retry-tests-on-failure absorbs the known swift-testing signal-11
         # runner flake (one retry, matching the local merge-gate convention).
         run: |
+          set -o pipefail
           xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
@@ -143,6 +144,7 @@ jobs:
           fi
       - name: Run full UI suite on iPad
         run: |
+          set -o pipefail
           xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
@@ -173,6 +175,7 @@ jobs:
         run: xcodegen generate
       - name: Run Mac UI smoke
         run: |
+          set -o pipefail
           xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchMac \
