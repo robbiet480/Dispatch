@@ -1,5 +1,8 @@
 name: Dispatch
 options:
+  # Nest navigator groups to mirror directory paths — without this every
+  # target's <dir>/Sources becomes a root-level group named "Sources".
+  createIntermediateGroups: true
   bundleIdPrefix: io.robbie
   deploymentTarget:
     iOS: "26.0"
