@@ -73,6 +73,49 @@ private func testSettings() -> SensorSettings {
     guard case .unavailable = outcomes[.location] else { Issue.record("expected unavailable"); return }
 }
 
+/// A provider mirroring SpeedFromLocationProvider/CourseFromLocationProvider's
+/// shape without any CoreLocation dependency: degrades an invalid raw reading
+/// to a thrown ProviderError via MotionFormatting, exactly as the real
+/// location-fix-derived providers do (plan 43, #61). Exercises the
+/// degrade-through-absence path at the kit level, since the CoreLocation
+/// providers themselves live in the App/Watch targets.
+private struct DegradingMotionStub: SensorProvider {
+    let kind: SensorKind
+    let rawValue: Double
+    let validate: @Sendable (Double) -> Double?
+
+    func capture() async throws -> SensorPayload {
+        guard let valid = validate(rawValue) else {
+            throw StubError()
+        }
+        return kind == .speed ? .speed(valid) : .course(valid)
+    }
+}
+
+@Test func invalidSpeedAndCourseReadingsDegradeToUnavailable() async {
+    let providers: [any SensorProvider] = [
+        DegradingMotionStub(kind: .speed, rawValue: -1, validate: MotionFormatting.validSpeed),
+        DegradingMotionStub(kind: .course, rawValue: -1, validate: MotionFormatting.validCourse),
+    ]
+    let outcomes = await collect(CaptureCoordinator.capture(
+        providers: providers, settings: testSettings(), timeout: .seconds(1)))
+    guard case .unavailable = outcomes[.speed] else { Issue.record("expected speed unavailable"); return }
+    guard case .unavailable = outcomes[.course] else { Issue.record("expected course unavailable"); return }
+}
+
+@Test func validSpeedAndCourseReadingsCapture() async {
+    let providers: [any SensorProvider] = [
+        DegradingMotionStub(kind: .speed, rawValue: 5.5, validate: MotionFormatting.validSpeed),
+        DegradingMotionStub(kind: .course, rawValue: 180, validate: MotionFormatting.validCourse),
+    ]
+    let outcomes = await collect(CaptureCoordinator.capture(
+        providers: providers, settings: testSettings(), timeout: .seconds(1)))
+    guard case .captured(.speed(let mps)) = outcomes[.speed] else { Issue.record("expected speed captured"); return }
+    #expect(mps == 5.5)
+    guard case .captured(.course(let degrees)) = outcomes[.course] else { Issue.record("expected course captured"); return }
+    #expect(degrees == 180)
+}
+
 @Test func hungProviderStillTimesOutAndStreamFinishes() async {
     let providers: [any SensorProvider] = [
         HangingProvider(kind: .weather),

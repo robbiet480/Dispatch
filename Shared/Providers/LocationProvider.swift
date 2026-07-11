@@ -178,3 +178,84 @@ struct AltitudeFromLocationProvider: SensorProvider {
         return .altitude(fix.altitude)
     }
 }
+
+/// Speed off the same shared location fix (plan 43, #61) — mirrors
+/// AltitudeFromLocationProvider exactly, degrading CoreLocation's invalid-
+/// reading sentinel (negative `speed`) to `.unavailable` via MotionFormatting
+/// rather than capturing a nonsensical value.
+struct SpeedFromLocationProvider: SensorProvider {
+    let kind = SensorKind.speed
+    let store: LocationFixStore
+
+    func capture() async throws -> SensorPayload {
+        let fix = await store.awaitFix()
+        guard let speed = MotionFormatting.validSpeed(fix.speed) else {
+            throw ProviderError("no valid speed reading")
+        }
+        return .speed(speed)
+    }
+}
+
+/// Course (direction of travel) off the same shared location fix (plan 43,
+/// #61) — mirrors AltitudeFromLocationProvider/SpeedFromLocationProvider.
+struct CourseFromLocationProvider: SensorProvider {
+    let kind = SensorKind.course
+    let store: LocationFixStore
+
+    func capture() async throws -> SensorPayload {
+        let fix = await store.awaitFix()
+        guard let course = MotionFormatting.validCourse(fix.course) else {
+            throw ProviderError("no valid course reading")
+        }
+        return .course(course)
+    }
+}
+
+/// Compass heading (plan 43, #61) — a distinct magnetometer read via its own
+/// CLLocationManager, NOT derived from the shared location fix (different
+/// data source, independently device-gated: `headingAvailable()` is false on
+/// iPad/Mac/Watch). Takes exactly one delegate sample then stops, same
+/// single-shot shape as LocationProvider.requestFix.
+final class HeadingProvider: NSObject, SensorProvider, CLLocationManagerDelegate, @unchecked Sendable {
+    let kind = SensorKind.heading
+    private let manager = CLLocationManager()
+    // The continuation carries the extracted Double, not the CLHeading
+    // itself — CLHeading isn't Sendable, and the value is all this provider
+    // needs from the delegate callback.
+    private let state = OSAllocatedUnfairLock<CheckedContinuation<Double, Error>?>(initialState: nil)
+
+    func capture() async throws -> SensorPayload {
+        guard CLLocationManager.headingAvailable() else {
+            throw ProviderError("heading not available on this device")
+        }
+        let degrees = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Double, Error>) in
+                state.withLock { $0 = continuation }
+                manager.delegate = self
+                manager.startUpdatingHeading()
+            }
+        } onCancel: {
+            takeContinuation()?.resume(throwing: ProviderError("cancelled"))
+        }
+        return .heading(degrees)
+    }
+
+    private func takeContinuation() -> CheckedContinuation<Double, Error>? {
+        state.withLock { c in
+            let result = c
+            c = nil
+            return result
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        manager.stopUpdatingHeading()
+        let degrees = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        takeContinuation()?.resume(returning: degrees)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        manager.stopUpdatingHeading()
+        takeContinuation()?.resume(throwing: error)
+    }
+}
