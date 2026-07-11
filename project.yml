@@ -238,6 +238,10 @@ targets:
       - path: App/Sources/Sync/RemoteChangeObserver.swift
       - path: App/Sources/ThemeColor.swift
       - path: App/Sources/AppDefaultsEnvironment.swift
+      # Screenshot rig: the deterministic demo fixture (Foundation/SwiftData
+      # only) compiles unmodified — DispatchMacApp gates it behind the same
+      # test-environment + --demo-data contract as iOS.
+      - path: App/Sources/DemoData.swift
       # The highest-value share in the plan: Swift Charts renders the same
       # chart marks on macOS; the color-blend helper is the file's only
       # platform seam (#if canImport(UIKit)). OptionBlockLayout is pure math.
@@ -265,6 +269,35 @@ targets:
         SWIFT_VERSION: 6.0
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
         CODE_SIGN_ENTITLEMENTS: Mac/DispatchMac.entitlements
+  # Screenshot-only watch UI tests (skipped without SCREENSHOT_MODE=1 —
+  # scripts/screenshots.sh is the only caller).
+  DispatchWatchUITests:
+    type: bundle.ui-testing
+    platform: watchOS
+    sources: [WatchUITests]
+    dependencies:
+      - target: DispatchWatch
+    settings:
+      base:
+        TEST_TARGET_NAME: DispatchWatch
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.watchuitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        TARGETED_DEVICE_FAMILY: "4"
+  # Screenshot-only Mac UI tests (same SCREENSHOT_MODE gate).
+  DispatchMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [MacUITests]
+    dependencies:
+      - target: DispatchMac
+    settings:
+      base:
+        TEST_TARGET_NAME: DispatchMac
+        PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.macuitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        DEVELOPMENT_TEAM: UTQFCBPQRF
   DispatchUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -309,7 +342,13 @@ schemes:
     build:
       targets:
         DispatchWatch: all
+        DispatchWatchUITests: [test]
+    test:
+      targets: [DispatchWatchUITests]
   DispatchMac:
     build:
       targets:
         DispatchMac: all
+        DispatchMacUITests: [test]
+    test:
+      targets: [DispatchMacUITests]
