@@ -274,3 +274,63 @@ jobs:
           name: mac-smoke-xcresult
           path: mac-smoke.xcresult
           retention-days: 7
+  watch-ui-tests:
+    # Functional watch UI tests. Non-blocking initially: watchOS
+    # XCUITest is inherently flakier than iOS (see PR body); promote once a
+    # week of CI history is clean.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+      - name: Ensure watchOS platform
+        run: |
+          if xcodebuild -showsdks 2>/dev/null | grep -q watchsimulator; then
+            exit 0
+          fi
+          for i in 1 2 3; do
+            sudo xcodebuild -downloadPlatform watchOS && exit 0
+            sleep 30
+          done
+          exit 1
+      - name: Install XcodeGen + xcbeautify
+        run: brew install xcodegen xcbeautify
+      - name: Generate project
+        run: xcodegen generate
+      - name: Ensure simulator
+        run: |
+          # The runner image ships several "Apple Watch Ultra 3 (49mm)" sims —
+          # one per installed watchOS runtime — so a name-only destination is
+          # ambiguous ("multiple devices matched"). Resolve a concrete UDID
+          # (newest available, or create one) and pin the destination to it.
+          UDID=$(xcrun simctl list devices available \
+            | grep "Apple Watch Ultra 3 (49mm) (" \
+            | grep -Eo "[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}" \
+            | tail -1)
+          if [ -z "$UDID" ]; then
+            RUNTIME=$(xcrun simctl list runtimes | grep -Eo "com.apple.CoreSimulator.SimRuntime.watchOS[0-9-]+" | sort -V | tail -1)
+            UDID=$(xcrun simctl create "Apple Watch Ultra 3 (49mm)" "Apple Watch Ultra 3 (49mm)" "$RUNTIME")
+          fi
+          echo "WATCH_SIM_UDID=$UDID" >> "$GITHUB_ENV"
+      - name: Run watch UI tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Dispatch.xcodeproj \
+            -scheme DispatchWatch \
+            -destination "platform=watchOS Simulator,id=$WATCH_SIM_UDID" \
+            -only-testing:DispatchWatchUITests/WatchAppUITests \
+            -resultBundlePath watch-ui.xcresult \
+            -retry-tests-on-failure \
+            | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
+      - name: Upload result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watch-ui-xcresult
+          path: watch-ui.xcresult
+          retention-days: 7
