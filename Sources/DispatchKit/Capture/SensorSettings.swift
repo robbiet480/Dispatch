@@ -9,6 +9,12 @@ public enum SensorKind: String, Codable, CaseIterable, Sendable {
     /// Windowed heart-rate statistics since the previous report (plan 43,
     /// issue #48). Additive raw value.
     case healthHeartRange
+    /// Location-fix-derived (plan 43, #61): rides the shared `LocationFixStore`
+    /// fix exactly like `altitude`.
+    case speed, course
+    /// Magnetometer-derived (plan 43, #61): its own CoreLocation heading
+    /// read, iPhone-only — see `HeadingProvider`.
+    case heading
 }
 
 public enum TemperatureUnit: String, Codable, Sendable { case fahrenheit, celsius }

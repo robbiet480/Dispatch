@@ -15,6 +15,9 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
         .battery: .captured(.battery(0.42)),
         .audio: .captured(.audio(AudioSample(avg: -50, peak: -30))),
         .altitude: .captured(.altitude(63.0)),
+        .speed: .captured(.speed(5.5)),
+        .course: .captured(.course(180.0)),
+        .heading: .captured(.heading(45.0)),
         .connection: .captured(.connection(1)),
         .focus: .captured(.focus(FocusState(label: nil, isFocused: true))),
         .healthSteps: .captured(.health([HealthReading(type: "steps", value: 1200, unit: "count")])),
@@ -40,6 +43,9 @@ private func ref(_ id: String, _ prompt: String, _ type: QuestionType) -> Questi
     #expect(report.battery == 0.42)
     #expect(report.audio?.avg == -50)
     #expect(report.altitudeMeters == 63.0)
+    #expect(report.speedMPS == 5.5)
+    #expect(report.courseDegrees == 180.0)
+    #expect(report.headingDegrees == 45.0)
     #expect(report.connectionType == .wifi)
     #expect(report.focus?.isFocused == true)
     #expect(report.weather == nil) // unavailable → absent

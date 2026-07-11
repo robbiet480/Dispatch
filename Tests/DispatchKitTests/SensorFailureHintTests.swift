@@ -38,6 +38,13 @@ import Testing
     #expect(SensorFailureHint.hint(for: .altitude, reason: "") == "Unable to detect Altitude.")
 }
 
+@Test func motionSensorsFallBackToGenericHint() {
+    #expect(SensorFailureHint.hint(for: .speed, reason: "no valid fix") == "no valid fix")
+    #expect(SensorFailureHint.hint(for: .course, reason: nil) == "Unable to detect Course.")
+    #expect(SensorFailureHint.hint(for: .heading, reason: nil) == "Unable to detect Heading.")
+    #expect(SensorFailureHint.disabledHint(for: .speed) == "Turn Speed back on in Settings → Sensors.")
+}
+
 @Test func disabledHintPointsAtSensorSettings() {
     #expect(SensorFailureHint.disabledHint(for: .weather) == "Turn Weather back on in Settings → Sensors.")
     #expect(SensorFailureHint.disabledHint(for: .healthSteps) == "Turn Steps back on in Settings → Sensors.")
