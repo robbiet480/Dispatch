@@ -43,7 +43,10 @@ protocol CatalogProviding: Sendable {
     ) async throws -> (entries: [CatalogQuestion], cursor: CatalogQueryCursor?)
 
     /// Create a SubmittedQuestion record (values already validated/normalized).
-    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?) async throws
+    /// The plan-41 input configuration is optional and nil-omitted.
+    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?,
+                inputStyle: String?, defaultAnswer: String?, placeholder: String?,
+                inputMin: Double?, inputMax: Double?, inputStep: Double?) async throws
 
     /// Create a QuestionFlag record against a catalog entry.
     func flag(catalogRecordName: String, reason: String) async throws
@@ -101,10 +104,14 @@ final class CloudKitCatalogProvider: CatalogProviding {
         return (entries, nextCursor.map { CatalogQueryCursor(value: $0) })
     }
 
-    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?) async throws {
+    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?,
+                inputStyle: String?, defaultAnswer: String?, placeholder: String?,
+                inputMin: Double?, inputMax: Double?, inputStep: Double?) async throws {
         let submission = SubmittedQuestion(
             recordName: UUID().uuidString, prompt: prompt, typeRaw: typeRaw,
-            choices: choices, creditName: creditName, submittedAt: .now
+            choices: choices, creditName: creditName, submittedAt: .now,
+            inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder,
+            inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
         )
         let record = CKRecord(
             recordType: CatalogRecordType.submittedQuestion,
@@ -162,6 +169,7 @@ final class CloudKitCatalogProvider: CatalogProviding {
             switch value {
             case .string(let string): record[key] = string as CKRecordValue
             case .int(let int): record[key] = int as CKRecordValue
+            case .double(let double): record[key] = double as CKRecordValue
             case .date(let date): record[key] = date as CKRecordValue
             case .stringList(let list): record[key] = list as CKRecordValue
             }
@@ -180,6 +188,13 @@ final class CloudKitCatalogProvider: CatalogProviding {
         if let credit = record["credit"] as? String { fields["credit"] = .string(credit) }
         if let approvedAt = record["approvedAt"] as? Date { fields["approvedAt"] = .date(approvedAt) }
         if let tags = record["tags"] as? [String] { fields["tags"] = .stringList(tags) }
+        // Input configuration (plan 41) — optional on every record.
+        for key in ["inputStyle", "defaultAnswer", "placeholder"] {
+            if let string = record[key] as? String { fields[key] = .string(string) }
+        }
+        for key in ["inputMin", "inputMax", "inputStep"] {
+            if let double = record[key] as? Double { fields[key] = .double(double) }
+        }
         return CatalogQuestion(recordName: record.recordID.recordName, fields: fields)
     }
 
@@ -237,9 +252,20 @@ final class StubCatalogProvider: CatalogProviding, @unchecked Sendable {
             typeRaw: QuestionType.tokens.rawValue, choices: [], credit: nil,
             approvedAt: Date(timeIntervalSinceReferenceDate: 798_000_000), tags: ["food"]
         ),
+        // Fully configured number entry (plan 41): exercises the
+        // add-to-my-questions input-config mapping in UI tests.
+        CatalogQuestion(
+            recordName: "stub-catalog-4", prompt: "How stressed are you?",
+            typeRaw: QuestionType.number.rawValue, choices: [], credit: nil,
+            approvedAt: Date(timeIntervalSinceReferenceDate: 797_000_000), tags: ["mood"],
+            inputStyle: "scale", defaultAnswer: "3", placeholder: "1 to 5",
+            inputMin: 1, inputMax: 5, inputStep: 1
+        ),
     ]
 
-    private(set) var submissions: [(prompt: String, typeRaw: Int, choices: [String], creditName: String?)] = []
+    private(set) var submissions: [(prompt: String, typeRaw: Int, choices: [String], creditName: String?,
+                                    inputStyle: String?, defaultAnswer: String?, placeholder: String?,
+                                    inputMin: Double?, inputMax: Double?, inputStep: Double?)] = []
     private(set) var flags: [(catalogRecordName: String, reason: String)] = []
 
     func approvedQuestions(
@@ -250,8 +276,12 @@ final class StubCatalogProvider: CatalogProviding, @unchecked Sendable {
         return (Self.stubEntries, nil)
     }
 
-    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?) async throws {
-        submissions.append((prompt, typeRaw, choices, creditName))
+    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?,
+                inputStyle: String?, defaultAnswer: String?, placeholder: String?,
+                inputMin: Double?, inputMax: Double?, inputStep: Double?) async throws {
+        submissions.append((prompt, typeRaw, choices, creditName,
+                            inputStyle, defaultAnswer, placeholder,
+                            inputMin, inputMax, inputStep))
     }
 
     func flag(catalogRecordName: String, reason: String) async throws {

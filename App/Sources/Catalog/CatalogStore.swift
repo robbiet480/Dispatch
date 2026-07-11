@@ -85,17 +85,28 @@ final class CatalogStore {
 
     /// Validate + normalize + create a SubmittedQuestion record. Throws
     /// `CatalogProviderError.validation` with all structural problems.
-    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?) async throws {
+    /// The input configuration (plan 41) is optional: style/default answer
+    /// are number-only, placeholder applies to any type, and the bounds ride
+    /// along with the style (already parsed to finite Doubles by the form).
+    func submit(prompt: String, typeRaw: Int, choices: [String], creditName: String?,
+                inputStyle: String? = nil, defaultAnswer: String? = nil,
+                placeholder: String? = nil, inputMin: Double? = nil,
+                inputMax: Double? = nil, inputStep: Double? = nil) async throws {
         let errors = CatalogValidation.validate(
-            prompt: prompt, typeRaw: typeRaw, choices: choices, creditName: creditName
+            prompt: prompt, typeRaw: typeRaw, choices: choices, creditName: creditName,
+            inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder
         )
         guard errors.isEmpty else { throw CatalogProviderError.validation(errors) }
         let normalized = CatalogValidation.normalized(
-            prompt: prompt, choices: choices, creditName: creditName
+            prompt: prompt, choices: choices, creditName: creditName,
+            inputStyle: inputStyle, defaultAnswer: defaultAnswer, placeholder: placeholder
         )
         try await provider.submit(
             prompt: normalized.prompt, typeRaw: typeRaw,
-            choices: normalized.choices, creditName: normalized.creditName
+            choices: normalized.choices, creditName: normalized.creditName,
+            inputStyle: normalized.inputStyle, defaultAnswer: normalized.defaultAnswer,
+            placeholder: normalized.placeholder,
+            inputMin: inputMin, inputMax: inputMax, inputStep: inputStep
         )
     }
 
@@ -123,7 +134,9 @@ final class CatalogStore {
         }
         let question = QuestionAdmin.makeQuestion(
             prompt: entry.prompt, type: type, choices: entry.choices,
-            placeholder: nil, kinds: [.regular], after: existing
+            placeholder: entry.placeholder, kinds: [.regular], after: existing,
+            defaultAnswer: entry.defaultAnswer, inputStyle: entry.inputStyle,
+            inputMin: entry.inputMin, inputMax: entry.inputMax, inputStep: entry.inputStep
         )
         context.insert(question)
         try? context.save()

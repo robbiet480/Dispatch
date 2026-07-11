@@ -38,3 +38,47 @@ private func q(_ id: String, sort: Int) -> Question {
     #expect(made.type == .yesNo)
     #expect(made.reportKinds == [.regular])
 }
+
+// MARK: - Input configuration (plan 41)
+
+@Test func makeQuestionCarriesInputConfig() {
+    let made = QuestionAdmin.makeQuestion(
+        prompt: "Stress?", type: .number, choices: [],
+        placeholder: "1–5", kinds: [.regular], after: [],
+        defaultAnswer: "3", inputStyle: "scale",
+        inputMin: 1, inputMax: 5, inputStep: 1
+    )
+    #expect(made.inputStyle == .scale)
+    #expect(made.inputStyleRaw == "scale")
+    #expect(made.inputMin == 1)
+    #expect(made.inputMax == 5)
+    #expect(made.inputStep == 1)
+    #expect(made.defaultAnswerString == "3")
+    #expect(made.placeholderString == "1–5")
+}
+
+@Test func makeQuestionDefaultsLeaveInputConfigNil() {
+    // Existing call shape (no new args) produces a bare question — every
+    // pre-plan-41 caller compiles and behaves unchanged.
+    let made = QuestionAdmin.makeQuestion(prompt: "Bare?", type: .number, choices: [],
+                                          placeholder: nil, kinds: [.regular], after: [])
+    #expect(made.inputStyleRaw == nil)
+    #expect(made.inputStyle == .textField)
+    #expect(made.inputMin == nil)
+    #expect(made.inputMax == nil)
+    #expect(made.inputStep == nil)
+    #expect(made.defaultAnswerString == nil)
+    #expect(made.placeholderString == nil)
+}
+
+@Test func makeQuestionPreservesUnknownInputStyleRaw() {
+    // Leniency: a future style raw persists untouched and resolves to the
+    // plain text field on this build.
+    let made = QuestionAdmin.makeQuestion(
+        prompt: "Future?", type: .number, choices: [],
+        placeholder: nil, kinds: [.regular], after: [],
+        inputStyle: "hologram"
+    )
+    #expect(made.inputStyleRaw == "hologram")
+    #expect(made.inputStyle == .textField)
+}
