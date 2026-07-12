@@ -76,3 +76,20 @@ import Testing
     #expect(BeaconTrigger(beaconJSON: empty.json, directionRaw: "arrival",
                           delayMinutes: 0, cancelOnContradiction: true) == nil)
 }
+
+// MARK: - Delay preset clamping
+
+@Test func nearestAllowedMinutesSnapsToOfferedPreset() {
+    // Exact presets pass through unchanged.
+    for preset in MonitorDelay.allowedMinutes {
+        #expect(MonitorDelay.nearestAllowedMinutes(preset) == preset)
+    }
+    // Off-list values (corrupt/hand-edited import) snap to the closest preset,
+    // so the editor Picker always has a matching tag.
+    #expect(MonitorDelay.nearestAllowedMinutes(3) == 5)
+    #expect(MonitorDelay.nearestAllowedMinutes(7) == 5)
+    #expect(MonitorDelay.nearestAllowedMinutes(12) == 10)
+    #expect(MonitorDelay.nearestAllowedMinutes(45) == 30)
+    #expect(MonitorDelay.nearestAllowedMinutes(-100) == 0)
+    #expect(MonitorDelay.nearestAllowedMinutes(9_999) == 60)
+}

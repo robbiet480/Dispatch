@@ -11,6 +11,15 @@ public enum MonitorDelay {
     /// CLMonitor geographic callbacks get unreliable below ~100 m, so radii
     /// are clamped to this floor (surface over false precision).
     public static let floorRadiusMeters = 100.0
+
+    /// Snaps a persisted/imported delay to the nearest offered preset. The
+    /// editor's Delay `Picker` only has tags for `allowedMinutes`; seeding it
+    /// with an off-list value (a hand-edited/corrupt import) would leave the
+    /// control with no matching selection and let the bad value re-save
+    /// unchanged. Clamping to the closest preset keeps the Picker well-defined.
+    public static func nearestAllowedMinutes(_ minutes: Int) -> Int {
+        allowedMinutes.min(by: { abs($0 - minutes) < abs($1 - minutes) }) ?? 0
+    }
 }
 
 /// Which edge of a monitored condition fires the prompt. Raw values are the
