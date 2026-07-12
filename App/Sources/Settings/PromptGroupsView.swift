@@ -277,6 +277,12 @@ struct PromptGroupEditorView: View {
     @State private var beaconName: String
     @State private var isEnabled: Bool
     @State private var newTime = Date()
+    /// Place-search (plan 50, #83): the shared MapKit autocomplete/geocode model
+    /// plus the live search text. Picking a result fills the place drafts above
+    /// (`placeLatitude`/`placeLongitude`/`placeName`); the advanced manual
+    /// disclosure still writes them directly.
+    @State private var placeSearch = PlaceSearchModel.makeForCurrentProcess()
+    @State private var placeSearchText = ""
 
     private var theme: Theme { themeStore.theme }
 
@@ -553,26 +559,19 @@ struct PromptGroupEditorView: View {
                 }
             case .placeTrigger:
                 Text("Fires a prompt when you arrive at (or leave) a place — "
-                    + "e.g. “30 minutes after arriving at the office”. Needs "
-                    + "“Always” location access to work when Dispatch is closed.")
+                    + "e.g. “30 minutes after arriving at the office”. Search for "
+                    + "the place by name or address. Needs “Always” location "
+                    + "access to work when Dispatch is closed.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.7))
-                TextField("Latitude", text: $placeLatitude)
-                    .keyboardType(.numbersAndPunctuation)
-                    .foregroundStyle(.white).tint(.white)
-                    .accessibilityIdentifier("group-place-latitude")
-                TextField("Longitude", text: $placeLongitude)
-                    .keyboardType(.numbersAndPunctuation)
-                    .foregroundStyle(.white).tint(.white)
-                    .accessibilityIdentifier("group-place-longitude")
-                TextField("Place name (optional)", text: $placeName)
-                    .foregroundStyle(.white).tint(.white)
-                    .accessibilityIdentifier("group-place-name")
+                placeSearchField
+                placeSelectedRow
                 Stepper("Radius \(Int(placeRadius)) m",
                         value: $placeRadius,
                         in: MonitorDelay.floorRadiusMeters...5000, step: 50)
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("group-place-radius")
+                placeManualEntry
                 monitorControls
                 monitorValidationHint
                 if !monitorObserver.hasAlwaysAuthorization {
@@ -638,7 +637,7 @@ struct PromptGroupEditorView: View {
         case .placeTrigger:
             guard let lat = Double(placeLatitude), (-90.0...90.0).contains(lat),
                   let lon = Double(placeLongitude), (-180.0...180.0).contains(lon)
-            else { return "Enter a valid latitude (−90…90) and longitude (−180…180)." }
+            else { return "Search for a place and choose a result (or enter coordinates manually)." }
             return nil
         case .beaconTrigger:
             guard UUID(uuidString: beaconUUID.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
@@ -661,6 +660,106 @@ struct PromptGroupEditorView: View {
                 .font(.footnote)
                 .foregroundStyle(.yellow)
                 .accessibilityIdentifier("group-monitor-invalid")
+        }
+    }
+
+    /// The place-search field + live autocomplete results (plan 50). Typing
+    /// drives the shared `PlaceSearchModel`; tapping a result geocodes it and
+    /// fills the place drafts (see `pickPlace`).
+    @ViewBuilder
+    private var placeSearchField: some View {
+        TextField("Search for a place or address", text: $placeSearchText)
+            .foregroundStyle(.white).tint(.white)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.words)
+            .accessibilityIdentifier("group-place-search")
+            .onChange(of: placeSearchText) { _, text in
+                placeSearch.updateQuery(text)
+            }
+        if placeSearch.isResolving {
+            HStack(spacing: 8) {
+                ProgressView().tint(.white)
+                Text("Finding place…")
+                    .font(.footnote).foregroundStyle(.white.opacity(0.7))
+            }
+        }
+        if let error = placeSearch.errorMessage {
+            Text(error)
+                .font(.footnote).foregroundStyle(.yellow)
+                .accessibilityIdentifier("group-place-search-error")
+        }
+        ForEach(placeSearch.suggestions) { suggestion in
+            Button {
+                pickPlace(suggestion)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(suggestion.title)
+                        .foregroundStyle(.white)
+                    if !suggestion.subtitle.isEmpty {
+                        Text(suggestion.subtitle)
+                            .font(.caption).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+            }
+            .accessibilityIdentifier("group-place-result")
+        }
+    }
+
+    /// Confirmation of the currently-chosen coordinate (from search OR manual
+    /// entry) — shown whenever the drafts hold a parseable lat/lon.
+    @ViewBuilder
+    private var placeSelectedRow: some View {
+        if let lat = Double(placeLatitude), let lon = Double(placeLongitude) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "mappin.circle.fill")
+                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(placeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "Selected place" : placeName)
+                        .foregroundStyle(.white)
+                    Text(String(format: "%.5f, %.5f", lat, lon))
+                        .font(.caption).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("group-place-selected")
+        }
+    }
+
+    /// Advanced fallback: raw latitude/longitude + name entry, collapsed by
+    /// default. Preserves the exact-coordinate path (and the frozen ids) for
+    /// power users; the search field above is the primary flow.
+    @ViewBuilder
+    private var placeManualEntry: some View {
+        DisclosureGroup {
+            TextField("Latitude", text: $placeLatitude)
+                .keyboardType(.numbersAndPunctuation)
+                .foregroundStyle(.white).tint(.white)
+                .accessibilityIdentifier("group-place-latitude")
+            TextField("Longitude", text: $placeLongitude)
+                .keyboardType(.numbersAndPunctuation)
+                .foregroundStyle(.white).tint(.white)
+                .accessibilityIdentifier("group-place-longitude")
+            TextField("Place name (optional)", text: $placeName)
+                .foregroundStyle(.white).tint(.white)
+                .accessibilityIdentifier("group-place-name")
+        } label: {
+            Text("Enter coordinates manually")
+                .foregroundStyle(.white)
+        }
+        .tint(.white)
+        .accessibilityIdentifier("group-place-manual")
+    }
+
+    /// Geocodes a picked suggestion and fills the place drafts, then clears the
+    /// search text so the results list collapses.
+    private func pickPlace(_ suggestion: PlaceSuggestion) {
+        Task {
+            guard let resolved = await placeSearch.select(suggestion) else { return }
+            placeLatitude = String(resolved.latitude)
+            placeLongitude = String(resolved.longitude)
+            placeName = resolved.name
+            placeSearchText = ""
         }
     }
 

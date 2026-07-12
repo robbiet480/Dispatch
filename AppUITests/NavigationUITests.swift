@@ -224,7 +224,10 @@ final class NavigationUITests: XCTestCase {
     @MainActor
     func testCreatePlaceTriggerGroupAppearsInList() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        // --stub-place-search: the editor's PlaceSearchModel uses a canned
+        // completer/resolver (no network) so the search flow is deterministic.
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding",
+                               "--stub-place-search"]
         app.launch()
 
         let settingsButton = app.buttons["settings-button"]
@@ -272,18 +275,23 @@ final class NavigationUITests: XCTestCase {
         placeOption.tap()
 
         // Full-access (Always) test posture: no needs-Always hint in editor.
-        // A valid coordinate is required for Save (guards the (0,0) fallback).
-        let latitude = app.textFields["group-place-latitude"]
-        XCTAssertTrue(latitude.waitForExistence(timeout: 10))
+        // Primary path: type a name, choose an autocomplete result. The stub
+        // completer returns a canned "HQ" suggestion; the stub resolver geocodes
+        // it to a fixed coordinate — no manual lat/long, no network.
+        let search = app.textFields["group-place-search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["group-monitor-needs-always"].exists)
         XCTAssertFalse(app.buttons["group-monitor-needs-always"].exists)
-        latitude.tap()
-        latitude.typeText("37.3349")
-        app.textFields["group-place-longitude"].tap()
-        app.textFields["group-place-longitude"].typeText("-122.009")
-        let placeName = app.textFields["group-place-name"]
-        placeName.tap()
-        placeName.typeText("HQ")
+        search.tap()
+        search.typeText("HQ")
+
+        let result = app.buttons["group-place-result"].firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 10))
+        result.tap()
+
+        // Picking geocodes and shows the selected-place confirmation.
+        XCTAssertTrue(app.otherElements["group-place-selected"].waitForExistence(timeout: 10)
+            || app.staticTexts["group-place-selected"].waitForExistence(timeout: 10))
 
         app.buttons["group-save"].tap()
 
