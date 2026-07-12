@@ -115,6 +115,12 @@ struct ReportDetailView: View {
             let feet = meters * 3.28084
             append("arrow.up.forward", "Altitude", String(format: "%.0f ft", feet))
         }
+        // CLLocation extras riding the location payload (plan 44, #61) —
+        // grouped with the location-derived rows above; nil fields render
+        // nothing.
+        for row in ContextMetadataDetail.locationRows(report.location) {
+            append(row.icon, row.label, row.value, id: "\(row.label)-\(row.value)")
+        }
         if let audio = report.audio {
             let display = AudioLevel.displayValue(fromRaw: audio.avg)
             let label = AudioLevel.label(forDisplay: display)
@@ -155,6 +161,12 @@ struct ReportDetailView: View {
         }
         if let connection = report.connectionType {
             append("antenna.radiowaves.left.and.right", "Connection", connection.displayName)
+        }
+        // Capture-time context metadata (plan 44, #61): the trailing group —
+        // activity, pressure, Low Power Mode, brightness, appearance, audio
+        // route. Only captured (non-nil) fields render.
+        for row in ContextMetadataDetail.contextRows(for: report) {
+            append(row.icon, row.label, row.value)
         }
         // Media is rendered by mediaRow(_:) in sensorSection, not here — it
         // needs a tappable variant the plain-tuple rows can't express.

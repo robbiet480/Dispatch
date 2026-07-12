@@ -137,18 +137,22 @@ extension SensorKind {
     /// The permission gating this sensor's readings, or nil when none does
     /// (battery/connection need no authorization; weather and elevation ride
     /// on the location fix; medications have no queryable status — see
-    /// SensorPermission).
+    /// SensorPermission). The plan-44 metadata toggles map 1:1 onto real OS
+    /// permissions: Motion & Fitness reuses the existing `.motion`
+    /// authorization (same dialog PermissionCascade already sequences for the
+    /// pedometer), and Device Context has NO permission — it must never
+    /// render a Request affordance or count as requestable.
     var permission: SensorPermission? {
         switch self {
         case .location, .weather, .altitude: .location
         case .photos: .photos
         case .audio: .microphone
         case .focus: .focus
-        case .healthFlights: .motion
+        case .healthFlights, .motionFitness: .motion
         case .healthSteps, .healthHeart, .healthHeartRange, .healthHRV, .healthRestingHeart,
              .healthSleep, .healthWorkouts, .healthCaffeine, .healthActivityRings: .health
         case .media: .mediaLibrary
-        case .battery, .connection, .healthMedications: nil
+        case .battery, .connection, .healthMedications, .deviceContext: nil
         }
     }
 }

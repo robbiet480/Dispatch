@@ -233,7 +233,8 @@ struct SensorSettingsView: View {
 
     /// Sensor rows grouped into categories, each sorted alphabetically by
     /// display name. Every SensorKind appears in exactly one category — the
-    /// four groups partition all 20 cases.
+    /// four groups partition all 22 cases (20 capture sensors + the two
+    /// plan-44 metadata toggles).
     private var sensorCategories: [SensorCategory] {
         let groups: [(String, [SensorKind])] = [
             ("HEALTH", [
@@ -243,7 +244,7 @@ struct SensorSettingsView: View {
                 .healthFlights, .healthSteps, .healthWorkouts,
             ]),
             ("LOCATION & WEATHER", [.location, .weather, .altitude]),
-            ("DEVICE", [.battery, .connection, .focus]),
+            ("DEVICE", [.battery, .connection, .focus, .deviceContext, .motionFitness]),
             ("MEDIA & SURROUNDINGS", [.audio, .media, .photos]),
         ]
         return groups.map { title, kinds in
@@ -254,8 +255,19 @@ struct SensorSettingsView: View {
     @ViewBuilder
     private func sensorRow(_ kind: SensorKind) -> some View {
         HStack(spacing: 12) {
-            Text(kind.displayName)
-                .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(kind.displayName)
+                    .foregroundStyle(.white)
+                // Permission-grouped metadata toggles (plan 44) carry a
+                // caption listing exactly what the toggle gates; the
+                // location row's caption covers the CLLocation extras that
+                // ride its existing toggle.
+                if let caption = kind.caption {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
             Spacer()
             // A locked sensor (permission not yet granted, or denied) can't be
             // enabled — its slider is off and disabled, with a Request/Settings
@@ -408,6 +420,24 @@ extension SensorKind {
         case .healthMedications: "Medications"
         case .healthActivityRings: "Activity Rings"
         case .media: "Media"
+        case .motionFitness: "Motion & Fitness"
+        case .deviceContext: "Device Context"
+        }
+    }
+
+    /// Caption under the toggle title (plan 44, #61) — present only on the
+    /// permission-grouped metadata toggles and the location row whose
+    /// existing toggle now also gates the CLLocation extras.
+    var caption: String? {
+        switch self {
+        case .location:
+            "Includes altitude, speed, course, accuracy, floor, and compass heading."
+        case .motionFitness:
+            "Activity type (walking, driving…) and barometric pressure."
+        case .deviceContext:
+            "Low Power Mode, screen brightness, appearance, audio output."
+        default:
+            nil
         }
     }
 }

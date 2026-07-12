@@ -120,6 +120,12 @@ struct MacReportDetailView: View {
             let feet = meters * 3.28084
             append("arrow.up.forward", "Altitude", String(format: "%.0f ft", feet))
         }
+        // CLLocation extras riding the location payload (plan 44, #61) —
+        // shared kit formatting keeps this in lockstep with the iOS detail
+        // view. The Mac never captures these; they arrive on synced reports.
+        for row in ContextMetadataDetail.locationRows(report.location) {
+            append(row.icon, row.label, row.value, id: "\(row.label)-\(row.value)")
+        }
         if let audio = report.audio {
             let display = AudioLevel.displayValue(fromRaw: audio.avg)
             let label = AudioLevel.label(forDisplay: display)
@@ -154,6 +160,12 @@ struct MacReportDetailView: View {
         }
         if let connection = report.connectionType {
             append("antenna.radiowaves.left.and.right", "Connection", connection.displayName)
+        }
+        // Capture-time context metadata (plan 44, #61): trailing group,
+        // non-nil fields only — mirrors the iOS detail view via the shared
+        // kit rows.
+        for row in ContextMetadataDetail.contextRows(for: report) {
+            append(row.icon, row.label, row.value)
         }
         return rows
     }
