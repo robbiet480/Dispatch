@@ -43,7 +43,7 @@ jobs:
       # would wipe an in-workspace .build every run) and is keyed on
       # $RUNNER_NAME so the two instances on one mini never share it.
       - name: Run DispatchKit tests
-        run: swift test --scratch-path "$HOME/dispatch-ci/${RUNNER_NAME}/spm-build"
+        run: swift test --scratch-path "$HOME/ci-cache/${RUNNER_NAME}/spm-build"
   build-app:
     # Fork-PR gate: same rationale as `test` above.
     if: >-
@@ -78,4 +78,4 @@ jobs:
       - name: Build app
         # generic simulator destination: compiles against the SDK without
         # requiring a concrete simulator runtime to be installed.
-        run: xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination 'generic/platform=iOS Simulator' -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-build" build
+        run: xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination 'generic/platform=iOS Simulator' -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-build" build
