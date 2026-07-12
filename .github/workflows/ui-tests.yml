@@ -91,31 +91,32 @@ jobs:
           done
       - name: Generate project
         run: xcodegen generate
-      - name: Reset this instance's simulator
-        # Persistent runners REUSE simulators between jobs, so app state persists
-        # across runs (plan-38 throttle / plan-42 already-submitted artifacts —
-        # the dirty-state failure mode documented in PR #76 triage). Hosted
-        # runners always got factory-fresh sims; erasing restores fresh-state
-        # semantics. Only our per-instance device (never `all`) so we don't
-        # touch the simulator the OTHER concurrent instance is using — they
-        # share one CoreSimulator service. erase requires shutdown first; the
-        # device may not exist yet on a fresh runner — hence || true.
-        run: |
-          xcrun simctl shutdown "iPhone 17 Pro-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
-          xcrun simctl erase "iPhone 17 Pro-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
-      - name: Ensure simulator
-        # The suite pins iPhone 17 Pro (docs/testing-tiers.md). Use a per-instance
-        # device name so the two runner instances never collide on one device.
+      - name: Ensure fresh per-instance simulator
+        # The suite pins iPhone 17 Pro (docs/testing-tiers.md). A per-instance
+        # device name (suffix = runner name) keeps the two instances sharing one
+        # CoreSimulator service from ever touching each other's device. All
+        # simctl operations and the -destination use the resolved UDID, never
+        # the name: a stale unavailable same-name device (left by a runtime
+        # upgrade) would make name-addressing ambiguous. The erase restores
+        # hosted-style fresh app state each run — persistent sims keep plan-38
+        # throttle / plan-42 already-submitted artifacts (PR #76 triage).
         run: |
           DEVICE="iPhone 17 Pro-${RUNNER_SIM_SUFFIX}"
-          # -F: fixed-string match — the runner-derived name must never be
-          # interpreted as a regex. Runtime pick skips unavailable runtimes.
-          if ! xcrun simctl list devices available | grep -qF "${DEVICE} ("; then
+          # Drop stale same-name devices whose runtime is gone (grep -F: the
+          # runner-derived name must never be interpreted as a regex).
+          xcrun simctl list devices | grep -F "${DEVICE} (" | grep -F "unavailable" | grep -Eo "[0-9A-F]{8}-[0-9A-F-]{27}" | while read -r stale; do
+            echo "deleting stale unavailable device $stale"
+            xcrun simctl delete "$stale" || true
+          done
+          UDID=$(xcrun simctl list devices available | grep -F "${DEVICE} (" | grep -Eo "[0-9A-F]{8}-[0-9A-F-]{27}" | head -1)
+          if [ -z "$UDID" ]; then
             RUNTIME=$(xcrun simctl list runtimes available | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
             [ -n "$RUNTIME" ] || { echo "::error::No iOS simulator runtime available on this runner — install one via Xcode"; exit 1; }
-            xcrun simctl create "${DEVICE}" "iPhone 17 Pro" "$RUNTIME"
+            UDID=$(xcrun simctl create "${DEVICE}" "iPhone 17 Pro" "$RUNTIME")
           fi
-          xcrun simctl list devices available | grep -F "${DEVICE}"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          xcrun simctl erase "$UDID"
       - name: Run full UI suite
         # -retry-tests-on-failure absorbs the known swift-testing signal-11
         # runner flake (one retry, matching the local merge-gate convention).
@@ -124,7 +125,7 @@ jobs:
           xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
-            -destination "platform=iOS Simulator,name=iPhone 17 Pro-${RUNNER_SIM_SUFFIX}" \
+            -destination "platform=iOS Simulator,id=${SIM_UDID}" \
             -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-ui" \
             -resultBundlePath ui-tests.xcresult \
             -retry-tests-on-failure \
@@ -176,30 +177,31 @@ jobs:
           done
       - name: Generate project
         run: xcodegen generate
-      - name: Reset this instance's simulator
-        # Shutdown + erase our per-instance device (never `all`) so every run
-        # starts with fresh app state — see ios-ui-suite for the full rationale
-        # (dirty-state artifact documented in PR #76 triage).
-        run: |
-          xcrun simctl shutdown "iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
-          xcrun simctl erase "iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
-      - name: Ensure simulator
+      - name: Ensure fresh per-instance simulator
+        # UDID-addressed per-instance device with stale-device cleanup and a
+        # fresh-state erase — see ios-ui-suite for the full rationale.
         run: |
           DEVICE="iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}"
-          # -F fixed-string + available-runtime filter — see ios-ui-suite.
-          if ! xcrun simctl list devices available | grep -qF "${DEVICE} ("; then
+          xcrun simctl list devices | grep -F "${DEVICE} (" | grep -F "unavailable" | grep -Eo "[0-9A-F]{8}-[0-9A-F-]{27}" | while read -r stale; do
+            echo "deleting stale unavailable device $stale"
+            xcrun simctl delete "$stale" || true
+          done
+          UDID=$(xcrun simctl list devices available | grep -F "${DEVICE} (" | grep -Eo "[0-9A-F]{8}-[0-9A-F-]{27}" | head -1)
+          if [ -z "$UDID" ]; then
             RUNTIME=$(xcrun simctl list runtimes available | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
             [ -n "$RUNTIME" ] || { echo "::error::No iOS simulator runtime available on this runner — install one via Xcode"; exit 1; }
-            xcrun simctl create "${DEVICE}" "iPad Pro 13-inch (M5)" "$RUNTIME"
+            UDID=$(xcrun simctl create "${DEVICE}" "iPad Pro 13-inch (M5)" "$RUNTIME")
           fi
-          xcrun simctl list devices available | grep -F "${DEVICE}"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          xcrun simctl erase "$UDID"
       - name: Run full UI suite on iPad
         run: |
           set -o pipefail
           xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
-            -destination "platform=iOS Simulator,name=iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}" \
+            -destination "platform=iOS Simulator,id=${SIM_UDID}" \
             -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-ui-ipad" \
             -resultBundlePath ipad-ui-tests.xcresult \
             -retry-tests-on-failure \
