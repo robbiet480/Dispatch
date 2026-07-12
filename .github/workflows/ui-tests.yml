@@ -126,7 +126,13 @@ jobs:
         # get independent data containers (a test-isolation bonus).
         run: |
           set -o pipefail
-          xcodebuild test \
+          # NSUnbufferedIO=YES forces xcodebuild to flush stdout unbuffered so
+          # xcbeautify streams results live. Without it, a piped (non-TTY)
+          # xcodebuild is block-buffered and — under -parallel-testing-enabled,
+          # which batches each worker's output — the job log goes silent for
+          # minutes at a time before emitting a burst. Cosmetic, but it hides
+          # progress. See #79 (clone parallelism) for when the silence appeared.
+          NSUnbufferedIO=YES xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
             -destination "platform=iOS Simulator,id=${SIM_UDID}" \
@@ -205,7 +211,13 @@ jobs:
         # Clone-parallelism: same 2-worker cap + rationale as ios-ui-suite.
         run: |
           set -o pipefail
-          xcodebuild test \
+          # NSUnbufferedIO=YES forces xcodebuild to flush stdout unbuffered so
+          # xcbeautify streams results live. Without it, a piped (non-TTY)
+          # xcodebuild is block-buffered and — under -parallel-testing-enabled,
+          # which batches each worker's output — the job log goes silent for
+          # minutes at a time before emitting a burst. Cosmetic, but it hides
+          # progress. See #79 (clone parallelism) for when the silence appeared.
+          NSUnbufferedIO=YES xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
             -destination "platform=iOS Simulator,id=${SIM_UDID}" \
@@ -266,7 +278,13 @@ jobs:
       - name: Run Mac UI smoke (real dev signing)
         run: |
           set -o pipefail
-          xcodebuild test \
+          # NSUnbufferedIO=YES forces xcodebuild to flush stdout unbuffered so
+          # xcbeautify streams results live. Without it, a piped (non-TTY)
+          # xcodebuild is block-buffered and — under -parallel-testing-enabled,
+          # which batches each worker's output — the job log goes silent for
+          # minutes at a time before emitting a burst. Cosmetic, but it hides
+          # progress. See #79 (clone parallelism) for when the silence appeared.
+          NSUnbufferedIO=YES xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchMac \
             -destination 'platform=macOS' \
@@ -330,7 +348,13 @@ jobs:
       - name: Run watch UI tests
         run: |
           set -o pipefail
-          xcodebuild test \
+          # NSUnbufferedIO=YES forces xcodebuild to flush stdout unbuffered so
+          # xcbeautify streams results live. Without it, a piped (non-TTY)
+          # xcodebuild is block-buffered and — under -parallel-testing-enabled,
+          # which batches each worker's output — the job log goes silent for
+          # minutes at a time before emitting a burst. Cosmetic, but it hides
+          # progress. See #79 (clone parallelism) for when the silence appeared.
+          NSUnbufferedIO=YES xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchWatch \
             -destination "platform=watchOS Simulator,id=$WATCH_SIM_UDID" \
