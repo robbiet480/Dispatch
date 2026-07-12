@@ -11,78 +11,81 @@ truncates anything over the cap, so check the length after editing.*
 
 ```
 Dispatch is a self-tracking app: it prompts the user a few times a day
-with their own short questionnaire and attaches sensor context to each
-answer. No account or sign-in exists; no demo credentials are needed.
+with their own questionnaire and attaches sensor context to each answer.
+No account or sign-in exists; no demo credentials are needed. Universal
+app (iPhone, iPad, Apple Watch, Mac) synced through the user's iCloud;
+the Mac only reviews and manages (no sensors, no prompts).
 
-QUICK DEMO PATH: complete onboarding (every permission is asked in
-context and can be denied; the app still works), tap REPORT, answer,
-tap DONE — the first survey page lists the sensors being captured.
-After 2-3 reports the home screen fills with charts. Settings → Data
-has export (JSON/CSV), automatic backups, and Delete All Data.
+QUICK DEMO PATH: finish onboarding (permissions asked in context,
+deniable), tap REPORT, answer, tap DONE. Settings → Data has export
+(JSON/CSV), backups, and Delete All Data.
 
 PERMISSIONS, ONE BY ONE
-- Notifications: the core mechanic — randomly timed survey prompts.
-  Optional "nag" re-reminders use Time Sensitive notifications.
-- Location (When in Use): stamps the report location and fetches
-  weather via Apple's WeatherKit.
-- Location (ALWAYS — requested ONLY in one place): Settings → Prompt
-  Groups → New Group → "When I arrive somewhere", which uses Apple's
-  power-efficient CLVisit monitoring. Asked contextually at that
-  moment, never at onboarding; if declined, only that group type is
-  unavailable. Purpose string states this scope.
-- Health (read): steps, flights, heart rate, HRV, resting HR, sleep,
-  workouts, caffeine, Activity rings — a snapshot per report for the
-  user's own review. Displayed only; no advertising, no third parties
-  (no analytics, no SDKs, no server of ours).
-- Health medications (separate per-object authorization, its own
-  explanation step): shows dose events the user already logged in
-  Health. No medical advice is given.
-- Health (write): State of Mind only, for questions the user marks to
-  log mood.
-- Microphone: sampled to a single decibel number per report; no audio
-  is ever recorded or stored.
+- Notifications: randomly timed survey prompts (the core mechanic);
+  "nag" re-reminders are Time Sensitive notifications.
+- Location (When in Use): stamps the report location (with speed,
+  heading, altitude) and fetches weather via WeatherKit.
+- Location (Always): asked contextually only when a prompt group uses a
+  location trigger — arriving somewhere new (CLVisit), or entering /
+  leaving a picked place or iBeacon (CLMonitor). Never at onboarding. On
+  Mac, used once for "Use current location" when setting up a place.
+- Calendar (full access): read only to fire a group when a matching
+  event ends; event details never leave the device.
+- Health (read): steps, heart rate, HRV, sleep, workouts, Activity rings
+  — a per-report snapshot, displayed only.
+- Health medications (separate per-object authorization, its own step):
+  shows dose events the user already logged. No medical advice.
+- Health (write): State of Mind only, for questions marked to log mood.
+- Media & Apple Music: reads the currently-playing song, artist, and
+  album; never any audio.
+- Microphone: sampled to a single decibel number per report; no audio is
+  recorded or stored.
 - Photos: counts photos taken since the last report; images are never
-  read, copied, or uploaded.
+  read or uploaded.
 - Motion & Fitness: stairs descended, to pair with Health's flights.
 - Face ID: optional app lock.
-- Focus status: whether a Focus was active at filing; an optional
-  Focus Filter can mute chosen prompt groups.
-- Contacts (OPTIONAL, default off; asked only at Settings → Sensors →
-  "Suggest from Contacts"): matches names on device for name/photo
-  chips. Matching and the link cache are device-local; photos are
-  live-fetched, never stored; nothing from Contacts leaves the device.
-- Local Network: only if the opt-in webhook is configured; plain HTTP
-  is limited to local-network hosts.
+- Focus status: whether a Focus was active at filing; an optional Focus
+  Filter can mute chosen prompt groups.
+- Contacts (OPTIONAL, default off; Settings → Sensors → "Suggest from
+  Contacts"): matches names on device for chips; the link cache is
+  device-local, photos live-fetched, never stored.
+- Local Network: only if the opt-in webhook is configured; plain HTTP is
+  limited to local-network hosts.
+
+SPOTIFY (optional, opt-in)
+Settings → Sensors → Spotify → Connect runs a Spotify OAuth
+(app-remote-control scope) via Spotify's official App Remote SDK. A
+connected report can note the currently-playing track; the app stores
+only a Keychain access token and reads now-playing. No data goes to us,
+an ad network, or a data broker. Disconnect deletes the token.
 
 ICLOUD
-Data syncs via SwiftData's CloudKit mirroring to the user's own
-private CloudKit database (Settings → Data → iCloud turns it off).
-Automatic backups write to the local Files app and, optionally, the
-user's own iCloud Drive. Delete All Data propagates erasure to iCloud.
-No data is ever accessible to the developer or any third party.
+Data syncs via SwiftData's CloudKit mirroring to the user's own private
+CloudKit database (Settings → Data → iCloud turns it off). Backups write
+to the Files app and optionally the user's iCloud Drive. Delete All Data
+propagates erasure to iCloud. No synced data reaches the developer.
 
 BACKGROUND MODES
-remote-notification only (CloudKit silent pushes). Workout-end and
-visit-arrival triggers use HealthKit background delivery and CLVisit
-relaunches (no location background mode).
+remote-notification only (CloudKit silent pushes). Trigger groups relaunch
+via HealthKit background delivery, EventKit, CLVisit, and CLMonitor — no
+location background mode.
 
 WEBHOOKS (opt-in, user-directed)
-Off by default; sends the user's own report JSON from the device to
-the single endpoint they entered. We operate no server and receive
-nothing. HTTPS required for non-local endpoints; optional HMAC signing
-and AES-256-GCM encryption via OS CryptoKit (consistent with
-ITSAppUsesNonExemptEncryption = NO).
+Off by default; sends the user's report JSON to the one endpoint they
+entered; we run no server and receive nothing. HTTPS is required for
+non-local endpoints; optional HMAC signing and AES-256-GCM encryption via
+OS CryptoKit (ITSAppUsesNonExemptEncryption = NO).
 
 COMMUNITY CATALOG (user-generated content)
-Settings → Questions → Catalog browses shared question sets from a
-public CloudKit database. Submissions contain only question text, are
-held for moderation before appearing, and can be reported/removed.
+Settings → Questions → Catalog browses shared question sets (public
+CloudKit DB). Submissions are question text only, held for moderation
+before appearing, and can be reported/removed.
 
 ORIGIN
-Original, open-source (MIT) implementation inspired by Reporter
-(Nicholas Felton, 2014, discontinued). No original Reporter code,
-assets, or branding; imports Reporter's documented JSON export so
-former users keep their history. Source: github.com/robbiet480/Dispatch
+Original, open-source (MIT) app inspired by Reporter (Nicholas Felton,
+2014, discontinued). No original Reporter code/assets/branding; imports
+Reporter's JSON export so users keep their history. Source:
+github.com/robbiet480/Dispatch
 ```
 
 ## Internal reminders (do not paste)

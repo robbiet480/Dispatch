@@ -1,7 +1,8 @@
 # Dispatch Privacy Policy
 
-*Effective 2026-07-09. Applies to the Dispatch iOS app (bundle
-`io.robbie.Dispatch`), published by Robbie Trencheny.*
+*Effective 2026-07-12. Applies to the Dispatch apps for iOS, iPadOS,
+watchOS, and macOS (bundle `io.robbie.Dispatch`), published by Robbie
+Trencheny.*
 
 Dispatch is a self-tracking app. Your data is the entire point of the
 app, so this policy is blunt about exactly where it lives.
@@ -11,11 +12,13 @@ app, so this policy is blunt about exactly where it lives.
 - Everything you record stays **on your device** and, if you leave
   iCloud Sync on (it is on by default), in **your own private iCloud
   database**. There is no Dispatch server.
-- **No analytics, no ads, no tracking, no third-party SDKs.** The app
-  makes no network connections except to Apple services (iCloud,
-  Apple's weather service, push notifications), the shared community
-  catalog (only if you explicitly submit a question set), and — only
-  if you configure one — a webhook endpoint you choose yourself.
+- **No analytics, no ads, no tracking.** The app makes no network
+  connections except to Apple services (iCloud, Apple's weather
+  service, push notifications), the shared community catalog (only if
+  you explicitly submit a question set), a webhook endpoint you choose
+  yourself (only if you configure one), and Spotify (only if you tap
+  "Connect Spotify," to read what you're currently playing). Dispatch
+  uses no analytics, advertising, tracking, or data-broker SDKs.
 - **No account.** Nothing to sign up for; we never see your email or
   name.
 - You can **export** everything (JSON/CSV), and **Delete All Data**
@@ -29,7 +32,8 @@ context you have granted access to:
 
 - **Answers** — your responses to your questions, including free-text
   notes and the people/things/places you type.
-- **Location** — coordinates and a reverse-geocoded place name at the
+- **Location** — coordinates, a reverse-geocoded place name, and —
+  when available — your speed, heading, course, and altitude at the
   moment of the report (if you allow location access).
 - **Health data** — snapshot readings from Apple Health at the moment
   of the report: steps, flights climbed, heart rate, HRV, resting
@@ -40,14 +44,17 @@ context you have granted access to:
   Mind entries to Apple Health.
 - **Weather** — current conditions fetched from Apple's weather
   service (see below).
+- **Now playing** — the title, artist, and album of what you're
+  listening to when you file a report, read from Apple Music or, if
+  you connect it, Spotify (see below). No audio is ever captured.
 - **Ambient sound level** — a single decibel number. The microphone is
   sampled for loudness only; **no audio is ever recorded or stored**.
 - **Photo activity** — a count of photos taken since your last report
   and basic metadata (dimensions, timestamps, location) of those
   photos. The photos themselves are never copied or uploaded.
-- **Device context** — battery level, connectivity type, altitude,
-  stairs descended (motion coprocessor), and whether a Focus was
-  active (with the name you gave the Focus filter).
+- **Device context** — battery level, connectivity type, stairs
+  descended (motion coprocessor), and whether a Focus was active (with
+  the name you gave the Focus filter).
 
 All of this is stored in a local database on your device.
 
@@ -136,12 +143,29 @@ server, your own service, anything. Plainly:
   hosts, private-range addresses). Choosing an endpoint — and securing
   the transport and storage behind it — is your responsibility.
 
+## Spotify (optional, off by default)
+
+If you connect Spotify (Settings → Sensors → Spotify → Connect),
+Dispatch reads only your currently-playing track (title, artist,
+album) to note it on a report, using Spotify's official App Remote
+SDK. Authorization uses the `app-remote-control` scope; Dispatch
+receives only an access token, stored in your device Keychain, never
+your Spotify email or profile. Dispatch never sends your data to any
+advertising network or data broker (Spotify's Developer Terms prohibit
+this, and Dispatch doesn't). Spotify's own handling of your account
+and listening data is covered by Spotify's privacy policy. Disconnect
+any time in Settings, which deletes the token.
+
 ## What Dispatch does NOT do
 
 - No analytics or telemetry of any kind. Not even crash reporting
   beyond Apple's own opt-in system diagnostics.
 - No advertising, no tracking, no fingerprinting, no data sales.
-- No third-party services or SDKs. The dependency list is empty.
+- No analytics, advertising, tracking, or fingerprinting SDKs. The one
+  third-party SDK in the app is Spotify's App Remote SDK, used solely
+  to read your current track and only if you opt in by connecting
+  Spotify (see "Spotify," above) — never for analytics, advertising,
+  or tracking.
 - No accounts. Contacts are read only if you turn on the optional
   suggestions feature above (off by default), and even then nothing
   from your contact book leaves your device.

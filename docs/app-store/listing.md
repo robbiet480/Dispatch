@@ -33,11 +33,18 @@ enough of them and a picture of your life emerges that no
 end-of-day journal can match, because it was sampled while it
 happened.
 
+Dispatch is a universal app: file reports from your iPhone or Apple
+Watch, and review, chart, and manage everything on iPad and Mac — all
+synced through your own iCloud.
+
 Each report can capture, with your permission:
-• Where you are, and the weather there
+• Where you are — with your speed, heading, and altitude — and the
+  weather there
 • Apple Health context: steps, flights, heart rate, HRV, sleep,
   workouts, caffeine, Activity rings — and, if you choose, the
   medications you logged in the Health app
+• What's playing: the song, artist, and album from Apple Music, or
+  from Spotify if you connect it (never any audio)
 • Ambient loudness as a single decibel number (nothing is recorded)
 • Photos taken since your last report (a count, never the photos)
 • Battery, connectivity, and which Focus was on
@@ -54,10 +61,13 @@ stays on your device; nothing from Contacts is uploaded or synced.
 
 Prompting is flexible: a global random schedule with quiet hours,
 plus prompt groups that fire on their own schedule — every few hours,
-at fixed times, when a workout ends, or when you arrive somewhere
-(using power-efficient visit detection; only if you set it up).
-Focus filters mute the groups you choose while a Focus is on. Nag
-reminders can re-ping you until you answer.
+at fixed times, when a workout ends, when a matching calendar event
+ends, when you arrive at or leave a place you choose (by name,
+address, or current location), when you come in range of an iBeacon,
+or when you arrive somewhere new (power-efficient visit detection).
+Set up only the triggers you want. Focus filters mute the groups you
+choose while a Focus is on. Nag reminders can re-ping you until you
+answer.
 
 Your data works for you:
 • Charts of every answer over time, plus an insights view that
@@ -65,21 +75,23 @@ Your data works for you:
 • A weekly digest written on device with Apple Intelligence, with a
   built-in fallback summary
 • Full-text and Spotlight search
-• Home and lock screen widgets, and a Control Center button that
-  starts a report in one tap
+• Home and lock screen widgets, a Control Center button that starts
+  a report in one tap, and Siri Shortcuts and App Intents to file a
+  report, log an answer, or check your streak hands-free
 • Export everything as JSON or CSV, automatic daily backups (Files
   app and your own iCloud Drive), and one-button Delete All Data
 • Optional webhooks: send each report's JSON to a URL you choose —
   your home-automation server, your own service — with signing and
   encryption options
 
-Privacy, plainly: there is no server, no account, no analytics, and
-no third-party code. Data stays on your device and — if you leave
-iCloud Sync and iCloud Drive backups on — in your own private iCloud
-storage, which includes the Health readings attached to your reports.
-Turn those off and nothing leaves the device unless you point a
-webhook somewhere yourself. Full policy inside the app and at the
-privacy policy link.
+Privacy, plainly: there is no server, no account, and no analytics or
+tracking. The only third-party code is Spotify's official SDK — used
+just to read your current track, and only if you connect Spotify
+yourself. Data stays on your device and — if you leave iCloud Sync and
+iCloud Drive backups on — in your own private iCloud storage, which
+includes the Health readings attached to your reports. Turn those off
+and nothing leaves the device unless you point a webhook somewhere
+yourself. Full policy inside the app and at the privacy policy link.
 
 Dispatch is an independent, open-source reimplementation inspired by
 Reporter, the discontinued self-tracking app — original code and
@@ -107,13 +119,24 @@ analytics.
 ## What's New — 1.0 draft
 
 ```
-First App Store release. Random survey prompts, prompt groups
-(timed, workout-end, and arrival triggers), Focus filters, Apple
-Health capture including medications and State of Mind, charts,
-insights, a weekly on-device digest, widgets and a Control Center
-button, people management with optional contact suggestions, iCloud
-sync, JSON/CSV export, automatic backups to Files and iCloud Drive,
-webhooks, and Reporter import.
+First App Store release. Dispatch prompts you a few times a day and
+attaches the moment's context to each answer.
+
+• Runs on iPhone, iPad, Apple Watch, and Mac, synced through your own
+  iCloud
+• Random survey prompts with quiet hours, plus prompt groups that fire
+  every few hours, at set times, when a workout ends, when a calendar
+  event ends, when you arrive at or leave a place, or near an iBeacon
+• Captures location (with speed, heading, altitude) and weather, Apple
+  Health (including medications and State of Mind), what's playing
+  (Apple Music, or Spotify if you connect it), ambient sound level,
+  photo counts, battery, connectivity, and Focus
+• Charts, an insights view, and a weekly on-device digest
+• Home and lock screen widgets, a Control Center button, and Siri
+  Shortcuts / App Intents to file a report or log an answer hands-free
+• People management with optional Contacts suggestions
+• JSON/CSV export, automatic backups to Files and iCloud Drive,
+  optional signed webhooks, and one-tap Reporter import
 ```
 
 ## Age rating questionnaire
