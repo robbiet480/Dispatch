@@ -16,8 +16,10 @@ Two minis = four lanes + host redundancy.
 
 ## Security model (public repo!)
 
-- Every self-hosted job carries a **same-repo-PR gate** (`github.event.pull_request.head.repo.full_name == github.repository`)
-  so fork-PR code never executes on these machines. Repo settings additionally
+- Every self-hosted job carries a **same-repo-PR gate**
+  (`(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)`)
+  so fork-PR code never executes on these machines while non-PR events
+  (push, schedule, dispatch) still run. Repo settings additionally
   require maintainer approval for all external contributors' workflow runs.
 - Repo Actions permissions: GitHub-authored actions only, SHA-pinned.
 - FileVault stays ON (the signing identity lives here). The boot-unlock
