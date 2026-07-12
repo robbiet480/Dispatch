@@ -100,6 +100,10 @@ extension SensorKind {
         // Media is phone-only in v1 (plan 26) — named here only because the
         // switch is exhaustive; no watch provider exists for it.
         case .media: "Media"
+        // Plan-44 metadata toggles are phone-only too (not in
+        // watchCapableKinds) — named for exhaustiveness only.
+        case .motionFitness: "Motion & Fitness"
+        case .deviceContext: "Device Context"
         }
     }
 }
