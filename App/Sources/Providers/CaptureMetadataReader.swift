@@ -35,9 +35,15 @@ enum CaptureMetadataReader {
     private static func deviceState() -> CaptureMetadata {
         var device = CaptureMetadata()
         device.isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
-        let scene = UIApplication.shared.connectedScenes
+        // Prefer the foreground-active scene, then foreground-inactive, before
+        // falling back to any connected scene — a bare `.first` can land on a
+        // backgrounded scene in multi-window (iPad) setups and stamp the wrong
+        // window's brightness/appearance (Copilot review catch on PR #72).
+        let windowScenes = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .first
+        let scene = windowScenes.first { $0.activationState == .foregroundActive }
+            ?? windowScenes.first { $0.activationState == .foregroundInactive }
+            ?? windowScenes.first
         device.screenBrightness = scene.flatMap {
             CaptureMetadataFormatting.normalizedBrightness($0.screen.brightness)
         }

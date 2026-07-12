@@ -25,38 +25,49 @@ public enum ContextMetadataDetail {
         var rows: [Row] = []
         // Every captured field renders — accuracies fold into their value's
         // row as a "(±…)" suffix rather than spawning rows of their own.
-        if let mps = snapshot.speed {
+        //
+        // Re-validate every CLLocation-derived value through MotionFormatting
+        // at DISPLAY time as a backstop: the capture path already degrades
+        // CoreLocation's `-1` invalid sentinels to nil before storage, but a
+        // V2 import (or any externally-authored report JSON) can carry raw
+        // negatives — validating here keeps "-1" from surfacing as negative
+        // mph / degrees / accuracy (Copilot review catch on PR #72).
+        if let mps = snapshot.speed.flatMap(MotionFormatting.validSpeed) {
             var value = String(format: "%.0f mph", MotionFormatting.mph(fromMPS: mps))
-            if let accuracy = snapshot.speedAccuracy {
+            if let accuracy = snapshot.speedAccuracy.flatMap(MotionFormatting.validAccuracy) {
                 value += String(format: " (±%.0f mph)", MotionFormatting.mph(fromMPS: accuracy))
             }
             rows.append(Row(icon: "speedometer", label: "Speed", value: value))
         }
-        if let degrees = snapshot.course {
+        if let degrees = snapshot.course.flatMap(MotionFormatting.validCourse) {
             rows.append(Row(icon: "location.north.line.fill", label: "Course",
-                            value: degreesValue(degrees, accuracy: snapshot.courseAccuracy)))
+                            value: degreesValue(degrees,
+                                accuracy: snapshot.courseAccuracy.flatMap(MotionFormatting.validAccuracy))))
         }
         // Prefer true (geographic) heading; fall back to magnetic — labeled,
         // so the two heading flavors stay distinguishable — when declination
         // was unavailable at capture.
-        if let degrees = snapshot.trueHeading {
+        let headingAccuracy = snapshot.headingAccuracy.flatMap(MotionFormatting.validAccuracy)
+        if let degrees = snapshot.trueHeading.flatMap(MotionFormatting.validHeading) {
             rows.append(Row(icon: "location.north.circle.fill", label: "Heading",
-                            value: degreesValue(degrees, accuracy: snapshot.headingAccuracy)))
-        } else if let degrees = snapshot.magneticHeading {
+                            value: degreesValue(degrees, accuracy: headingAccuracy)))
+        } else if let degrees = snapshot.magneticHeading.flatMap(MotionFormatting.validHeading) {
             rows.append(Row(icon: "location.north.circle.fill", label: "Heading",
-                            value: degreesValue(degrees, accuracy: snapshot.headingAccuracy)
+                            value: degreesValue(degrees, accuracy: headingAccuracy)
                                 + " magnetic"))
         }
         if let floor = snapshot.floorLevel {
             rows.append(Row(icon: "building", label: "Floor", value: String(floor)))
         }
-        if let accuracy = snapshot.horizontalAccuracy {
-            var value = String(format: "±%.0f m", accuracy)
-            if let vertical = snapshot.verticalAccuracy {
+        let horizontal = snapshot.horizontalAccuracy.flatMap(MotionFormatting.validAccuracy)
+        let vertical = snapshot.verticalAccuracy.flatMap(MotionFormatting.validAccuracy)
+        if let horizontal {
+            var value = String(format: "±%.0f m", horizontal)
+            if let vertical {
                 value += String(format: " · ±%.0f m vertical", vertical)
             }
             rows.append(Row(icon: "scope", label: "Accuracy", value: value))
-        } else if let vertical = snapshot.verticalAccuracy {
+        } else if let vertical {
             rows.append(Row(icon: "scope", label: "Accuracy",
                             value: String(format: "±%.0f m vertical", vertical)))
         }
