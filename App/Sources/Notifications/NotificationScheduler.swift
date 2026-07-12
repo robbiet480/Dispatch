@@ -124,11 +124,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Setup
 
-    /// Registers the DISPATCH_PROMPT category with quick-answer actions
-    /// drawn from the first enabled regular-kind Yes/No question (falling
-    /// back to generic Yes/No titles if none exists yet) plus "Snooze 15m".
-    /// Safe to call repeatedly; UNUserNotificationCenter replaces the
-    /// category definition each time.
+    /// Registers the DISPATCH_PROMPT category. When an enabled regular-kind
+    /// Yes/No question exists, the category carries its Yes/No quick-answer
+    /// actions (titled from the question's choices) plus "Snooze 15m";
+    /// otherwise it carries ONLY "Snooze 15m" so an open-text prompt never
+    /// shows Yes/No buttons that would file nothing (see
+    /// PromptNotificationActions). Safe to call repeatedly;
+    /// UNUserNotificationCenter replaces the category definition each time.
     func registerCategory() {
         let context = ModelContext(container)
         registerCategory(question: Self.firstEnabledYesNoQuestion(in: context))
@@ -142,26 +144,31 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         } else {
             noTitle = "No"
         }
+        let titles = [
+            NotificationIdentifiers.answerYesAction: yesTitle,
+            NotificationIdentifiers.answerNoAction: noTitle,
+            NotificationIdentifiers.snoozeAction: "Snooze 15m",
+        ]
 
-        let yesAction = UNNotificationAction(
-            identifier: NotificationIdentifiers.answerYesAction,
-            title: yesTitle,
-            options: []
-        )
-        let noAction = UNNotificationAction(
-            identifier: NotificationIdentifiers.answerNoAction,
-            title: noTitle,
-            options: []
-        )
-        let snoozeAction = UNNotificationAction(
-            identifier: NotificationIdentifiers.snoozeAction,
-            title: "Snooze 15m",
-            options: []
-        )
+        // Yes/No quick-answer actions are attached ONLY when an eligible
+        // Yes/No question exists (kit-tested: PromptNotificationActions).
+        // An open-text prompt (nil question → generic body) offers Snooze
+        // alone, so tapping it opens the app to answer instead of showing
+        // Yes/No buttons that file nothing — the TestFlight bug where those
+        // buttons appeared (iPhone + forwarded to the watch) and no-op'd.
+        let actions = PromptNotificationActions
+            .identifiers(hasYesNoQuestion: question != nil)
+            .map { identifier in
+                UNNotificationAction(
+                    identifier: identifier,
+                    title: titles[identifier] ?? identifier,
+                    options: []
+                )
+            }
 
         let category = UNNotificationCategory(
             identifier: NotificationIdentifiers.category,
-            actions: [yesAction, noAction, snoozeAction],
+            actions: actions,
             intentIdentifiers: [],
             options: []
         )
