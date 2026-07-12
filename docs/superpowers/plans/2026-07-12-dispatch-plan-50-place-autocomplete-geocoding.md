@@ -128,12 +128,11 @@ the locked-schedule preservation path unchanged.
 
 - **iOS editor**, picking **When I arrive at / leave a place**
   (`group-schedule-kind`) shows a **search field** (`group-place-search`) with
-  placeholder "Search for a place or address". Typing shows a results list
-  (`group-place-results`) of tappable suggestions (`group-place-result`);
-  tapping one fills a confirmation row (`group-place-selected`) reading the
-  resolved place name + coordinate, and Save becomes enabled. The radius control
-  (`group-place-radius`, floored at 100 m) and the direction/delay/cancel
-  controls remain.
+  placeholder "Search for a place or address". Typing shows tappable suggestion
+  rows (`group-place-result`); tapping one fills a confirmation row
+  (`group-place-selected`) reading the resolved place name + coordinate, and
+  Save becomes enabled. The radius control (`group-place-radius`, floored at
+  100 m) and the direction/delay/cancel controls remain.
 - **iOS advanced fallback:** a disclosure "Enter coordinates manually"
   (`group-place-manual`) reveals the latitude (`group-place-latitude`) and
   longitude (`group-place-longitude`) fields; entering a valid pair also enables
@@ -143,12 +142,13 @@ the locked-schedule preservation path unchanged.
   posture.
 - **macOS editor:** the schedule picker (`mac-group-schedule-kind`) now offers
   **When I arrive at / leave a place (iPhone)** for a NEW group (no longer
-  view-only). It shows a search field (`mac-group-place-search`), a results list
-  (`mac-group-place-results`), a selected-place confirmation
-  (`mac-group-place-selected`), radius, and the direction/delay/cancel controls;
-  choosing a result and saving creates a real place group. **Beacon** stays
-  offered only when the group already is one (`mac-group-trigger-note` preserved
-  read-only).
+  view-only). It shows a search field (`mac-group-place-search`), suggestion
+  rows (`mac-group-place-result`), a selected-place confirmation
+  (`mac-group-place-selected`), radius (`mac-group-place-radius`), and the
+  direction/delay/cancel controls (`mac-group-monitor-direction` /
+  `-delay` / `-cancel`); choosing a result and saving creates a real place
+  group (Save gated until a coordinate is chosen). **Beacon** stays offered only
+  when the group already is one (`mac-group-trigger-note` preserved read-only).
 
 ## Global Constraints
 
@@ -226,4 +226,50 @@ the locked-schedule preservation path unchanged.
   `DispatchApp` + `DispatchMac` build. Self-review: no kit MapKit import, no
   entitlement diff, no schema change.
 - [ ] Completion note; open the PR (plan + impl). Do NOT merge / auto-merge.
+
+---
+
+## Completion note (2026-07-12)
+
+Shipped on branch `plan-50-place-autocomplete` in three commits after the plan
+doc: the shared `Shared/Search/PlaceSearch.swift` wrapper + `project.yml` wiring
++ 7 unit tests; the iOS editor search flow + UI-test rewrite; the Mac editor
+place creation + view-only lift. Each commit builds green on its own — no
+intentionally-red intermediate this time (the shared component compiles
+standalone).
+
+**Where the shared component lives / how it's wired:**
+`Shared/Search/PlaceSearch.swift`, added to the `DispatchApp` AND `DispatchMac`
+target `sources` in `project.yml` (the `Shared/Providers` dual-membership
+pattern) and to the hostless `DispatchAppTests` bundle for unit testing (with a
+`DispatchKit` package dependency for `MonitorDelay`). DispatchKit stays
+MapKit-free (grep-verified).
+
+**Decisions the owner should confirm:**
+1. **Manual coordinate entry kept (iOS only)** as a collapsed advanced
+   `DisclosureGroup` (`group-place-manual`) preserving the `group-place-latitude`
+   / `-longitude` / `-name` ids. The Mac editor is search-only.
+2. **"Use my current location" deferred** on BOTH platforms: the Mac is
+   sandboxed with no location entitlement (adding one is a signing change this
+   plan forbids), and the iOS affordance adds a one-shot fix path with its own
+   auth edges. The issue lists it as optional; the search-by-name flow covers
+   the "here" case.
+3. **Beacons stay Mac-view-only** (`isTriggerOnly` narrowed to beacon-only) per
+   the owner note / issue #84.
+
+**Verification (exact):** `swift test` — **817 kit tests / 13 suites** pass.
+`DispatchAppTests` — **12 tests** pass (5 OptionBlockLayout + 7
+PlaceSearchModel). `DispatchApp` (iOS sim) and `DispatchMac` (platform=macOS)
+both **BUILD SUCCEEDED**. The iOS UI test
+`testCreatePlaceTriggerGroupAppearsInList` (rewritten to drive the search flow
+under `--stub-place-search`) **passed** on the simulator. Mac UI test execution
+is deferred to CI (the wedged local `io.robbie.Dispatch` process blocks
+launching the Mac app locally).
+
+**No entitlement / plist / schema diff:** the `PlaceTrigger` /
+`MonitorPlaceRegion` model, the v2 format, and the `MonitorObserver` are
+untouched — this is purely a picker/UX change over the existing save path. The
+real MapKit search path (non-`--stub-place-search`) is exercised on device;
+locally, search resolution runs against Apple's servers and is not asserted in
+the deterministic suites.
 </content>
