@@ -163,17 +163,24 @@ jobs:
   mac-ui-smoke:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: macos-26
+    # Self-hosted M4 mini: the Mac app carries app-sandbox + iCloud entitlements
+    # that launchd refuses to spawn under ad-hoc signing (Runningboard error 5).
+    # Hosted runners can't launch it at all; a real Apple Development identity +
+    # the team provisioning profile (in the mini's login keychain, reached via a
+    # GUI-session LaunchAgent) sign it so it launches. See docs/testing-tiers.md.
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Homebrew on PATH
+        # LaunchAgent PATH is minimal; brew tools (xcodegen/xcbeautify) live here.
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
       - name: Select Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-      - name: Install XcodeGen + xcbeautify
-        run: brew install xcodegen xcbeautify
+        # Runner defaults to CommandLineTools; point at full Xcode without sudo.
+        run: echo "DEVELOPER_DIR=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" >> "$GITHUB_ENV"
       - name: Generate project
         run: xcodegen generate
-      - name: Run Mac UI smoke
+      - name: Run Mac UI smoke (real dev signing)
         run: |
           set -o pipefail
           xcodebuild test \
@@ -181,7 +188,9 @@ jobs:
             -scheme DispatchMac \
             -destination 'platform=macOS' \
             -resultBundlePath mac-smoke.xcresult \
-            CODE_SIGN_IDENTITY=- \
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=UTQFCBPQRF \
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
       - name: Upload result bundle on failure
         if: failure()
