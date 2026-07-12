@@ -20,12 +20,13 @@ jobs:
   # docs-only PRs via `if:`; skipped jobs SATISFY required status checks, so
   # no companion no-op workflow is needed (and unlike paths filters, a mixed
   # code+docs PR can never produce duplicate same-named check runs).
+  # Trivial git-diff — stays on hosted ubuntu-latest, no reason to burn a mini lane.
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
       - id: diff
@@ -44,49 +45,77 @@ jobs:
 
   ios-ui-suite:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: macos-26
+    # Self-hosted runners must never execute fork-PR code (the minis hold the
+    # Apple Development signing identity). Same-repo PRs, schedule, and
+    # workflow_dispatch only — fork PRs skip (repo policy additionally requires
+    # maintainer approval before any external contributor's workflow runs).
+    if: >-
+      needs.changes.outputs.code == 'true' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    # Self-hosted M4 mini pool. Two runner instances share one CoreSimulator
+    # service, so each job uses a per-instance simulator (see RUNNER_SIM_SUFFIX)
+    # to avoid concurrent runs erasing/booting each other's device.
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Per-instance simulator suffix
+        # The `runner` context isn't available in job-level `env:`, so derive the
+        # per-instance suffix from the built-in $RUNNER_NAME (= dispatch-a1/a2/…)
+        # here. Two instances share one CoreSimulator service; a distinct device
+        # name per instance keeps concurrent runs from clobbering each other.
+        run: echo "RUNNER_SIM_SUFFIX=${RUNNER_NAME}" >> "$GITHUB_ENV"
+      - name: Homebrew on PATH
+        # LaunchAgent PATH is minimal; brew tools (xcodegen/xcbeautify) live here.
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
       - name: Select Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-      - name: Ensure iOS platform
-        # Same rationale + retry as ci.yml's build-app job.
+        # Runner defaults to CommandLineTools; point at full Xcode without sudo.
         run: |
-          if xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator; then
-            echo "iOS simulator SDK pre-installed; skipping download"
-            exit 0
-          fi
-          for i in 1 2 3; do
-            sudo xcodebuild -downloadPlatform iOS && exit 0
-            echo "downloadPlatform attempt $i failed; retrying in 30s"
-            sleep 30
+          # Fail fast if no Xcode is installed — a silent empty glob would
+          # otherwise write a bogus DEVELOPER_DIR and fail confusingly later.
+          XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE_APP" ] || { echo "::error::No Xcode found in /Applications on this runner"; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Verify runner toolchain
+        # xcodegen/xcbeautify are pre-installed on the minis (runner setup doc),
+        # not brewed per run; the iOS simulator SDK ships with Xcode, so no
+        # downloadPlatform step either. DerivedData persists on the runner's
+        # local disk between jobs (no cache) — outside the workspace, since
+        # checkout's default `git clean -ffdx` wipes in-workspace ignored dirs.
+        # Fail fast with a clear message if the runner was reprovisioned
+        # without the tools.
+        run: |
+          for tool in xcodegen xcbeautify; do
+            command -v "$tool" >/dev/null || { echo "::error::$tool missing on self-hosted runner — brew install it (see runner setup doc)"; exit 1; }
           done
-          echo "iOS platform download failed after 3 attempts"; exit 1
-      - name: Install XcodeGen + xcbeautify
-        run: brew install xcodegen xcbeautify
       - name: Generate project
         run: xcodegen generate
-      - name: Capture Xcode version for cache keys
-        id: xcode
-        run: echo "v=$(xcodebuild -version | tr '\n' '-' | tr -d ' ')" >> "$GITHUB_OUTPUT"
-      - name: Cache DerivedData
-        uses: actions/cache@v4
-        with:
-          path: DerivedData
-          key: dd-ui-${{ runner.os }}-${{ steps.xcode.outputs.v }}-${{ hashFiles('project.yml', 'Package.swift', 'App/**', 'AppUITests/**', 'Widgets/**', 'Sources/**', 'Shared/**') }}
-          restore-keys: |
-            dd-ui-${{ runner.os }}-${{ steps.xcode.outputs.v }}-
-      - name: Ensure simulator
-        # The suite pins iPhone 17 Pro (docs/testing-tiers.md). Create it if
-        # the image's default device set lacks one.
+      - name: Reset this instance's simulator
+        # Persistent runners REUSE simulators between jobs, so app state persists
+        # across runs (plan-38 throttle / plan-42 already-submitted artifacts —
+        # the dirty-state failure mode documented in PR #76 triage). Hosted
+        # runners always got factory-fresh sims; erasing restores fresh-state
+        # semantics. Only our per-instance device (never `all`) so we don't
+        # touch the simulator the OTHER concurrent instance is using — they
+        # share one CoreSimulator service. erase requires shutdown first; the
+        # device may not exist yet on a fresh runner — hence || true.
         run: |
-          if ! xcrun simctl list devices available | grep -q "iPhone 17 Pro ("; then
-            RUNTIME=$(xcrun simctl list runtimes | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
-            xcrun simctl create "iPhone 17 Pro" "iPhone 17 Pro" "$RUNTIME"
+          xcrun simctl shutdown "iPhone 17 Pro-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
+          xcrun simctl erase "iPhone 17 Pro-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
+      - name: Ensure simulator
+        # The suite pins iPhone 17 Pro (docs/testing-tiers.md). Use a per-instance
+        # device name so the two runner instances never collide on one device.
+        run: |
+          DEVICE="iPhone 17 Pro-${RUNNER_SIM_SUFFIX}"
+          # -F: fixed-string match — the runner-derived name must never be
+          # interpreted as a regex. Runtime pick skips unavailable runtimes.
+          if ! xcrun simctl list devices available | grep -qF "${DEVICE} ("; then
+            RUNTIME=$(xcrun simctl list runtimes available | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
+            [ -n "$RUNTIME" ] || { echo "::error::No iOS simulator runtime available on this runner — install one via Xcode"; exit 1; }
+            xcrun simctl create "${DEVICE}" "iPhone 17 Pro" "$RUNTIME"
           fi
-          xcrun simctl list devices available | grep "iPhone 17 Pro"
+          xcrun simctl list devices available | grep -F "${DEVICE}"
       - name: Run full UI suite
         # -retry-tests-on-failure absorbs the known swift-testing signal-11
         # runner flake (one retry, matching the local merge-gate convention).
@@ -95,14 +124,14 @@ jobs:
           xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-            -derivedDataPath DerivedData \
+            -destination "platform=iOS Simulator,name=iPhone 17 Pro-${RUNNER_SIM_SUFFIX}" \
+            -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-ui" \
             -resultBundlePath ui-tests.xcresult \
             -retry-tests-on-failure \
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
       - name: Upload result bundle on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ui-tests-xcresult
           path: ui-tests.xcresult
@@ -110,51 +139,74 @@ jobs:
 
   ipad-ui-suite:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # Fork-PR gate: same rationale as ios-ui-suite (self-hosted runners hold
+    # the signing identity; fork PRs must never execute here).
+    if: >-
+      needs.changes.outputs.code == 'true' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     # EXPERIMENTAL / non-blocking: the suite has only ever run on iPhone and
     # some tests encode compact-width assumptions (HomeParity, sheet vs
     # popover). Gathering pass/fail data first; promote to blocking once the
     # suite is triaged iPad-clean (then drop continue-on-error).
-    runs-on: macos-26
+    # Self-hosted M4 mini pool; per-instance simulator isolation via RUNNER_SIM_SUFFIX.
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
     timeout-minutes: 90
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Per-instance simulator suffix
+        # See ios-ui-suite: derive per-instance suffix from $RUNNER_NAME because
+        # the `runner` context is unavailable in job-level `env:`.
+        run: echo "RUNNER_SIM_SUFFIX=${RUNNER_NAME}" >> "$GITHUB_ENV"
+      - name: Homebrew on PATH
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
       - name: Select Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-      - name: Ensure iOS platform
         run: |
-          if xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator; then
-            exit 0
-          fi
-          for i in 1 2 3; do
-            sudo xcodebuild -downloadPlatform iOS && exit 0
-            sleep 30
+          # Fail fast if no Xcode is installed — a silent empty glob would
+          # otherwise write a bogus DEVELOPER_DIR and fail confusingly later.
+          XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE_APP" ] || { echo "::error::No Xcode found in /Applications on this runner"; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Verify runner toolchain
+        # Fail fast if the runner is missing pre-installed tools — see ios-ui-suite.
+        run: |
+          for tool in xcodegen xcbeautify; do
+            command -v "$tool" >/dev/null || { echo "::error::$tool missing on self-hosted runner — brew install it (see runner setup doc)"; exit 1; }
           done
-          exit 1
-      - name: Install XcodeGen + xcbeautify
-        run: brew install xcodegen xcbeautify
       - name: Generate project
         run: xcodegen generate
+      - name: Reset this instance's simulator
+        # Shutdown + erase our per-instance device (never `all`) so every run
+        # starts with fresh app state — see ios-ui-suite for the full rationale
+        # (dirty-state artifact documented in PR #76 triage).
+        run: |
+          xcrun simctl shutdown "iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
+          xcrun simctl erase "iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}" 2>/dev/null || true
       - name: Ensure simulator
         run: |
-          if ! xcrun simctl list devices available | grep -q "iPad Pro 13-inch (M5) ("; then
-            RUNTIME=$(xcrun simctl list runtimes | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
-            xcrun simctl create "iPad Pro 13-inch (M5)" "iPad Pro 13-inch (M5)" "$RUNTIME"
+          DEVICE="iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}"
+          # -F fixed-string + available-runtime filter — see ios-ui-suite.
+          if ! xcrun simctl list devices available | grep -qF "${DEVICE} ("; then
+            RUNTIME=$(xcrun simctl list runtimes available | grep -Eo "com.apple.CoreSimulator.SimRuntime.iOS[0-9-]+" | sort -V | tail -1)
+            [ -n "$RUNTIME" ] || { echo "::error::No iOS simulator runtime available on this runner — install one via Xcode"; exit 1; }
+            xcrun simctl create "${DEVICE}" "iPad Pro 13-inch (M5)" "$RUNTIME"
           fi
+          xcrun simctl list devices available | grep -F "${DEVICE}"
       - name: Run full UI suite on iPad
         run: |
           set -o pipefail
           xcodebuild test \
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
-            -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' \
+            -destination "platform=iOS Simulator,name=iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}" \
+            -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-ui-ipad" \
             -resultBundlePath ipad-ui-tests.xcresult \
             -retry-tests-on-failure \
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
       - name: Upload result bundle on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ipad-ui-tests-xcresult
           path: ipad-ui-tests.xcresult
@@ -178,13 +230,18 @@ jobs:
     runs-on: [self-hosted, macOS, dispatch-selfhosted]
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Homebrew on PATH
         # LaunchAgent PATH is minimal; brew tools (xcodegen/xcbeautify) live here.
         run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
       - name: Select Xcode
         # Runner defaults to CommandLineTools; point at full Xcode without sudo.
-        run: echo "DEVELOPER_DIR=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" >> "$GITHUB_ENV"
+        run: |
+          # Fail fast if no Xcode is installed — a silent empty glob would
+          # otherwise write a bogus DEVELOPER_DIR and fail confusingly later.
+          XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE_APP" ] || { echo "::error::No Xcode found in /Applications on this runner"; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
       - name: Verify runner toolchain
         # Tools are pre-installed on the minis (runner setup doc), not brewed per
         # run. Fail fast with a clear message if the runner was reprovisioned
@@ -202,6 +259,7 @@ jobs:
             -project Dispatch.xcodeproj \
             -scheme DispatchMac \
             -destination 'platform=macOS' \
+            -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-mac" \
             -resultBundlePath mac-smoke.xcresult \
             -allowProvisioningUpdates \
             CODE_SIGN_STYLE=Automatic \
@@ -209,7 +267,7 @@ jobs:
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
       - name: Upload result bundle on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mac-smoke-xcresult
           path: mac-smoke.xcresult
