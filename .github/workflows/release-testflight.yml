@@ -1,0 +1,172 @@
+# Release → TestFlight
+#
+# Archives Dispatch and uploads it to TestFlight (iOS AND macOS) whenever a
+# GitHub Release is *published*. This automates the manual
+# `scripts/upload-testflight.sh --mac <notes>` step.
+#
+# Trigger:   on a published Release (fires once per release), or manually via
+#            workflow_dispatch (pick a ref/tag and iOS-only vs iOS+Mac — use
+#            this for a dry run without cutting a real release).
+# Runner:    a SINGLE self-hosted M4 Mac mini instance (labels: self-hosted,
+#            macOS, dispatch-selfhosted) — the same pool the UI suites use.
+#            Serial archive+upload, not a matrix; a concurrency group keeps two
+#            releases from uploading at once.
+# Creds:     the App Store Connect API key (.p8 in
+#            ~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8) and the
+#            gitignored scripts/asc-config.local (ASC_KEY_ID / ASC_ISSUER_ID)
+#            already live ON the mini runners — that's where the manual
+#            upload-testflight.sh runs today. This workflow relies on those
+#            on-runner files (nothing secret is stored in this PUBLIC repo) and
+#            FAILS FAST with an actionable message if either is missing. The
+#            macOS lane also needs the "Dispatch macOS App Store" profile +
+#            "Apple Distribution" / "3rd Party Mac Developer Installer"
+#            identities in the mini's login keychain (see
+#            scripts/ExportOptionsUploadMac.plist + docs/selfhosted-runners.md).
+# Notes:     "What to Test" text is scripts/notes-build<N>.md (N =
+#            CURRENT_PROJECT_VERSION from project.yml) when that file is
+#            committed; otherwise the GitHub Release body is used.
+#
+# Manual dry run:
+#   Actions → "Release → TestFlight" → Run workflow → pick a tag/branch,
+#   optionally untick "Upload macOS too" for an iOS-only test.
+
+name: Release → TestFlight
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref/tag to archive (blank = the ref this run was launched from)"
+        required: false
+        default: ""
+      include_mac:
+        description: "Upload macOS too (iOS + Mac). Untick for iOS-only."
+        type: boolean
+        required: false
+        default: true
+
+# Serialize uploads: never let two releases archive/upload at once (a partial
+# TestFlight upload racing another confuses App Store Connect processing).
+# cancel-in-progress is false so an in-flight upload finishes rather than being
+# killed mid-archive — a queued run waits its turn.
+concurrency:
+  group: release-testflight
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    # Self-hosted runners must never execute fork-PR code (the minis hold the
+    # signing identity + ASC key). Neither `release` nor `workflow_dispatch` is
+    # a pull_request event, so this gate is always true here — kept for parity
+    # with the documented "every self-hosted job carries a same-repo-PR gate"
+    # invariant (docs/selfhosted-runners.md).
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    # Single self-hosted M4 mini instance (same pool as mac-ui-smoke). This is a
+    # serial archive+upload — one runner, no matrix.
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
+    timeout-minutes: 60
+    env:
+      # release: always include Mac. dispatch: honor the boolean input
+      # (workflow_dispatch delivers booleans as the strings "true"/"false").
+      INCLUDE_MAC: ${{ github.event_name == 'release' || github.event.inputs.include_mac == 'true' }}
+      # Empty on workflow_dispatch (no release payload); the notes step falls
+      # back cleanly when both this and the committed notes file are absent.
+      RELEASE_BODY: ${{ github.event.release.body }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # release → the published tag; workflow_dispatch → the provided ref,
+          # defaulting to the ref this run was launched from (github.ref).
+          ref: ${{ github.event.inputs.ref || github.event.release.tag_name || github.ref }}
+      - name: Homebrew on PATH
+        # LaunchAgent PATH is minimal; brew tools (xcodegen) live under
+        # /opt/homebrew/bin.
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+      - name: Select Xcode
+        # Runner defaults to CommandLineTools; point at full Xcode without sudo.
+        run: |
+          # Fail fast if no Xcode is installed — a silent empty glob would
+          # otherwise write a bogus DEVELOPER_DIR and fail confusingly later.
+          XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE_APP" ] || { echo "::error::No Xcode found in /Applications on this runner"; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Verify runner toolchain
+        # xcodegen is pre-installed on the minis (runner setup doc), not brewed
+        # per run; xcodebuild ships with Xcode. Fail fast with a clear message
+        # if the runner was reprovisioned without them.
+        run: |
+          for tool in xcodegen xcodebuild; do
+            command -v "$tool" >/dev/null || { echo "::error::$tool missing on self-hosted runner — install it (see docs/selfhosted-runners.md)"; exit 1; }
+          done
+      - name: Verify App Store Connect credentials
+        # The .p8 and scripts/asc-config.local are gitignored and live ON the
+        # runner (public repo — no secrets stored here). Guard both up front so
+        # a missing credential fails in seconds with an actionable message
+        # instead of after a multi-minute archive. (upload-testflight.sh also
+        # re-checks the .p8; this is the earlier, friendlier gate.)
+        run: |
+          if [ ! -f scripts/asc-config.local ]; then
+            echo "::error::scripts/asc-config.local not found on this runner. This self-hosted mini must carry the gitignored ASC config (ASC_KEY_ID / ASC_ISSUER_ID). See scripts/upload-testflight.sh header + docs/selfhosted-runners.md."
+            exit 1
+          fi
+          # shellcheck disable=SC1091
+          . scripts/asc-config.local
+          if [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_ISSUER_ID:-}" ]; then
+            echo "::error::scripts/asc-config.local is missing ASC_KEY_ID and/or ASC_ISSUER_ID."
+            exit 1
+          fi
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          if [ ! -f "$KEY_PATH" ]; then
+            echo "::error::App Store Connect API key not found at $KEY_PATH on this runner. Place the .p8 there (see scripts/upload-testflight.sh header)."
+            exit 1
+          fi
+          echo "ASC credentials present (key ${ASC_KEY_ID})."
+      - name: Choose What-to-Test notes
+        # Prefer the committed scripts/notes-build<N>.md (N = the build number
+        # in project.yml — same source the upload script reads). If it isn't
+        # committed, fall back to the GitHub Release body so the release notes
+        # become TestFlight's "What to Test". If neither exists (e.g. a
+        # workflow_dispatch dry run with no committed notes), upload without
+        # notes rather than pushing an empty string.
+        run: |
+          BUILD_NUMBER=$(grep -m1 "CURRENT_PROJECT_VERSION" project.yml | awk '{print $2}')
+          if [ -z "$BUILD_NUMBER" ]; then
+            echo "::error::Could not read CURRENT_PROJECT_VERSION from project.yml"
+            exit 1
+          fi
+          CANDIDATE="scripts/notes-build${BUILD_NUMBER}.md"
+          if [ -f "$CANDIDATE" ]; then
+            echo "Using committed notes file $CANDIDATE (build $BUILD_NUMBER)."
+            echo "NOTES_FILE=$CANDIDATE" >> "$GITHUB_ENV"
+          elif [ -n "${RELEASE_BODY}" ]; then
+            TMP="$(mktemp -t dispatch-release-notes)"
+            printf '%s\n' "$RELEASE_BODY" > "$TMP"
+            echo "No $CANDIDATE committed — using the GitHub Release body as What-to-Test ($TMP)."
+            echo "NOTES_FILE=$TMP" >> "$GITHUB_ENV"
+          else
+            echo "No $CANDIDATE and no release body — uploading without What-to-Test notes."
+            echo "NOTES_FILE=" >> "$GITHUB_ENV"
+          fi
+      - name: Archive and upload to TestFlight
+        # scripts/upload-testflight.sh runs xcodegen generate itself, archives
+        # the iOS app (embeds watch + widgets) and — with --mac — the macOS app,
+        # then exports with destination=upload straight to App Store Connect.
+        run: |
+          set -euo pipefail
+          FLAGS=()
+          if [ "${INCLUDE_MAC}" = "true" ]; then
+            FLAGS+=(--mac)
+          fi
+          echo "Uploading to TestFlight (include_mac=${INCLUDE_MAC}, notes=${NOTES_FILE:-<none>})"
+          if [ -n "${NOTES_FILE}" ]; then
+            ./scripts/upload-testflight.sh "${FLAGS[@]}" "${NOTES_FILE}"
+          else
+            ./scripts/upload-testflight.sh "${FLAGS[@]}"
+          fi
