@@ -87,6 +87,26 @@ protocol PlaceResolving {
     func resolve(_ suggestion: PlaceSuggestion) async throws -> ResolvedPlace
 }
 
+/// Why a "Use my current location" fetch failed — mapped to an actionable
+/// inline message by `PlaceSearchModel`.
+enum CurrentLocationError: Error, Equatable {
+    /// Location access is off (denied or restricted) — point the user at Settings.
+    case denied
+    /// No fix (timeout / hardware / transient) — offer retry or search instead.
+    case unavailable
+}
+
+/// One-shot current-location source (plan 50 follow-up, #83). Behind a protocol
+/// so tests inject a stub — no real CoreLocation under test. `@MainActor` for the
+/// same reason as `PlaceResolving`: nothing non-Sendable crosses an actor hop.
+@MainActor
+protocol CurrentLocationProviding {
+    /// Requests authorization if needed, takes one location fix, and resolves it
+    /// to a place (name reverse-geocoded when possible, else "Current location").
+    /// Throws `CurrentLocationError` on denied/restricted/unavailable.
+    func currentPlace(defaultRadius: Double) async throws -> ResolvedPlace
+}
+
 // MARK: - Model
 
 @MainActor
@@ -103,10 +123,17 @@ final class PlaceSearchModel {
 
     @ObservationIgnored private let completer: any PlaceCompleting
     @ObservationIgnored private let resolver: any PlaceResolving
+    @ObservationIgnored private let currentLocation: any CurrentLocationProviding
+    @ObservationIgnored private let defaultRadius: Double
 
-    init(completer: any PlaceCompleting, resolver: any PlaceResolving) {
+    init(completer: any PlaceCompleting,
+         resolver: any PlaceResolving,
+         currentLocation: any CurrentLocationProviding,
+         defaultRadius: Double = MonitorDelay.floorRadiusMeters) {
         self.completer = completer
         self.resolver = resolver
+        self.currentLocation = currentLocation
+        self.defaultRadius = defaultRadius
         completer.onResults = { [weak self] results in
             self?.suggestions = results
         }
@@ -150,6 +177,38 @@ final class PlaceSearchModel {
         }
     }
 
+    /// "Use my current location": takes a one-shot fix and resolves it to a
+    /// place. Returns the resolved place (and stores it), or nil on failure with
+    /// an actionable `errorMessage`. Clears the suggestion list on success.
+    @discardableResult
+    func useCurrentLocation() async -> ResolvedPlace? {
+        isResolving = true
+        errorMessage = nil
+        defer { isResolving = false }
+        do {
+            let place = try await currentLocation.currentPlace(defaultRadius: defaultRadius)
+            resolvedPlace = place
+            suggestions = []
+            return place
+        } catch let error as CurrentLocationError {
+            errorMessage = Self.message(for: error)
+            return nil
+        } catch {
+            placeSearchLog.error("current location failed: \(error, privacy: .public)")
+            errorMessage = "Couldn't get your current location. Try again, or search by name."
+            return nil
+        }
+    }
+
+    private static func message(for error: CurrentLocationError) -> String {
+        switch error {
+        case .denied:
+            "Location access is off — allow it in Settings to use your current location, or search by name."
+        case .unavailable:
+            "Couldn't get your current location. Try again, or search by name."
+        }
+    }
+
     /// Resets the search (clears results, error, and any pending completion).
     func clear() {
         suggestions = []
@@ -158,16 +217,24 @@ final class PlaceSearchModel {
     }
 
     /// The editor's search model: a canned stub under `--stub-place-search`
-    /// (deterministic UI tests, no network), the real MapKit pair otherwise.
+    /// (deterministic UI tests, no network), the real MapKit/CoreLocation
+    /// implementations otherwise.
     static func makeForCurrentProcess(
         defaultRadius: Double = MonitorDelay.floorRadiusMeters
     ) -> PlaceSearchModel {
         if ProcessInfo.processInfo.arguments.contains("--stub-place-search") {
-            return PlaceSearchModel(completer: StubPlaceCompleter(),
-                                    resolver: StubPlaceResolver(defaultRadius: defaultRadius))
+            return PlaceSearchModel(
+                completer: StubPlaceCompleter(),
+                resolver: StubPlaceResolver(defaultRadius: defaultRadius),
+                currentLocation: StubCurrentLocationProvider(
+                    outcome: .place(name: "Current location", latitude: 37.3349, longitude: -122.009)),
+                defaultRadius: defaultRadius)
         }
-        return PlaceSearchModel(completer: MapKitPlaceCompleter(),
-                                resolver: MapKitPlaceResolver(defaultRadius: defaultRadius))
+        return PlaceSearchModel(
+            completer: MapKitPlaceCompleter(),
+            resolver: MapKitPlaceResolver(defaultRadius: defaultRadius),
+            currentLocation: CoreLocationCurrentLocationProvider(),
+            defaultRadius: defaultRadius)
     }
 }
 
@@ -253,6 +320,125 @@ struct MapKitPlaceResolver: PlaceResolving {
     }
 }
 
+/// `CLLocationManager`-backed one-shot current-location fetch (+ best-effort
+/// reverse-geocoded name). Requests **when-in-use** authorization if needed —
+/// enough for a single fix; the app's Always upgrade (for background monitoring)
+/// is a separate flow. `CLLocationManagerDelegate` callbacks arrive on the main
+/// thread, so the `nonisolated` delegate methods `assumeIsolated` back on-actor
+/// (the same bridge as `MapKitPlaceCompleter`).
+@MainActor
+final class CoreLocationCurrentLocationProvider: NSObject, CurrentLocationProviding {
+    /// A Sendable coordinate carried across the continuation (CLLocation isn't
+    /// Sendable; two Doubles are).
+    private struct Fix: Sendable {
+        let latitude: Double
+        let longitude: Double
+    }
+
+    private let manager = CLLocationManager()
+    private var fixContinuation: CheckedContinuation<Fix, any Error>?
+    /// True while waiting for the authorization decision before requesting a fix.
+    private var awaitingAuthorization = false
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func currentPlace(defaultRadius: Double) async throws -> ResolvedPlace {
+        let fix = try await requestFix()
+        let location = CLLocation(latitude: fix.latitude, longitude: fix.longitude)
+        let name = await Self.reverseGeocodedName(location)
+        return ResolvedPlace(name: name ?? "Current location",
+                             latitude: fix.latitude,
+                             longitude: fix.longitude,
+                             suggestedRadius: defaultRadius)
+    }
+
+    private func requestFix() async throws -> Fix {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            return try await withFixContinuation(requestLocationNow: true)
+        case .denied, .restricted:
+            throw CurrentLocationError.denied
+        case .notDetermined:
+            return try await withFixContinuation(requestLocationNow: false)
+        @unknown default:
+            throw CurrentLocationError.unavailable
+        }
+    }
+
+    private func withFixContinuation(requestLocationNow: Bool) async throws -> Fix {
+        try await withCheckedThrowingContinuation { continuation in
+            fixContinuation = continuation
+            if requestLocationNow {
+                awaitingAuthorization = false
+                manager.requestLocation()
+            } else {
+                awaitingAuthorization = true
+                manager.requestWhenInUseAuthorization()
+            }
+        }
+    }
+
+    private func resume(returning fix: Fix) {
+        fixContinuation?.resume(returning: fix)
+        fixContinuation = nil
+    }
+
+    private func resume(throwing error: any Error) {
+        fixContinuation?.resume(throwing: error)
+        fixContinuation = nil
+    }
+
+    /// Best-effort place name via MapKit reverse geocoding (the non-deprecated
+    /// `MKReverseGeocodingRequest`, matching `LocationProvider`). nil ⇒ caller
+    /// falls back to "Current location".
+    private static func reverseGeocodedName(_ location: CLLocation) async -> String? {
+        guard let request = MKReverseGeocodingRequest(location: location) else { return nil }
+        let item = try? await request.mapItems.first
+        return item?.name
+    }
+}
+
+extension CoreLocationCurrentLocationProvider: CLLocationManagerDelegate {
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        MainActor.assumeIsolated {
+            guard awaitingAuthorization else { return }
+            switch self.manager.authorizationStatus {
+            case .authorizedWhenInUse, .authorizedAlways:
+                awaitingAuthorization = false
+                self.manager.requestLocation()
+            case .denied, .restricted:
+                awaitingAuthorization = false
+                resume(throwing: CurrentLocationError.denied)
+            case .notDetermined:
+                return // still waiting on the user
+            @unknown default:
+                awaitingAuthorization = false
+                resume(throwing: CurrentLocationError.unavailable)
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // Extract Sendable Doubles in the nonisolated context so nothing
+        // non-Sendable crosses into the main-actor region.
+        guard let coordinate = locations.last?.coordinate else { return }
+        let fix = Fix(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        MainActor.assumeIsolated {
+            resume(returning: fix)
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
+        MainActor.assumeIsolated {
+            resume(throwing: CurrentLocationError.unavailable)
+        }
+    }
+}
+
 // MARK: - Stubs (tests + `--stub-place-search` UI runs)
 
 /// In-process autocomplete stub — filters a canned catalog by case-insensitive
@@ -310,5 +496,30 @@ struct StubPlaceResolver: PlaceResolving {
                              latitude: coordinate.latitude,
                              longitude: coordinate.longitude,
                              suggestedRadius: defaultRadius)
+    }
+}
+
+/// Current-location stub — returns a fixed place or a chosen error so tests and
+/// UI runs never touch CoreLocation. Builds the `ResolvedPlace` with the caller's
+/// `defaultRadius` so the radius fill is asserted.
+@MainActor
+final class StubCurrentLocationProvider: CurrentLocationProviding {
+    enum Outcome {
+        case place(name: String, latitude: Double, longitude: Double)
+        case failure(CurrentLocationError)
+    }
+
+    var outcome: Outcome
+
+    init(outcome: Outcome) { self.outcome = outcome }
+
+    func currentPlace(defaultRadius: Double) async throws -> ResolvedPlace {
+        switch outcome {
+        case .place(let name, let latitude, let longitude):
+            return ResolvedPlace(name: name, latitude: latitude,
+                                 longitude: longitude, suggestedRadius: defaultRadius)
+        case .failure(let error):
+            throw error
+        }
     }
 }

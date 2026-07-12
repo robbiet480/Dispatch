@@ -284,6 +284,13 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: 6.0
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
+        # Plan 50 (#83): "Use my current location" in the place-trigger editor.
+        # macOS reads NSLocationWhenInUseUsageDescription for
+        # requestWhenInUseAuthorization (macos 10.15+); NSLocationUsageDescription
+        # is the legacy key some macOS paths still consult. Both are purpose
+        # strings only — the sandbox entitlement is in DispatchMac.entitlements.
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Dispatch uses your current location when you tap “Use current location” to set up a place trigger. Your location stays on this device."
+        INFOPLIST_KEY_NSLocationUsageDescription: "Dispatch uses your current location when you tap “Use current location” to set up a place trigger. Your location stays on this device."
         CODE_SIGN_ENTITLEMENTS: Mac/DispatchMac.entitlements
   # Screenshot-only watch UI tests (skipped without SCREENSHOT_MODE=1 —
   # scripts/screenshots.sh is the only caller).
