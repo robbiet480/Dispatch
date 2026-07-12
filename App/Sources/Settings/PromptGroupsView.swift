@@ -330,7 +330,7 @@ struct PromptGroupEditorView: View {
         case .placeTrigger(let trigger):
             kind = .placeTrigger
             direction = trigger.direction
-            delayMinutes = trigger.delayMinutes
+            delayMinutes = MonitorDelay.nearestAllowedMinutes(trigger.delayMinutes)
             cancelOnContradiction = trigger.cancelOnContradiction
             latitude = String(trigger.region.latitude)
             longitude = String(trigger.region.longitude)
@@ -339,7 +339,7 @@ struct PromptGroupEditorView: View {
         case .beaconTrigger(let trigger):
             kind = .beaconTrigger
             direction = trigger.direction
-            delayMinutes = trigger.delayMinutes
+            delayMinutes = MonitorDelay.nearestAllowedMinutes(trigger.delayMinutes)
             cancelOnContradiction = trigger.cancelOnContradiction
             uuid = trigger.beacon.uuid
             major = trigger.beacon.major.map(String.init) ?? ""

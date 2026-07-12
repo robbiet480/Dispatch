@@ -216,6 +216,10 @@ final class MonitorObserver {
             await monitor.remove(identifier)
         }
         registeredHashes.removeAll()
+        // Monitoring is now inactive (e.g. Always was revoked). Drop the cached
+        // per-condition states so the Beacons settings surface stops showing a
+        // stale "in range / out of range" reading that no longer reflects reality.
+        lastState.removeAll()
     }
 
     private func ensureMonitor() async -> CLMonitor {
@@ -236,12 +240,19 @@ final class MonitorObserver {
                 radius: trigger.region.radius)
         case .beaconTrigger(let trigger):
             guard let uuid = UUID(uuidString: trigger.beacon.uuid) else { return nil }
-            switch (trigger.beacon.major, trigger.beacon.minor) {
+            // major/minor arrive as `Int?` from decoded JSON — a corrupt/hand-
+            // edited import could hold an out-of-range value. `CLBeaconMajorValue`
+            // / `CLBeaconMinorValue` are UInt16, so the plain `UInt16(x)` init
+            // traps on anything outside 0…65535. `exactly:` yields nil instead,
+            // and we simply drop that refinement (minor requires major, so a bad
+            // major also drops minor) rather than crashing during reconcile.
+            let major = trigger.beacon.major.flatMap { CLBeaconMajorValue(exactly: $0) }
+            let minor = trigger.beacon.minor.flatMap { CLBeaconMinorValue(exactly: $0) }
+            switch (major, minor) {
             case let (major?, minor?):
-                return CLMonitor.BeaconIdentityCondition(
-                    uuid: uuid, major: CLBeaconMajorValue(major), minor: CLBeaconMinorValue(minor))
+                return CLMonitor.BeaconIdentityCondition(uuid: uuid, major: major, minor: minor)
             case let (major?, nil):
-                return CLMonitor.BeaconIdentityCondition(uuid: uuid, major: CLBeaconMajorValue(major))
+                return CLMonitor.BeaconIdentityCondition(uuid: uuid, major: major)
             default:
                 return CLMonitor.BeaconIdentityCondition(uuid: uuid)
             }
