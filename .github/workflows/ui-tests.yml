@@ -120,6 +120,10 @@ jobs:
       - name: Run full UI suite
         # -retry-tests-on-failure absorbs the known swift-testing signal-11
         # runner flake (one retry, matching the local merge-gate convention).
+        # Clone-parallelism: 2 workers per job — capped deliberately, NOT auto:
+        # each clone is a booted sim (~1.5GB) and two runner instances share a
+        # 16GB M4, so worst case is 2 jobs x 2 clones + builds per box. Clones
+        # get independent data containers (a test-isolation bonus).
         run: |
           set -o pipefail
           xcodebuild test \
@@ -129,6 +133,8 @@ jobs:
             -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-ui" \
             -resultBundlePath ui-tests.xcresult \
             -retry-tests-on-failure \
+            -parallel-testing-enabled YES \
+            -parallel-testing-worker-count 2 \
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
       - name: Upload result bundle on failure
         if: failure()
@@ -196,6 +202,7 @@ jobs:
           xcrun simctl shutdown "$UDID" 2>/dev/null || true
           xcrun simctl erase "$UDID"
       - name: Run full UI suite on iPad
+        # Clone-parallelism: same 2-worker cap + rationale as ios-ui-suite.
         run: |
           set -o pipefail
           xcodebuild test \
@@ -205,6 +212,8 @@ jobs:
             -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-ui-ipad" \
             -resultBundlePath ipad-ui-tests.xcresult \
             -retry-tests-on-failure \
+            -parallel-testing-enabled YES \
+            -parallel-testing-worker-count 2 \
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
       - name: Upload result bundle on failure
         if: failure()
