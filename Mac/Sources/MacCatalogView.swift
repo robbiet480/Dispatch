@@ -172,14 +172,15 @@ private struct MacCatalogRow: View {
             Button(isAdded ? "Added ✓" : "Add") { onAdd() }
                 .disabled(isAdded)
                 .accessibilityIdentifier("mac-catalog-add")
-            Menu {
-                Button("Flag…", role: .destructive) { onFlag() }
-                    .accessibilityIdentifier("mac-catalog-flag")
+            Button {
+                onFlag()
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "flag")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Flag this question")
+            .accessibilityIdentifier("mac-catalog-flag")
         }
     }
 
