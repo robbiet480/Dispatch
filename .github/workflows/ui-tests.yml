@@ -44,7 +44,7 @@ jobs:
 
   ios-ui-suite:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event_name != 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 90
     steps:
@@ -110,7 +110,7 @@ jobs:
 
   ipad-ui-suite:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event_name != 'workflow_dispatch'
     # EXPERIMENTAL / non-blocking: the suite has only ever run on iPhone and
     # some tests encode compact-width assumptions (HomeParity, sheet vs
     # popover). Gathering pass/fail data first; promote to blocking once the
@@ -162,7 +162,7 @@ jobs:
 
   mac-ui-smoke:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event_name != 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -189,4 +189,38 @@ jobs:
         with:
           name: mac-smoke-xcresult
           path: mac-smoke.xcresult
+          retention-days: 7
+
+  # PROBE (manual dispatch only): real dev-signed Mac UI test on the self-hosted
+  # mini — exercises the true sandbox+iCloud entitlements (no ad-hoc hack). If
+  # this launches + passes, it becomes the basis for the real mac gate.
+  mac-ui-signed:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Homebrew on PATH
+        # LaunchAgent PATH is minimal; brew tools (xcodegen/xcbeautify) live here.
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+      - name: Generate project
+        run: xcodegen generate
+      - name: Run Mac UI (real dev signing)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Dispatch.xcodeproj \
+            -scheme DispatchMac \
+            -destination 'platform=macOS' \
+            -resultBundlePath mac-signed.xcresult \
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=UTQFCBPQRF \
+            | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
+      - name: Upload result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-signed-xcresult
+          path: mac-signed.xcresult
           retention-days: 7
