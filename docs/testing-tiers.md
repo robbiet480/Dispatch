@@ -5,6 +5,8 @@ only `swift test` (the DispatchKit unit suite) + an app build — it does NOT ru
 the UI tiers.** SMOKE, FULL, and VISUAL REVIEW below are a **local / manual**
 process gated by a human (or an agent) before merge and before release.
 
+Heavy CI jobs run on self-hosted M4 minis — see [selfhosted-runners.md](selfhosted-runners.md).
+
 ## 1. SMOKE — per-merge (~3-4 min)
 
 - **Run:** `scripts/smoke-tests.sh`

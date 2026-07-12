@@ -125,7 +125,7 @@ jobs:
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
             -destination "platform=iOS Simulator,name=iPhone 17 Pro-${RUNNER_SIM_SUFFIX}" \
-            -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-ui" \
+            -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-ui" \
             -resultBundlePath ui-tests.xcresult \
             -retry-tests-on-failure \
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
@@ -200,7 +200,7 @@ jobs:
             -project Dispatch.xcodeproj \
             -scheme DispatchApp \
             -destination "platform=iOS Simulator,name=iPad Pro 13-inch (M5)-${RUNNER_SIM_SUFFIX}" \
-            -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-ui-ipad" \
+            -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-ui-ipad" \
             -resultBundlePath ipad-ui-tests.xcresult \
             -retry-tests-on-failure \
             | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
@@ -259,7 +259,7 @@ jobs:
             -project Dispatch.xcodeproj \
             -scheme DispatchMac \
             -destination 'platform=macOS' \
-            -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-mac" \
+            -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-mac" \
             -resultBundlePath mac-smoke.xcresult \
             -allowProvisioningUpdates \
             CODE_SIGN_STYLE=Automatic \
