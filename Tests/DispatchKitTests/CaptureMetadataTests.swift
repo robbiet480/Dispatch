@@ -188,6 +188,35 @@ import Testing
     #expect(imported.motionActivity == nil)
 }
 
+// MARK: - Detail rows
+
+@Test func detailDegreeRowsWrapAt360() {
+    var snapshot = LocationSnapshot(latitude: 0, longitude: 0)
+    snapshot.course = 359.6
+    snapshot.trueHeading = 45
+    let rows = ContextMetadataDetail.locationRows(snapshot)
+    let course = rows.first { $0.label == "Course" }
+    // 359.6 rounds to 360 → wraps to 0°, never renders "360°".
+    #expect(course?.value == "0° N")
+    let heading = rows.first { $0.label == "Heading" }
+    #expect(heading?.value == "45° NE")
+}
+
+@Test func detailRowsHideNilFieldsAndQuietSourceFlags() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let report = Report()
+    context.insert(report)
+    // No metadata at all → no context rows.
+    #expect(ContextMetadataDetail.contextRows(for: report).isEmpty)
+    // A normal (non-simulated, non-accessory) fix renders no source rows.
+    var snapshot = LocationSnapshot(latitude: 0, longitude: 0)
+    snapshot.isSimulatedBySoftware = false
+    snapshot.isProducedByAccessory = false
+    #expect(ContextMetadataDetail.locationRows(snapshot).isEmpty)
+    #expect(ContextMetadataDetail.locationRows(nil).isEmpty)
+}
+
 // MARK: - Toggle defaults
 
 @Test func metadataTogglesDefaultToEnabled() {

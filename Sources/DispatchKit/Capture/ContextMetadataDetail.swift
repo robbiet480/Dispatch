@@ -88,6 +88,9 @@ public enum ContextMetadataDetail {
     }
 
     private static func degreesValue(_ degrees: Double) -> String {
-        "\(Int(degrees.rounded()))° \(MotionFormatting.compassPoint(forDegrees: degrees))"
+        // Modulo after rounding so 359.6 renders as 0°, never 360° (compass
+        // degrees are 0..<360) — Copilot review catch on PR #72.
+        let rounded = Int(degrees.rounded()) % 360
+        return "\(rounded)° \(MotionFormatting.compassPoint(forDegrees: degrees))"
     }
 }
