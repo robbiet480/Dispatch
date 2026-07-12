@@ -219,6 +219,39 @@ import Testing
     #expect(rows.first { $0.label == "Accuracy" }?.value == "±5 m · ±3 m vertical")
 }
 
+@Test func detailRowsDegradeNegativeSentinelValues() {
+    // Externally-authored / imported reports can carry CoreLocation's raw
+    // `-1` invalid sentinels that never passed through capture-time
+    // validation. locationRows must re-validate at display time so negatives
+    // degrade to absence rather than rendering "-1 mph" / "-1°" / "±-1 m".
+    var snapshot = LocationSnapshot(latitude: 0, longitude: 0)
+    snapshot.speed = -1
+    snapshot.speedAccuracy = -1
+    snapshot.course = -1
+    snapshot.courseAccuracy = -1
+    snapshot.trueHeading = -1
+    snapshot.magneticHeading = -1
+    snapshot.headingAccuracy = -1
+    snapshot.horizontalAccuracy = -1
+    snapshot.verticalAccuracy = -1
+    // Every field invalid → no Speed/Course/Heading/Accuracy rows at all.
+    #expect(ContextMetadataDetail.locationRows(snapshot).isEmpty)
+
+    // A valid value paired with an invalid accuracy renders the value with
+    // no "(±…)" suffix rather than a negative accuracy.
+    var mixed = LocationSnapshot(latitude: 0, longitude: 0)
+    mixed.speed = 4.4704 // 10 mph
+    mixed.speedAccuracy = -1
+    mixed.course = 180
+    mixed.courseAccuracy = -1
+    mixed.horizontalAccuracy = 5
+    mixed.verticalAccuracy = -1
+    let rows = ContextMetadataDetail.locationRows(mixed)
+    #expect(rows.first { $0.label == "Speed" }?.value == "10 mph")
+    #expect(rows.first { $0.label == "Course" }?.value == "180° S")
+    #expect(rows.first { $0.label == "Accuracy" }?.value == "±5 m")
+}
+
 @Test func magneticOnlyHeadingIsLabeled() {
     var snapshot = LocationSnapshot(latitude: 0, longitude: 0)
     snapshot.magneticHeading = 44

@@ -92,7 +92,16 @@ final class SurveyController {
             outcomes[event.kind] = event.outcome
         }
         if let metadataTask {
-            metadata = await metadataTask.value
+            // startCapture runs under a SwiftUI `.task`; if the view was
+            // dismissed mid-capture, don't block teardown awaiting the metadata
+            // reads (CoreMotion/UI) — cancel the task and skip the await, its
+            // completion handlers resolve and are discarded (Copilot review
+            // catch on PR #72).
+            if Task.isCancelled {
+                metadataTask.cancel()
+            } else {
+                metadata = await metadataTask.value
+            }
         }
         await attachTriggeringWorkoutIfNeeded()
     }
