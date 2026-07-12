@@ -166,7 +166,7 @@ jobs:
           fi
           echo "Uploading to TestFlight (include_mac=${INCLUDE_MAC}, notes=${NOTES_FILE:-<none>})"
           if [ -n "${NOTES_FILE}" ]; then
-            ./scripts/upload-testflight.sh "${FLAGS[@]}" "${NOTES_FILE}"
+            ./scripts/upload-testflight.sh ${FLAGS[@]+"${FLAGS[@]}"} "${NOTES_FILE}"
           else
-            ./scripts/upload-testflight.sh "${FLAGS[@]}"
+            ./scripts/upload-testflight.sh ${FLAGS[@]+"${FLAGS[@]}"}
           fi
