@@ -41,6 +41,14 @@ final class BackupSettingsUITests: XCTestCase {
         app.buttons["settings-button"].tap()
         let iCloudLink = app.buttons["icloud-settings-link"]
         XCTAssertTrue(iCloudLink.waitForExistence(timeout: 10))
+        // The Data section sits below the schedule/survey rows, so on compact
+        // iPhone widths icloud-settings-link starts below the fold — scroll it
+        // into view before tapping (waitForExistence is true even off-screen).
+        var iCloudScrolls = 0
+        while !iCloudLink.isHittable, iCloudScrolls < 6 {
+            app.swipeUp()
+            iCloudScrolls += 1
+        }
         iCloudLink.tap()
 
         let backUpNow = app.buttons["backup-now-icloud"]
