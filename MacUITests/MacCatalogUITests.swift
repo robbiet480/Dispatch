@@ -52,18 +52,21 @@ final class MacCatalogUITests: XCTestCase {
         let app = launchApp()
         _ = mainWindow(app)
 
-        // The detail pane switch lives on the detail toolbar (shown while no
-        // report is selected — the launch state). Same handle the screenshot
-        // suite uses to reach Insights.
-        let panePicker = app.descendants(matching: .any)
-            .matching(identifier: "detail-pane-picker").firstMatch
-        XCTAssertTrue(panePicker.waitForExistence(timeout: 15),
-                      "detail-pane-picker should exist on the dashboard")
-
-        // Reproduces the owner's live repro: select the Catalog segment. Before
-        // the fix, activating the catalog pane brings a second `.searchable`
-        // into the shared window toolbar and AppKit throws → the app dies here.
-        panePicker.radioButtons["Catalog"].click()
+        // Navigate to the Catalog pane via the Manage menu (plan 47) rather than
+        // the detail toolbar's segmented picker: the menu bar is always present,
+        // whereas the `.principal` toolbar picker overflows on a narrow window
+        // (as on CI, which uses the default window size — the screenshot suite
+        // only sees it because it launches with --screenshot-window). Reaching
+        // the catalog is what triggered the crash — pre-fix it brought a second
+        // `.searchable` into the shared window toolbar and AppKit threw here.
+        let manageMenu = app.menuBars.menuBarItems["Manage"]
+        XCTAssertTrue(manageMenu.waitForExistence(timeout: 15),
+                      "Manage menu should exist in the menu bar")
+        manageMenu.click()
+        let catalogItem = app.menuBars.menuItems["Question Catalog"]
+        XCTAssertTrue(catalogItem.waitForExistence(timeout: 5),
+                      "Manage → Question Catalog menu item should exist")
+        catalogItem.click()
 
         // The catalog rendered — the stubbed provider yields four entries, so
         // the populated list appears. (Loading/empty are accepted too so the
