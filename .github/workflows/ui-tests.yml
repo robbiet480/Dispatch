@@ -162,7 +162,14 @@ jobs:
 
   mac-ui-smoke:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # Self-hosted runner + real signing identity: never run fork-PR code here.
+    # Same-repo PRs, schedule, and workflow_dispatch only — fork PRs skip this
+    # job (repo policy additionally requires maintainer approval before any
+    # fork workflow runs; maintainer review is the gate for those).
+    if: >-
+      needs.changes.outputs.code == 'true' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     # Self-hosted M4 mini: the Mac app carries app-sandbox + iCloud entitlements
     # that launchd refuses to spawn under ad-hoc signing (Runningboard error 5).
     # Hosted runners can't launch it at all; a real Apple Development identity +
@@ -178,6 +185,14 @@ jobs:
       - name: Select Xcode
         # Runner defaults to CommandLineTools; point at full Xcode without sudo.
         run: echo "DEVELOPER_DIR=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Verify runner toolchain
+        # Tools are pre-installed on the minis (runner setup doc), not brewed per
+        # run. Fail fast with a clear message if the runner was reprovisioned
+        # without them, instead of a confusing mid-job failure.
+        run: |
+          for tool in xcodegen xcbeautify; do
+            command -v "$tool" >/dev/null || { echo "::error::$tool missing on self-hosted runner — brew install it (see runner setup doc)"; exit 1; }
+          done
       - name: Generate project
         run: xcodegen generate
       - name: Run Mac UI smoke (real dev signing)
