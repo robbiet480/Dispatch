@@ -23,26 +23,42 @@ public enum ContextMetadataDetail {
     public static func locationRows(_ snapshot: LocationSnapshot?) -> [Row] {
         guard let snapshot else { return [] }
         var rows: [Row] = []
+        // Every captured field renders — accuracies fold into their value's
+        // row as a "(±…)" suffix rather than spawning rows of their own.
         if let mps = snapshot.speed {
-            rows.append(Row(icon: "speedometer", label: "Speed",
-                            value: String(format: "%.0f mph", MotionFormatting.mph(fromMPS: mps))))
+            var value = String(format: "%.0f mph", MotionFormatting.mph(fromMPS: mps))
+            if let accuracy = snapshot.speedAccuracy {
+                value += String(format: " (±%.0f mph)", MotionFormatting.mph(fromMPS: accuracy))
+            }
+            rows.append(Row(icon: "speedometer", label: "Speed", value: value))
         }
         if let degrees = snapshot.course {
             rows.append(Row(icon: "location.north.line.fill", label: "Course",
-                            value: degreesValue(degrees)))
+                            value: degreesValue(degrees, accuracy: snapshot.courseAccuracy)))
         }
-        // Prefer true (geographic) heading; fall back to magnetic when
-        // declination was unavailable at capture.
-        if let degrees = snapshot.trueHeading ?? snapshot.magneticHeading {
+        // Prefer true (geographic) heading; fall back to magnetic — labeled,
+        // so the two heading flavors stay distinguishable — when declination
+        // was unavailable at capture.
+        if let degrees = snapshot.trueHeading {
             rows.append(Row(icon: "location.north.circle.fill", label: "Heading",
-                            value: degreesValue(degrees)))
+                            value: degreesValue(degrees, accuracy: snapshot.headingAccuracy)))
+        } else if let degrees = snapshot.magneticHeading {
+            rows.append(Row(icon: "location.north.circle.fill", label: "Heading",
+                            value: degreesValue(degrees, accuracy: snapshot.headingAccuracy)
+                                + " magnetic"))
         }
         if let floor = snapshot.floorLevel {
             rows.append(Row(icon: "building", label: "Floor", value: String(floor)))
         }
         if let accuracy = snapshot.horizontalAccuracy {
+            var value = String(format: "±%.0f m", accuracy)
+            if let vertical = snapshot.verticalAccuracy {
+                value += String(format: " · ±%.0f m vertical", vertical)
+            }
+            rows.append(Row(icon: "scope", label: "Accuracy", value: value))
+        } else if let vertical = snapshot.verticalAccuracy {
             rows.append(Row(icon: "scope", label: "Accuracy",
-                            value: String(format: "±%.0f m", accuracy)))
+                            value: String(format: "±%.0f m vertical", vertical)))
         }
         // Source flags surface only when noteworthy (true) — a normal GPS fix
         // stays quiet.
@@ -87,10 +103,14 @@ public enum ContextMetadataDetail {
         return rows
     }
 
-    private static func degreesValue(_ degrees: Double) -> String {
+    private static func degreesValue(_ degrees: Double, accuracy: Double? = nil) -> String {
         // Modulo after rounding so 359.6 renders as 0°, never 360° (compass
         // degrees are 0..<360) — Copilot review catch on PR #72.
         let rounded = Int(degrees.rounded()) % 360
-        return "\(rounded)° \(MotionFormatting.compassPoint(forDegrees: degrees))"
+        var value = "\(rounded)° \(MotionFormatting.compassPoint(forDegrees: degrees))"
+        if let accuracy {
+            value += String(format: " (±%.0f°)", accuracy)
+        }
+        return value
     }
 }
