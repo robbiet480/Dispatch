@@ -161,4 +161,32 @@ struct DeviceProvenanceTests {
         report.triggerRaw = "hologram"
         #expect(report.trigger == .manual)
     }
+
+    @Test func reportTriggerDecodesUnknownRawToManual() throws {
+        // The synthesized RawRepresentable decoder throws on an unknown raw;
+        // the custom init(from:) resolves it to .manual so a direct decode
+        // (V2Report.trigger / CloudKit share) can't fail on a future case.
+        let manual = try JSONDecoder().decode(ReportTrigger.self, from: Data(#""hologram""#.utf8))
+        #expect(manual == .manual)
+        // Recognized cases (incl. the plan-45 additions) still decode verbatim.
+        let place = try JSONDecoder().decode(ReportTrigger.self, from: Data(#""placeArrival""#.utf8))
+        #expect(place == .placeArrival)
+    }
+
+    @Test func v2ReportWithFutureTriggerDecodesGracefully() throws {
+        // The flagged path: an OLDER build decoding a V2 export/CloudKit report
+        // whose trigger is a case it doesn't know must load with .manual, not
+        // throw and drop the whole report.
+        var report = V2Report(uniqueIdentifier: "r1", date: Date(timeIntervalSince1970: 0),
+                              timeZone: "UTC", kind: .regular, trigger: .beaconArrival)
+        report.isBackdated = false
+        let json = try JSONEncoder.v2.encode(report)
+        // Simulate a build that predates plan 45 by rewriting the raw to an
+        // unknown token, then decode it here.
+        var text = try #require(String(data: json, encoding: .utf8))
+        text = text.replacingOccurrences(of: "beaconArrival", with: "teleportArrival")
+        let decoded = try JSONDecoder.v2.decode(V2Report.self, from: Data(text.utf8))
+        #expect(decoded.trigger == .manual)
+        #expect(decoded.uniqueIdentifier == "r1")
+    }
 }

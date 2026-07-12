@@ -17,6 +17,20 @@ public enum ReportTrigger: String, Codable, Sendable, CaseIterable {
     /// arrival/departure × place/beacon, so charts/insights can slice by
     /// trigger. Additive raws; older builds fall back to `.manual`.
     case placeArrival, placeDeparture, beaconArrival, beaconDeparture
+
+    /// Cross-version-safe decode. The SwiftData store maps an unknown
+    /// `triggerRaw` to `.manual` via `Report.trigger`, but `V2Report.trigger`
+    /// (v2 JSON export / CloudKit share) decodes this enum DIRECTLY — and the
+    /// synthesized `RawRepresentable` decoder THROWS `DataCorrupted` on an
+    /// unrecognized raw, failing the whole report. A report filed by a NEWER
+    /// build (e.g. `placeArrival`) would then be undecodable on an OLDER one.
+    /// Decoding leniently here makes the "older builds fall back to `.manual`"
+    /// contract true for every decode path, not just the SwiftData accessor.
+    /// `encode(to:)` stays synthesized, so recognized cases round-trip verbatim.
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ReportTrigger(rawValue: raw) ?? .manual
+    }
 }
 
 /// Raw values 0–2 match the original Reporter export (gist.github.com/dbreunig/9315705).
