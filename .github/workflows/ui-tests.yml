@@ -305,12 +305,14 @@ jobs:
         run: |
           # The runner image ships several "Apple Watch Ultra 3 (49mm)" sims —
           # one per installed watchOS runtime — so a name-only destination is
-          # ambiguous ("multiple devices matched"). Resolve a concrete UDID
-          # (newest available, or create one) and pin the destination to it.
+          # ambiguous ("multiple devices matched"). Resolve a concrete UDID on
+          # the newest installed runtime (explicit sort -V on the
+          # "-- watchOS X.Y --" section headers), or create one, and pin the
+          # destination to it. `|| true` keeps the empty-UDID fallback
+          # reachable even if this pipeline ever runs under pipefail.
           UDID=$(xcrun simctl list devices available \
-            | grep "Apple Watch Ultra 3 (49mm) (" \
-            | grep -Eo "[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}" \
-            | tail -1)
+            | awk '/^-- watchOS/ { ver=$3 } /Apple Watch Ultra 3 \(49mm\) \(/ { if (match($0, /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/)) print ver, substr($0, RSTART, RLENGTH) }' \
+            | sort -V | tail -1 | awk '{ print $2 }' || true)
           if [ -z "$UDID" ]; then
             RUNTIME=$(xcrun simctl list runtimes | grep -Eo "com.apple.CoreSimulator.SimRuntime.watchOS[0-9-]+" | sort -V | tail -1)
             UDID=$(xcrun simctl create "Apple Watch Ultra 3 (49mm)" "Apple Watch Ultra 3 (49mm)" "$RUNTIME")
