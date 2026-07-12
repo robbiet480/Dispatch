@@ -74,8 +74,22 @@ public struct MonitorBeaconIdentity: Equatable, Sendable, Codable {
     public init(uuid: String, major: Int? = nil, minor: Int? = nil, name: String? = nil) {
         self.uuid = uuid
         self.major = major
-        self.minor = minor
+        // A minor is only meaningful alongside a major: CLBeaconIdentityConstraint
+        // supports UUID, UUID+major, or UUID+major+minor — never UUID+minor. Drop
+        // an orphaned minor so the contract holds for every construction site.
+        self.minor = major == nil ? nil : minor
         self.name = name
+    }
+
+    // Route decoding (stored fields + imports) through the memberwise init so
+    // the same major/minor contract is enforced, not just on in-app editing.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            uuid: try c.decode(String.self, forKey: .uuid),
+            major: try c.decodeIfPresent(Int.self, forKey: .major),
+            minor: try c.decodeIfPresent(Int.self, forKey: .minor),
+            name: try c.decodeIfPresent(String.self, forKey: .name))
     }
 }
 

@@ -432,9 +432,10 @@ section) — #56 and #60 differ only in the CLMonitor condition kind and share
 the observer, engine, budget, editor family, report triggers, and
 authorization.
 
-Suites at finish: **653 kit tests** green (627 before this plan — +26: 7
-MonitorTriggerEngine, 5 MonitorConditionBudget, 7 MonitorTrigger config, 6
-PromptGroup/V2, 1 GroupPlanner, 1 NotificationIdentifiers). App
+Suites at finish: this plan adds **28 kit tests** (8 MonitorTrigger config —
+incl. the beacon major/minor contract; 7 MonitorTriggerEngine; 5
+MonitorConditionBudget; 6 PromptGroup/V2; 1 GroupPlanner; 1
+NotificationIdentifiers); the full kit suite is green in CI. App
 `xcodebuild build` and `build-for-testing` both succeed, warning-free in the
 touched files; the new UI test `testCreatePlaceTriggerGroupAppearsInList`
 compiles (full simulator UI suite deferred to CI to avoid contending with

@@ -311,7 +311,7 @@ final class MonitorObserver {
         let outcome = MonitorTriggerEngine.outcome(
             direction: config.direction, delayMinutes: config.delayMinutes,
             cancelOnContradiction: config.cancelOnContradiction,
-            state: state, eventDate: Date())
+            state: state, eventDate: event.date)
 
         switch outcome {
         case .schedule(let fireDate):
