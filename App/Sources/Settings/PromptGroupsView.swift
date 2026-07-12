@@ -688,6 +688,18 @@ struct PromptGroupEditorView: View {
                 .font(.footnote).foregroundStyle(.yellow)
                 .accessibilityIdentifier("group-place-search-error")
         }
+        Button {
+            Task {
+                if let resolved = await placeSearch.useCurrentLocation() {
+                    applyResolved(resolved)
+                }
+            }
+        } label: {
+            Label("Use current location", systemImage: "location.fill")
+                .foregroundStyle(.white)
+        }
+        .disabled(placeSearch.isResolving)
+        .accessibilityIdentifier("group-place-current")
         ForEach(placeSearch.suggestions) { suggestion in
             Button {
                 pickPlace(suggestion)
@@ -756,11 +768,17 @@ struct PromptGroupEditorView: View {
     private func pickPlace(_ suggestion: PlaceSuggestion) {
         Task {
             guard let resolved = await placeSearch.select(suggestion) else { return }
-            placeLatitude = String(resolved.latitude)
-            placeLongitude = String(resolved.longitude)
-            placeName = resolved.name
-            placeSearchText = ""
+            applyResolved(resolved)
         }
+    }
+
+    /// Writes a resolved place (from search OR "use current location") into the
+    /// place drafts and clears the search text.
+    private func applyResolved(_ resolved: ResolvedPlace) {
+        placeLatitude = String(resolved.latitude)
+        placeLongitude = String(resolved.longitude)
+        placeName = resolved.name
+        placeSearchText = ""
     }
 
     /// The shared direction / delay / cancel controls for place and beacon

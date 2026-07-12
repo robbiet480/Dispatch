@@ -421,6 +421,17 @@ struct MacPromptGroupEditorView: View {
                 .font(.caption).foregroundStyle(.orange)
                 .accessibilityIdentifier("mac-group-place-search-error")
         }
+        Button {
+            Task {
+                if let resolved = await placeSearch.useCurrentLocation() {
+                    applyResolved(resolved)
+                }
+            }
+        } label: {
+            Label("Use current location", systemImage: "location.fill")
+        }
+        .disabled(placeSearch.isResolving)
+        .accessibilityIdentifier("mac-group-place-current")
         ForEach(placeSearch.suggestions) { suggestion in
             Button {
                 pickPlace(suggestion)
@@ -480,11 +491,17 @@ struct MacPromptGroupEditorView: View {
     private func pickPlace(_ suggestion: PlaceSuggestion) {
         Task {
             guard let resolved = await placeSearch.select(suggestion) else { return }
-            placeLatitude = String(resolved.latitude)
-            placeLongitude = String(resolved.longitude)
-            placeName = resolved.name
-            placeSearchText = ""
+            applyResolved(resolved)
         }
+    }
+
+    /// Writes a resolved place (from search OR "use current location") into the
+    /// place drafts and clears the search text.
+    private func applyResolved(_ resolved: ResolvedPlace) {
+        placeLatitude = String(resolved.latitude)
+        placeLongitude = String(resolved.longitude)
+        placeName = resolved.name
+        placeSearchText = ""
     }
 
     private func toggleMembership(of id: String) {

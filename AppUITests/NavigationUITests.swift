@@ -282,6 +282,8 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["group-monitor-needs-always"].exists)
         XCTAssertFalse(app.buttons["group-monitor-needs-always"].exists)
+        // "Use current location" is offered alongside the search field.
+        XCTAssertTrue(app.buttons["group-place-current"].waitForExistence(timeout: 10))
         search.tap()
         search.typeText("HQ")
 

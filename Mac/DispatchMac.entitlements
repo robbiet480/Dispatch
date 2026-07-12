@@ -15,6 +15,14 @@
          use them at all. -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
+    <!-- Plan 50 (#83): "Use my current location" in the place-trigger editor
+         takes a one-shot CLLocationManager fix. This is a SANDBOX entitlement
+         (self-declared, like files.user-selected above) — NOT an App-ID /
+         provisioning capability like iCloud or Push — so it needs no portal or
+         profile change and works with the existing manual signing lane. Pairs
+         with the NSLocation*UsageDescription purpose strings in project.yml. -->
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
     <!-- Same CloudKit container as iOS/watchOS — CloudKit is the sole data
          channel between platforms (DECISION 3: no App Group store on Mac). -->
     <key>com.apple.developer.icloud-services</key>

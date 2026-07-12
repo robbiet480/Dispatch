@@ -73,12 +73,16 @@ the locked-schedule preservation path unchanged.
   (iOS/macOS 26 non-deprecated coordinate surface). Available on iOS AND macOS;
   no new entitlement (the Mac already has `com.apple.security.network.client`;
   search uses Apple's servers, not the device's location).
-- **CoreLocation** `CLLocationCoordinate2D` for the resolved coordinate only.
+- **CoreLocation** `CLLocationCoordinate2D` for the resolved coordinate, and
+  `CLLocationManager.requestLocation` / `requestWhenInUseAuthorization` for the
+  one-shot "Use current location" fix (macOS 10.15+ / iOS 8+).
 - **DispatchKit** `MonitorDelay.floorRadiusMeters` for the default/suggested
   radius (unchanged) and the existing `PlaceTrigger` / `MonitorPlaceRegion`.
 - **XcodeGen** — one new `Shared/Search` source group added to the `DispatchApp`
   and `DispatchMac` target `sources`, plus the `DispatchAppTests` bundle for the
-  unit tests. No entitlement/plist/signing change.
+  unit tests. The Mac target gains the location sandbox entitlement +
+  purpose strings for "Use current location" (below); iOS reuses its existing
+  location purpose strings.
 
 ## Design decisions (decide + log)
 
@@ -114,12 +118,19 @@ the locked-schedule preservation path unchanged.
   `-longitude` ids. Rejected: dropping it entirely — cheap to keep, and it is
   the only way to enter an exact known coordinate or recover if search is
   unavailable. The Mac omits it (search-only) to keep the new editor lean.
-- **"Use my current location" deferred.** The Mac target is sandboxed with **no
-  location entitlement** (adding one is a signing/entitlement change this plan
-  forbids), and on iOS the affordance adds a one-shot `CLLocationManager` fix
-  path with its own auth edge cases. The issue lists it as *optional*; deferred
-  on both platforms and noted here and in the PR. The search-by-name flow
-  already covers the "here" case (type the address).
+- **"Use my current location" — IN SCOPE on BOTH platforms** (owner reversal of
+  the initial deferral). A `CurrentLocationProviding` protocol (the
+  `PlaceCompleting`/`PlaceResolving` mock-seam pattern) fronts a one-shot
+  `CLLocationManager.requestLocation` + best-effort `MKReverseGeocodingRequest`
+  name; the editor's "Use current location" button fills the region with the
+  fix + the floor radius, naming it the reverse-geocoded place or "Current
+  location". Denied/restricted/unavailable map to an actionable inline message
+  (no crash/hang). iOS reuses the existing when-in-use purpose string; **the Mac
+  gains the `com.apple.security.personal-information.location` SANDBOX
+  entitlement** (owner-authorized) + `NSLocation*UsageDescription` purpose
+  strings — a self-declared sandbox entitlement, NOT an App-ID/portal capability,
+  so it needs no provisioning-profile change and signs on the existing manual
+  Mac App Store lane (build-verified).
 - **Beacons stay Mac-view-only.** `isTriggerOnly` narrows from place+beacon to
   **beacon-only**; place is fully creatable on the Mac, beacon remains preserved
   read-only (owner decision, issue #84).
@@ -137,6 +148,10 @@ the locked-schedule preservation path unchanged.
   (`group-place-manual`) reveals the latitude (`group-place-latitude`) and
   longitude (`group-place-longitude`) fields; entering a valid pair also enables
   Save.
+- **"Use current location"** (`group-place-current` on iOS,
+  `mac-group-place-current` on Mac) sits alongside the search field; tapping it
+  takes a one-shot fix and fills the selected-place confirmation. If location is
+  denied/restricted/unavailable, an inline message explains what to do (no crash).
 - **iOS list:** after saving, the groups list row shows the place summary
   (e.g. `Arrive at HQ`) with no needs-Always hint under the full-access test
   posture.
@@ -245,26 +260,35 @@ pattern) and to the hostless `DispatchAppTests` bundle for unit testing (with a
 `DispatchKit` package dependency for `MonitorDelay`). DispatchKit stays
 MapKit-free (grep-verified).
 
-**Decisions the owner should confirm:**
+**Owner-reviewed decisions (verdicts applied):**
 1. **Manual coordinate entry kept (iOS only)** as a collapsed advanced
    `DisclosureGroup` (`group-place-manual`) preserving the `group-place-latitude`
-   / `-longitude` / `-name` ids. The Mac editor is search-only.
-2. **"Use my current location" deferred** on BOTH platforms: the Mac is
-   sandboxed with no location entitlement (adding one is a signing change this
-   plan forbids), and the iOS affordance adds a one-shot fix path with its own
-   auth edges. The issue lists it as optional; the search-by-name flow covers
-   the "here" case.
+   / `-longitude` / `-name` ids; the Mac editor is search-only. *(GOOD, kept.)*
+2. **"Use my current location" ADDED on BOTH platforms** (owner reversed the
+   initial deferral). A `CurrentLocationProviding` protocol fronts a one-shot
+   `CLLocationManager` fix + reverse-geocoded name; the editor button
+   (`group-place-current` / `mac-group-place-current`) fills the region.
+   Denied/restricted/unavailable → actionable inline message. iOS reuses its
+   when-in-use purpose string; the **Mac gains the
+   `com.apple.security.personal-information.location` sandbox entitlement** (in
+   `Mac/DispatchMac.entitlements`) + `NSLocationWhenInUseUsageDescription` /
+   `NSLocationUsageDescription` purpose strings (in `project.yml`). Being a
+   self-declared SANDBOX entitlement (not an App-ID/portal capability), it needs
+   no provisioning-profile change — `DispatchMac` builds and code-signs on the
+   existing manual lane (verified; the entitlement + strings are present in the
+   signed `.app`).
 3. **Beacons stay Mac-view-only** (`isTriggerOnly` narrowed to beacon-only) per
-   the owner note / issue #84.
+   the owner note / issue #84. *(Kept.)*
 
 **Verification (exact):** `swift test` — **817 kit tests / 13 suites** pass.
-`DispatchAppTests` — **12 tests** pass (5 OptionBlockLayout + 7
-PlaceSearchModel). `DispatchApp` (iOS sim) and `DispatchMac` (platform=macOS)
-both **BUILD SUCCEEDED**. The iOS UI test
-`testCreatePlaceTriggerGroupAppearsInList` (rewritten to drive the search flow
-under `--stub-place-search`) **passed** on the simulator. Mac UI test execution
-is deferred to CI (the wedged local `io.robbie.Dispatch` process blocks
-launching the Mac app locally).
+`DispatchAppTests` — **15 tests** pass (5 OptionBlockLayout + 10
+PlaceSearchModel, incl. 3 current-location fills via the injected stub — no real
+CoreLocation). `DispatchApp` (iOS sim) and `DispatchMac` (platform=macOS,
+new entitlement) both **BUILD SUCCEEDED** and code-sign clean. The iOS UI test
+`testCreatePlaceTriggerGroupAppearsInList` (search flow under
+`--stub-place-search`, plus a `group-place-current` existence check)
+**passed** on the simulator. Mac UI test execution is deferred to CI (the wedged
+local `io.robbie.Dispatch` process blocks launching the Mac app locally).
 
 **No entitlement / plist / schema diff:** the `PlaceTrigger` /
 `MonitorPlaceRegion` model, the v2 format, and the `MonitorObserver` are
