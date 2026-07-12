@@ -110,6 +110,10 @@ private struct MacGroupRow: View {
 
 private enum MacScheduleKind: String, CaseIterable, Identifiable {
     case everyNHours, timesPerDay, dailyAt, workoutEnd, visitArrival, calendarEventEnd
+    // Place/beacon triggers (plan 45) are configured on iPhone via CLMonitor;
+    // the Mac can't pick a region or register a beacon, so these are shown
+    // read-only and never offered when creating a group (see availableKinds).
+    case placeTrigger, beaconTrigger
     var id: String { rawValue }
     var displayName: String {
         switch self {
@@ -119,13 +123,22 @@ private enum MacScheduleKind: String, CaseIterable, Identifiable {
         case .workoutEnd: "When a workout ends (iPhone)"
         case .visitArrival: "When I arrive somewhere (iPhone)"
         case .calendarEventEnd: "When a calendar event ends (iPhone)"
+        case .placeTrigger: "When I arrive at / leave a place (iPhone)"
+        case .beaconTrigger: "When I'm near a beacon (iPhone)"
         }
     }
     /// Sensor kinds execute on iOS/watch only.
     var isDeviceOnly: Bool {
         switch self {
         case .everyNHours, .timesPerDay, .dailyAt: false
-        case .workoutEnd, .visitArrival, .calendarEventEnd: true
+        case .workoutEnd, .visitArrival, .calendarEventEnd, .placeTrigger, .beaconTrigger: true
+        }
+    }
+    /// Place/beacon groups can only be viewed (not created) on the Mac.
+    var isTriggerOnly: Bool {
+        switch self {
+        case .placeTrigger, .beaconTrigger: true
+        default: false
         }
     }
 }
@@ -163,6 +176,9 @@ struct MacPromptGroupEditorView: View {
     /// A `.calendars([...])` rule references the phone's calendars, which the
     /// Mac can't enumerate — preserved read-only when already set.
     private let pinnedCalendarIDs: [String]?
+    /// A place/beacon trigger (plan 45) the Mac can't reconfigure — preserved
+    /// verbatim on save so viewing a group here never drops its iPhone trigger.
+    private let lockedTriggerSchedule: GroupSchedule?
 
     init(group: PromptGroup?) {
         self.group = group
@@ -177,6 +193,7 @@ struct MacPromptGroupEditorView: View {
         var match = MacCalendarMatch.allEvents
         var title = ""
         var pinned: [String]? = nil
+        var lockedTrigger: GroupSchedule? = nil
         switch group?.schedule {
         case .everyNHours(let n): kind = .everyNHours; hours = n
         case .timesPerDay(let c, let d): kind = .timesPerDay; count = c; dist = d
@@ -191,8 +208,11 @@ struct MacPromptGroupEditorView: View {
             case .titleContains(let filter): match = .titleContains; title = filter
             case .calendars(let ids): pinned = ids
             }
+        case .placeTrigger: kind = .placeTrigger; lockedTrigger = group?.schedule
+        case .beaconTrigger: kind = .beaconTrigger; lockedTrigger = group?.schedule
         case .disabled, nil: break
         }
+        lockedTriggerSchedule = lockedTrigger
         _scheduleKind = State(initialValue: kind)
         _everyHours = State(initialValue: hours)
         _timesPerDay = State(initialValue: count)
@@ -261,7 +281,7 @@ struct MacPromptGroupEditorView: View {
     private var scheduleSection: some View {
         Section("Schedule") {
             Picker("Schedule", selection: $scheduleKind) {
-                ForEach(MacScheduleKind.allCases) { kind in
+                ForEach(availableKinds) { kind in
                     Text(kind.displayName).tag(kind)
                 }
             }
@@ -325,6 +345,10 @@ struct MacPromptGroupEditorView: View {
                 }
                 Text("Calendar matching by specific calendars must be set on your iPhone (the Mac can't read your calendars).")
                     .font(.caption).foregroundStyle(.secondary)
+            case .placeTrigger, .beaconTrigger:
+                Text("Triggered by a place or beacon set on your iPhone. Configure the trigger on iOS; you can still edit this group's questions and name here.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("mac-group-trigger-note")
             }
         }
     }
@@ -347,6 +371,13 @@ struct MacPromptGroupEditorView: View {
         }
     }
 
+    /// Trigger kinds only appear when the group already has that schedule; they
+    /// can't be created on the Mac (no region/beacon picker), so a fresh group
+    /// is never offered one.
+    private var availableKinds: [MacScheduleKind] {
+        MacScheduleKind.allCases.filter { !$0.isTriggerOnly || $0 == scheduleKind }
+    }
+
     private var draftSchedule: GroupSchedule {
         switch scheduleKind {
         case .everyNHours: .everyNHours(everyHours)
@@ -355,6 +386,8 @@ struct MacPromptGroupEditorView: View {
         case .workoutEnd: .workoutEnd
         case .visitArrival: .visitArrival
         case .calendarEventEnd: .calendarEventEnd(draftCalendarRule)
+        // Preserved verbatim — the Mac can't reconfigure a place/beacon trigger.
+        case .placeTrigger, .beaconTrigger: lockedTriggerSchedule ?? .disabled
         }
     }
 
