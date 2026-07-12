@@ -438,9 +438,16 @@ final class SurveyFlowUITests: XCTestCase {
         firstRow.tap()
 
         // Touched path: a time answer tagged "(yesterday)" is present.
+        // The detail screen is a lazy List with the SENSORS section (which now
+        // always carries plan-43's mocked heart-rate window row) above the
+        // answers, so the "(yesterday)" answer can sit below the fold and not
+        // yet exist in the accessibility tree — scroll to it rather than only
+        // waiting, matching the fix c8e2658 applied to the sibling flush/token
+        // detail assertions (the same latent fragility this one missed).
         let yesterdayText = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS[c] %@", "(yesterday)")).firstMatch
-        XCTAssertTrue(yesterdayText.waitForExistence(timeout: 10),
+        _ = yesterdayText.waitForExistence(timeout: 10)
+        XCTAssertTrue(scrollDownUntil(yesterdayText, app),
                       "no time answer tagged '(yesterday)' in the saved report — .time path broken")
 
         // Untouched path: the untouched time question shows no answer row
