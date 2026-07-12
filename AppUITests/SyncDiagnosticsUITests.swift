@@ -12,15 +12,17 @@ final class SyncDiagnosticsUITests: XCTestCase {
 
         app.buttons["settings-button"].tap()
         let iCloudLink = app.buttons["icloud-settings-link"]
-        XCTAssertTrue(iCloudLink.waitForExistence(timeout: 10))
-        // The Data section sits below the schedule/survey rows, so on compact
-        // iPhone widths icloud-settings-link starts below the fold — scroll it
-        // into view before tapping (waitForExistence is true even off-screen).
+        // The Data section renders below the fold on compact iPhone widths, and
+        // SwiftUI's List lazily materializes off-screen rows — so the row isn't
+        // in the accessibility tree until scrolled near. Scroll it in first,
+        // then assert + tap (asserting before scrolling races the lazy render).
         var iCloudScrolls = 0
-        while !iCloudLink.isHittable, iCloudScrolls < 6 {
+        while !iCloudLink.isHittable, iCloudScrolls < 8 {
             app.swipeUp()
             iCloudScrolls += 1
         }
+        XCTAssertTrue(iCloudLink.waitForExistence(timeout: 5),
+                      "icloud-settings-link should be reachable after scrolling")
         iCloudLink.tap()
 
         let diagnosticsLink = app.buttons["sync-diagnostics-link"]
