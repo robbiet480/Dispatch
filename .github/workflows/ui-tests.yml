@@ -203,6 +203,10 @@ jobs:
       - name: Homebrew on PATH
         # LaunchAgent PATH is minimal; brew tools (xcodegen/xcbeautify) live here.
         run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+      - name: Select Xcode
+        # Runner service defaults to CommandLineTools; point at the full Xcode
+        # via DEVELOPER_DIR (no sudo needed, unlike xcode-select -s).
+        run: echo "DEVELOPER_DIR=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" >> "$GITHUB_ENV"
       - name: Generate project
         run: xcodegen generate
       - name: Run Mac UI (real dev signing)
