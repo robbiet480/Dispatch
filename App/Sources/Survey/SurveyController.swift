@@ -74,13 +74,25 @@ final class SurveyController {
         ]
     }
 
+    /// Capture-time context metadata (plan 44, #61): assembled alongside the
+    /// sensor capture, stamped onto the report at save. Empty for backdated
+    /// reports (no capture ran) and in the test environment (deterministic
+    /// runs never touch UIKit/CoreMotion state).
+    private(set) var metadata = CaptureMetadata()
+
     func startCapture(since: Date?) async {
         // Backdated reports skip sensor capture entirely — no providers run.
         guard overrideDate == nil else { return }
+        let metadataTask: Task<CaptureMetadata, Never>? = isTestEnvironment ? nil : Task { [settings] in
+            await CaptureMetadataReader.read(settings: settings)
+        }
         let stream = CaptureCoordinator.capture(providers: Self.providers(since: since),
                                                 settings: settings)
         for await event in stream {
             outcomes[event.kind] = event.outcome
+        }
+        if let metadataTask {
+            metadata = await metadataTask.value
         }
         await attachTriggeringWorkoutIfNeeded()
     }
@@ -108,7 +120,8 @@ final class SurveyController {
                                             timeZone: TimeZone.current, outcomes: outcomes,
                                             answers: survey.drafts(), in: context,
                                             isBackdated: isBackdated,
-                                            promptGroupID: promptGroupID)
+                                            promptGroupID: promptGroupID,
+                                            metadata: metadata)
 
         SpotlightIndexer.index(report: report)
 

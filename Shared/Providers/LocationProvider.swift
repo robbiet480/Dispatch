@@ -66,11 +66,31 @@ final class LocationProvider: NSObject, SensorProvider, CLLocationManagerDelegat
         var snapshot = LocationSnapshot(latitude: fix.coordinate.latitude,
                                         longitude: fix.coordinate.longitude)
         snapshot.altitude = fix.altitude
-        snapshot.horizontalAccuracy = fix.horizontalAccuracy
-        snapshot.verticalAccuracy = fix.verticalAccuracy
-        snapshot.speed = fix.speed
-        snapshot.course = fix.course
+        // The full CLLocation rides the location payload as flat metadata
+        // (plan 44, #61) — CoreLocation's negative invalid sentinels degrade
+        // to nil via MotionFormatting rather than storing nonsense.
+        snapshot.horizontalAccuracy = MotionFormatting.validAccuracy(fix.horizontalAccuracy)
+        snapshot.verticalAccuracy = MotionFormatting.validAccuracy(fix.verticalAccuracy)
+        snapshot.speed = MotionFormatting.validSpeed(fix.speed)
+        snapshot.speedAccuracy = MotionFormatting.validAccuracy(fix.speedAccuracy)
+        snapshot.course = MotionFormatting.validCourse(fix.course)
+        snapshot.courseAccuracy = MotionFormatting.validAccuracy(fix.courseAccuracy)
+        snapshot.floorLevel = fix.floor?.level
+        if let source = fix.sourceInformation {
+            snapshot.isSimulatedBySoftware = source.isSimulatedBySoftware
+            snapshot.isProducedByAccessory = source.isProducedByAccessory
+        }
         snapshot.timestamp = fix.timestamp
+        // Compass heading (plan 44, #61): a separate CLHeading read (extra
+        // magnetometer activation, noted in the plan doc) folded into this
+        // provider so it rides the location toggle. Best-effort with an
+        // internal timeout — a missing compass (iPad/Mac/simulator) or a slow
+        // first sample degrades to nil, never stalling the location capture.
+        if let heading = await HeadingReader.read(timeout: .seconds(2)) {
+            snapshot.trueHeading = MotionFormatting.validHeading(heading.trueHeading)
+            snapshot.magneticHeading = MotionFormatting.validHeading(heading.magneticHeading)
+            snapshot.headingAccuracy = MotionFormatting.validAccuracy(heading.accuracy)
+        }
         if let placemark = try? await Self.reverseGeocode(fix) {
             snapshot.placemark = placemark
         }
@@ -176,5 +196,80 @@ struct AltitudeFromLocationProvider: SensorProvider {
         // abandons the waiter and yields `.unavailable`.
         let fix = await store.awaitFix()
         return .altitude(fix.altitude)
+    }
+}
+
+/// One-shot compass heading read (plan 44, #61) — CLHeading comes from a
+/// separate magnetometer activation, NOT from the CLLocation fix, so it gets
+/// its own manager here. Called from LocationProvider.capture (and therefore
+/// gated on the location sensor toggle). Single sample, stop immediately,
+/// bounded by an internal timeout so a slow/absent compass can never stall
+/// the location capture. The continuation carries the extracted values, not
+/// the CLHeading itself (CLHeading isn't Sendable).
+final class HeadingReader: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
+    struct Sample: Sendable {
+        let trueHeading: Double
+        let magneticHeading: Double
+        let accuracy: Double
+    }
+
+    private let manager = CLLocationManager()
+    private let state = OSAllocatedUnfairLock<CheckedContinuation<Sample?, Never>?>(initialState: nil)
+
+    /// Races the first heading sample against `timeout`; nil on no compass
+    /// hardware, delegate error, cancellation, or timeout.
+    static func read(timeout: Duration) async -> Sample? {
+        guard CLLocationManager.headingAvailable() else { return nil }
+        let reader = HeadingReader()
+        let sample = await withTaskGroup(of: Sample?.self) { group in
+            group.addTask { await reader.awaitSample() }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        await MainActor.run { reader.manager.stopUpdatingHeading() }
+        return sample
+    }
+
+    private func awaitSample() async -> Sample? {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Sample?, Never>) in
+                state.withLock { $0 = continuation }
+                // Start on the main runloop: CLLocationManager delivers
+                // delegate callbacks on the thread that starts updates, and a
+                // bare task-pool thread has no runloop to deliver into.
+                Task { @MainActor in
+                    self.manager.delegate = self
+                    self.manager.startUpdatingHeading()
+                }
+            }
+        } onCancel: {
+            takeContinuation()?.resume(returning: nil)
+        }
+    }
+
+    private func takeContinuation() -> CheckedContinuation<Sample?, Never>? {
+        state.withLock { c in
+            let result = c
+            c = nil
+            return result
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        manager.stopUpdatingHeading()
+        let sample = Sample(trueHeading: newHeading.trueHeading,
+                            magneticHeading: newHeading.magneticHeading,
+                            accuracy: newHeading.headingAccuracy)
+        takeContinuation()?.resume(returning: sample)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        manager.stopUpdatingHeading()
+        takeContinuation()?.resume(returning: nil)
     }
 }
