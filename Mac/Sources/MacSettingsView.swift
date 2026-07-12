@@ -83,6 +83,8 @@ struct MacSettingsView: View {
             Section("About") {
                 LabeledContent("Version", value: versionText)
                 LabeledContent("Sync container", value: SyncPolicy.containerIdentifier)
+                Link("View on GitHub", destination: Self.repositoryURL)
+                    .accessibilityIdentifier("github-link")
             }
         }
         .formStyle(.grouped)
@@ -102,6 +104,8 @@ struct MacSettingsView: View {
             Text(message)
         }
     }
+
+    private static let repositoryURL = URL(string: "https://github.com/robbiet480/Dispatch")!
 
     private var lastActivityText: String {
         guard let date = remoteChangeObserver.lastEventDate else { return "None this session" }

@@ -25,6 +25,7 @@ struct SettingsView: View {
                 dataSection
                 interfaceSection
                 aboutSection
+                sourceSection
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -268,6 +269,24 @@ struct SettingsView: View {
             sectionHeader("ABOUT")
         }
     }
+
+    private var sourceSection: some View {
+        Section {
+            Link(destination: Self.repositoryURL) {
+                HStack {
+                    settingsLabel("View on GitHub")
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            .accessibilityIdentifier("github-link")
+            .listRowBackground(Color.white.opacity(0.12))
+        }
+    }
+
+    private static let repositoryURL = URL(string: "https://github.com/robbiet480/Dispatch")!
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
