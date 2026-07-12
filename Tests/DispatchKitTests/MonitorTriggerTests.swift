@@ -93,3 +93,24 @@ import Testing
     #expect(MonitorDelay.nearestAllowedMinutes(-100) == 0)
     #expect(MonitorDelay.nearestAllowedMinutes(9_999) == 60)
 }
+
+// MARK: - Beacon major/minor contract
+
+@Test func beaconDropsOrphanMinorWhenMajorMissing() throws {
+    // UUID + minor (no major) is not a valid CLBeaconIdentityConstraint form,
+    // so the memberwise init drops the orphaned minor.
+    let viaInit = MonitorBeaconIdentity(uuid: "U", major: nil, minor: 42)
+    #expect(viaInit.major == nil)
+    #expect(viaInit.minor == nil)
+
+    // The same contract holds for stored/imported JSON, which decodes via the
+    // synthesized decoder — the custom init(from:) routes it through the guard.
+    let decoded = try #require(MonitorBeaconIdentity(json: #"{"uuid":"U","minor":42}"#))
+    #expect(decoded.major == nil)
+    #expect(decoded.minor == nil)
+
+    // A minor alongside a major is preserved.
+    let full = MonitorBeaconIdentity(uuid: "U", major: 1, minor: 42)
+    #expect(full.major == 1)
+    #expect(full.minor == 42)
+}
