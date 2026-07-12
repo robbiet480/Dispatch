@@ -70,6 +70,9 @@ Without this, CI fails with *"Timed out while enabling automation mode."*
 (If the prompt doesn't appear, System Settings → Privacy & Security →
 Accessibility → enable Xcode Helper.)
 
+The automation grant can re-prompt when the test-runner binary moves (e.g. a
+DerivedData path change) — approve on screen once per path per box.
+
 ### 3. Runner instances
 Get a registration token (repo → Settings → Actions → Runners → New
 self-hosted runner; valid ~1h, usable for both instances back-to-back):
