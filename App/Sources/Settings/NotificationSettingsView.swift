@@ -15,6 +15,7 @@ struct NotificationSettingsView: View {
     @Environment(\.notificationPrefs) private var prefs
     @Environment(\.scenePhase) private var scenePhase
 
+    @State private var randomCheckInsEnabled: Bool
     @State private var alertsPerDay: Int
     @State private var distribution: PromptDistribution
     @State private var scheduledTimes: [DateComponents]
@@ -56,6 +57,7 @@ struct NotificationSettingsView: View {
     private var theme: Theme { themeStore.theme }
 
     init(prefs: NotificationPrefs) {
+        _randomCheckInsEnabled = State(initialValue: prefs.randomCheckInsEnabled)
         _alertsPerDay = State(initialValue: prefs.alertsPerDay)
         _distribution = State(initialValue: prefs.distribution)
         _scheduledTimes = State(initialValue: prefs.scheduledTimes)
@@ -77,7 +79,12 @@ struct NotificationSettingsView: View {
                 focusFilterSection
                 sleepSection
                 frequencySection
-                distributionSection
+                // DISTRIBUTION only shapes the RANDOM schedule, so it's hidden
+                // when random check-ins are off (plan 51). SCHEDULED (explicit
+                // fixed times) stays — it's independent of the random toggle.
+                if randomCheckInsEnabled {
+                    distributionSection
+                }
                 scheduledSection
                 nagSection
                 digestSection
@@ -210,39 +217,63 @@ struct NotificationSettingsView: View {
 
     private var frequencySection: some View {
         Section {
-            HStack {
-                Text("Alerts per Day")
+            // Plan 51: the switch that fully disables the app's own random
+            // check-ins, so a user can rely on Prompt Groups only. Default ON
+            // (existing behavior). When off, the alerts-per-day stepper below
+            // and the DISTRIBUTION section are hidden — they only shape the
+            // random schedule this switch just turned off.
+            Toggle(isOn: Binding(
+                get: { randomCheckInsEnabled },
+                set: { updateRandomCheckInsEnabled($0) }
+            )) {
+                Text("Random Check-ins")
                     .foregroundStyle(.white)
-                Spacer()
-                Button {
-                    updateAlertsPerDay(alertsPerDay - 1)
-                } label: {
-                    Image(systemName: "minus.circle")
-                }
-                .disabled(alertsPerDay <= 1)
-                .accessibilityIdentifier("alerts-per-day-decrement")
-
-                Text("\(alertsPerDay)")
-                    .frame(minWidth: 24)
-                    .foregroundStyle(.white)
-                    .accessibilityIdentifier("alerts-per-day-count")
-
-                Button {
-                    updateAlertsPerDay(alertsPerDay + 1)
-                } label: {
-                    Image(systemName: "plus.circle")
-                }
-                .disabled(alertsPerDay >= 12)
-                .accessibilityIdentifier("alerts-per-day-increment")
             }
-            // Two Buttons in one List row: without an explicit style the
-            // whole row is a single tap target that fires BOTH actions (see
-            // SensorSettingsView's capsule buttons for the same pattern).
-            .buttonStyle(.borderless)
-            .foregroundStyle(.white)
+            .accessibilityIdentifier("random-checkins-toggle")
             .listRowBackground(Color.white.opacity(0.12))
+
+            if randomCheckInsEnabled {
+                HStack {
+                    Text("Alerts per Day")
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Button {
+                        updateAlertsPerDay(alertsPerDay - 1)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .disabled(alertsPerDay <= 1)
+                    .accessibilityIdentifier("alerts-per-day-decrement")
+
+                    Text("\(alertsPerDay)")
+                        .frame(minWidth: 24)
+                        .foregroundStyle(.white)
+                        .accessibilityIdentifier("alerts-per-day-count")
+
+                    Button {
+                        updateAlertsPerDay(alertsPerDay + 1)
+                    } label: {
+                        Image(systemName: "plus.circle")
+                    }
+                    .disabled(alertsPerDay >= 12)
+                    .accessibilityIdentifier("alerts-per-day-increment")
+                }
+                // Two Buttons in one List row: without an explicit style the
+                // whole row is a single tap target that fires BOTH actions (see
+                // SensorSettingsView's capsule buttons for the same pattern).
+                .buttonStyle(.borderless)
+                .foregroundStyle(.white)
+                .listRowBackground(Color.white.opacity(0.12))
+            }
         } header: {
             sectionHeader("FREQUENCY")
+        } footer: {
+            Text(randomCheckInsEnabled
+                 ? "Random prompts a few times a day. Turn off to only get your Prompt Groups."
+                 : "Off — only your Prompt Groups (and any Scheduled times below) will notify you.")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+                .accessibilityIdentifier("random-checkins-caption")
         }
     }
 
@@ -533,6 +564,12 @@ struct NotificationSettingsView: View {
     }
 
     // MARK: - Mutations
+
+    private func updateRandomCheckInsEnabled(_ value: Bool) {
+        randomCheckInsEnabled = value
+        prefs.randomCheckInsEnabled = value
+        replan()
+    }
 
     private func updateAlertsPerDay(_ value: Int) {
         let clamped = max(1, min(12, value))
