@@ -41,8 +41,17 @@ enum CaptureMetadataReader {
         device.screenBrightness = scene.flatMap {
             CaptureMetadataFormatting.normalizedBrightness($0.screen.brightness)
         }
-        device.interfaceStyle =
-            UITraitCollection.current.userInterfaceStyle == .dark ? "dark" : "light"
+        // Read the active scene's traits, not UITraitCollection.current —
+        // .current is often .unspecified off a view context and would store
+        // a wrong default. Unspecified degrades to nil, never a guess
+        // (Copilot review catch on PR #72).
+        let style = (scene?.keyWindow?.traitCollection ?? scene?.traitCollection)?
+            .userInterfaceStyle
+        device.interfaceStyle = switch style {
+        case .dark: "dark"
+        case .light: "light"
+        default: nil
+        }
         device.audioOutputRoute = AVAudioSession.sharedInstance().currentRoute.outputs.first
             .map { CaptureMetadataFormatting.audioRouteLabel(portType: $0.portType.rawValue) }
         return device

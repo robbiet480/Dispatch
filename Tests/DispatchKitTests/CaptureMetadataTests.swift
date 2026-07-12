@@ -202,6 +202,30 @@ import Testing
     #expect(heading?.value == "45° NE")
 }
 
+@Test func detailRowsRenderEveryCapturedField() {
+    var snapshot = LocationSnapshot(latitude: 0, longitude: 0)
+    snapshot.speed = 4.4704 // exactly 10 mph
+    snapshot.speedAccuracy = 0.44704 // exactly 1 mph
+    snapshot.course = 180
+    snapshot.courseAccuracy = 3
+    snapshot.trueHeading = 45
+    snapshot.headingAccuracy = 5
+    snapshot.horizontalAccuracy = 5
+    snapshot.verticalAccuracy = 3
+    let rows = ContextMetadataDetail.locationRows(snapshot)
+    #expect(rows.first { $0.label == "Speed" }?.value == "10 mph (±1 mph)")
+    #expect(rows.first { $0.label == "Course" }?.value == "180° S (±3°)")
+    #expect(rows.first { $0.label == "Heading" }?.value == "45° NE (±5°)")
+    #expect(rows.first { $0.label == "Accuracy" }?.value == "±5 m · ±3 m vertical")
+}
+
+@Test func magneticOnlyHeadingIsLabeled() {
+    var snapshot = LocationSnapshot(latitude: 0, longitude: 0)
+    snapshot.magneticHeading = 44
+    let rows = ContextMetadataDetail.locationRows(snapshot)
+    #expect(rows.first { $0.label == "Heading" }?.value == "44° NE magnetic")
+}
+
 @Test func detailRowsHideNilFieldsAndQuietSourceFlags() throws {
     let container = try DispatchStore.inMemoryContainer()
     let context = ModelContext(container)
