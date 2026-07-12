@@ -12,79 +12,70 @@ concurrency:
 
 jobs:
   test:
-    # macOS 26 image required: DispatchKit links SwiftData symbols that only
+    # Self-hosted runners must never execute fork-PR code (the minis hold the
+    # Apple Development signing identity). Same-repo PRs and main pushes only —
+    # fork PRs skip (repo policy additionally requires maintainer approval
+    # before any external contributor's workflow runs).
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    # Self-hosted M4 mini pool (labels: self-hosted, macOS, dispatch-selfhosted).
+    # macOS 26 / Xcode 26 required: DispatchKit links SwiftData symbols that only
     # exist in the macOS 26 runtime (an older host dlopen-fails the test bundle
-    # even though the Xcode 26 SDK compiles it).
-    runs-on: macos-26
+    # even though the Xcode 26 SDK compiles it). No signing or simulator needed.
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Homebrew on PATH
+        # LaunchAgent PATH is minimal; brew tools live under /opt/homebrew/bin.
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
       - name: Select Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-      # Cache keys are prefixed with the selected Xcode's build version so a
-      # runner-image toolchain bump can't serve module caches built by an
-      # older compiler (stale exact-key hits are never re-saved and would
-      # self-perpetuate otherwise).
-      - name: Capture Xcode version for cache keys
-        id: xcode
-        run: echo "v=$(xcodebuild -version | tr '\n' '-' | tr -d ' ')" >> "$GITHUB_OUTPUT"
-      # DispatchKit has no external dependencies (no Package.resolved), so
-      # the win here is incremental-build reuse of .build across runs: the
-      # exact key matches only identical sources, and restore-keys fall back
-      # to the newest previous cache so unchanged files aren't recompiled.
-      - name: Cache SwiftPM build
-        uses: actions/cache@v4
-        with:
-          path: .build
-          key: spm-${{ runner.os }}-${{ steps.xcode.outputs.v }}-${{ hashFiles('Package.swift', 'Sources/**', 'Tests/**') }}
-          restore-keys: |
-            spm-${{ runner.os }}-${{ steps.xcode.outputs.v }}-
-      - name: Run DispatchKit tests
-        run: swift test
-  build-app:
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-      - name: Ensure iOS platform
-        # macos-26 images now pre-install the iOS SDK + simulator runtimes
-        # (see actions/runner-images macos-26-arm64 readme), so this is a
-        # no-op check in the common case. The download path survives as a
-        # fallback because the generic-simulator build below needs the
-        # iphonesimulator SDK, and image regressions here have happened
-        # before (downloadPlatform is flaky on runners — transient exit 70 —
-        # hence the retries).
+        # Runner defaults to CommandLineTools; point at full Xcode without sudo.
         run: |
-          if xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator; then
-            echo "iOS simulator SDK pre-installed; skipping download"
-            exit 0
-          fi
-          for i in 1 2 3; do
-            sudo xcodebuild -downloadPlatform iOS && exit 0
-            echo "downloadPlatform attempt $i failed; retrying in 30s"
-            sleep 30
-          done
-          echo "iOS platform download failed after 3 attempts"; exit 1
-      - name: Install XcodeGen
-        run: brew install xcodegen
+          # Fail fast if no Xcode is installed — a silent empty glob would
+          # otherwise write a bogus DEVELOPER_DIR and fail confusingly later.
+          XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE_APP" ] || { echo "::error::No Xcode found in /Applications on this runner"; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+      # No actions/cache: persistent runners keep the SwiftPM build dir on
+      # local disk, so incremental builds are free between runs. The scratch
+      # path lives OUTSIDE the workspace (checkout's default `git clean -ffdx`
+      # would wipe an in-workspace .build every run) and is keyed on
+      # $RUNNER_NAME so the two instances on one mini never share it.
+      - name: Run DispatchKit tests
+        run: swift test --scratch-path "$HOME/dispatch-ci/${RUNNER_NAME}/spm-build"
+  build-app:
+    # Fork-PR gate: same rationale as `test` above.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Homebrew on PATH
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+      - name: Select Xcode
+        run: |
+          # Fail fast if no Xcode is installed — a silent empty glob would
+          # otherwise write a bogus DEVELOPER_DIR and fail confusingly later.
+          XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE_APP" ] || { echo "::error::No Xcode found in /Applications on this runner"; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Verify runner toolchain
+        # xcodegen is pre-installed on the minis (runner setup doc), not brewed
+        # per run; the iOS simulator SDK ships with Xcode, so no downloadPlatform
+        # step either. Fail fast with a clear message if the runner was
+        # reprovisioned without it.
+        run: |
+          command -v xcodegen >/dev/null || { echo "::error::xcodegen missing on self-hosted runner — brew install it (see runner setup doc)"; exit 1; }
       - name: Generate project
         run: xcodegen generate
-      # Same Xcode-version prefixing rationale as the SwiftPM cache above.
-      - name: Capture Xcode version for cache keys
-        id: xcode
-        run: echo "v=$(xcodebuild -version | tr '\n' '-' | tr -d ' ')" >> "$GITHUB_OUTPUT"
-      # DerivedData reuse between runs (pinned via -derivedDataPath so the
-      # path is cacheable): the exact key matches only identical inputs;
-      # restore-keys fall back to the newest previous cache so xcodebuild's
-      # incremental engine skips unchanged files.
-      - name: Cache DerivedData
-        uses: actions/cache@v4
-        with:
-          path: DerivedData
-          key: dd-${{ runner.os }}-${{ steps.xcode.outputs.v }}-${{ hashFiles('project.yml', 'Package.swift', 'App/**', 'Widgets/**', 'Sources/**') }}
-          restore-keys: |
-            dd-${{ runner.os }}-${{ steps.xcode.outputs.v }}-
+      # DerivedData persists on the runner's local disk between jobs, so
+      # xcodebuild's incremental engine skips unchanged files without an
+      # actions/cache round-trip. It lives OUTSIDE the workspace (checkout's
+      # default `git clean -ffdx` would wipe an in-workspace DerivedData every
+      # run) and is keyed on $RUNNER_NAME so the two instances never share it.
       - name: Build app
         # generic simulator destination: compiles against the SDK without
-        # requiring a concrete simulator runtime to be installed on the image.
-        run: xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData build
+        # requiring a concrete simulator runtime to be installed.
+        run: xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination 'generic/platform=iOS Simulator' -derivedDataPath "$HOME/dispatch-ci/${RUNNER_NAME}/DerivedData-build" build
