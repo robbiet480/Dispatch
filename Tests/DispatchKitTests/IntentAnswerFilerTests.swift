@@ -117,3 +117,30 @@ private func makeQuestion(
     #expect(try IntentAnswerFiler.file(questionID: "missing", raw: "x", trigger: .intent, date: Date(), in: context) == nil)
     #expect(try context.fetchCount(FetchDescriptor<Report>()) == 0)
 }
+
+// A raw value that coerces to .skipped (whitespace-only, or an unparseable
+// time) must NOT create a phantom payload-less report — it throws the
+// distinct unrecordable-value error so the intent can say "couldn't record
+// that" instead of a blank "Logged  to X" confirmation. nil stays reserved
+// for missing/ineligible questions (test above).
+@Test func fileThrowsAndSavesNothingForUnrecordableValue() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    let number = makeQuestion(prompt: "Coffees", type: .number)
+    let time = makeQuestion(prompt: "Woke at", type: .time)
+    for q in [number, time] { context.insert(q) }
+    try context.save()
+
+    // Whitespace-only coerces to .skipped for any type.
+    #expect(throws: IntentAnswerFiler.FilingError.unrecordableValue) {
+        try IntentAnswerFiler.file(questionID: number.uniqueIdentifier, raw: "   ",
+                                   trigger: .intent, date: Date(), in: context)
+    }
+    // An unparseable time coerces to .skipped too.
+    #expect(throws: IntentAnswerFiler.FilingError.unrecordableValue) {
+        try IntentAnswerFiler.file(questionID: time.uniqueIdentifier, raw: "lunchtime",
+                                   trigger: .intent, date: Date(), in: context)
+    }
+    // No phantom reports were created for either rejection.
+    #expect(try context.fetchCount(FetchDescriptor<Report>()) == 0)
+}
