@@ -66,14 +66,25 @@ public enum WidgetQuickAnswerMarker {
         return elapsed >= 0 && elapsed < doubleFireSuppressionWindow
     }
 
-    /// Records a widget-filed answer (both markers). `pendingActedAt` only
-    /// ever moves forward so an undrained older marker can't regress.
-    public static func recordFiled(at date: Date, in defaults: UserDefaults) {
+    /// Records ONLY the nag-cancel (`pendingActedAt`) marker, without the
+    /// widget-only `filedAt` marker — for non-widget filing paths (the "Log
+    /// Answer" App Intent) that must cancel the question's nag chain at the
+    /// app's next foreground but must NOT flip the medium widget's transient
+    /// "Filed ✓" state or arm its double-fire suppression window (both keyed
+    /// off `filedAt`). `pendingActedAt` only ever moves forward so an
+    /// undrained older marker can't regress.
+    public static func recordPendingActedAt(at date: Date, in defaults: UserDefaults) {
         if let existing = pendingActedAt(in: defaults), existing >= date {
             // keep the newer pending marker
         } else {
             defaults.set(date.timeIntervalSince1970, forKey: pendingActedAtKey)
         }
+    }
+
+    /// Records a widget-filed answer (both markers). `pendingActedAt` only
+    /// ever moves forward so an undrained older marker can't regress.
+    public static func recordFiled(at date: Date, in defaults: UserDefaults) {
+        recordPendingActedAt(at: date, in: defaults)
         defaults.set(date.timeIntervalSince1970, forKey: filedAtKey)
     }
 

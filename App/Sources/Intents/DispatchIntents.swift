@@ -114,14 +114,24 @@ struct LogAnswerIntent: AppIntent {
             }
             if let defaults = UserDefaults(suiteName: StoreLocation.appGroupID) {
                 // Cancel the question's nag chain at the app's next foreground
-                // (the shared widget marker path) and queue webhook delivery.
-                WidgetQuickAnswerMarker.recordFiled(at: Date(), in: defaults)
+                // (the shared pending-action marker) and queue webhook
+                // delivery. This is NOT a widget tap, so record only the
+                // nag-cancel marker — setting the widget-only `filedAt` here
+                // would flip the widget's transient "Filed ✓" state and arm
+                // its double-fire window against an unrelated real tap.
+                WidgetQuickAnswerMarker.recordPendingActedAt(at: Date(), in: defaults)
                 WebhookQueue.enqueue(reportID: report.uniqueIdentifier, in: defaults)
             }
             WidgetCenter.shared.reloadAllTimelines()
             let answered = report.responses?.first.flatMap(AnswerSummary.text) ?? value
             intentLog.info("logged intent answer to \(question.id, privacy: .public)")
             return .result(dialog: "Logged \(answered) to \(question.prompt).")
+        } catch IntentAnswerFiler.FilingError.unrecordableValue {
+            // The value carried no recordable answer (blank, or an
+            // unparseable time). No report was filed — say so instead of
+            // claiming a save with a blank confirmation.
+            intentLog.info("log answer skipped — unrecordable value for \(question.id, privacy: .public)")
+            return .result(dialog: "I couldn't record that as an answer to \(question.prompt).")
         } catch {
             intentLog.error("log answer failed: \(error, privacy: .public)")
             return .result(dialog: "Couldn't file that answer.")

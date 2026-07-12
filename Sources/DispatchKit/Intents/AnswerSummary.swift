@@ -38,21 +38,23 @@ public enum AnswerSummary {
 
     /// The most recent non-draft report's answered response for `id`, as
     /// display text plus that report's date. Drafts, payload-less responses,
-    /// and other questions are skipped; ties break toward the later date.
+    /// and other questions are skipped; ties break toward the first report at
+    /// the winning date. Single pass — no sorted copy, since this runs on
+    /// every intent/widget query.
     public static func lastAnswer(toQuestionID id: String,
                                   in reports: [Report]) -> (text: String, date: Date)? {
-        reports
-            .filter { !$0.isDraft }
-            .sorted { $0.date > $1.date }
-            .lazy
-            .compactMap { report -> (text: String, date: Date)? in
-                for response in report.responses ?? [] where response.questionIdentifier == id {
-                    if let text = text(for: response) {
-                        return (text: text, date: report.date)
-                    }
+        var best: (text: String, date: Date)?
+        for report in reports where !report.isDraft {
+            for response in report.responses ?? [] where response.questionIdentifier == id {
+                guard let text = text(for: response) else { continue }
+                // Strict `>` keeps the first report seen at the winning date,
+                // matching the old stable-sort-then-first tie-break.
+                if best == nil || report.date > best!.date {
+                    best = (text: text, date: report.date)
                 }
-                return nil
+                break // one answered response per report is enough
             }
-            .first
+        }
+        return best
     }
 }

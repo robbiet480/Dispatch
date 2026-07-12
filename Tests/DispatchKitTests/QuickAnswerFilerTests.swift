@@ -144,6 +144,32 @@ private func freshDefaults() -> UserDefaults {
     #expect(WidgetQuickAnswerMarker.filedAt(in: defaults) == filed)
 }
 
+@Test func markerPendingOnlyRecordSkipsFiledAt() {
+    let defaults = freshDefaults()
+    let acted = Date(timeIntervalSince1970: 1_780_000_000)
+
+    // The "Log Answer" App Intent path: cancel the nag chain WITHOUT flipping
+    // the widget's transient "Filed ✓" state or arming its double-fire window.
+    WidgetQuickAnswerMarker.recordPendingActedAt(at: acted, in: defaults)
+    #expect(WidgetQuickAnswerMarker.pendingActedAt(in: defaults) == acted)
+    #expect(WidgetQuickAnswerMarker.filedAt(in: defaults) == nil)
+    #expect(!WidgetQuickAnswerMarker.filedRecently(in: defaults, now: acted))
+    // A real widget tap right after must NOT be swallowed as a double-fire —
+    // suppression keys off filedAt, which this path never set.
+    #expect(!WidgetQuickAnswerMarker.shouldSuppressDoubleFire(
+        lastFiledAt: WidgetQuickAnswerMarker.filedAt(in: defaults), now: acted))
+}
+
+@Test func markerPendingOnlyRecordNeverRegresses() {
+    let defaults = freshDefaults()
+    let newer = Date(timeIntervalSince1970: 1_780_000_000)
+    let older = newer.addingTimeInterval(-600)
+
+    WidgetQuickAnswerMarker.recordPendingActedAt(at: newer, in: defaults)
+    WidgetQuickAnswerMarker.recordPendingActedAt(at: older, in: defaults)
+    #expect(WidgetQuickAnswerMarker.pendingActedAt(in: defaults) == newer)
+}
+
 @Test func markerPendingNeverRegresses() {
     let defaults = freshDefaults()
     let newer = Date(timeIntervalSince1970: 1_780_000_000)

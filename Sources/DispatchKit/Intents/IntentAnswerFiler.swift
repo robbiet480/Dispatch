@@ -12,6 +12,16 @@ import SwiftData
 /// Pure/`ModelContext` only — no `AppIntents` import — so the coercion and
 /// filing are unit-testable without an intent process.
 public enum IntentAnswerFiler {
+    /// Thrown by `file` when the raw value carries no recordable answer — it
+    /// coerced to `.skipped` (whitespace-only input, an empty token list, or
+    /// an unparseable time). Distinct from a `nil` return (question
+    /// missing/ineligible) so the intent can tell "no such question" apart
+    /// from "nothing to record", and neither path files a phantom
+    /// payload-less report.
+    public enum FilingError: Error, Equatable {
+        case unrecordableValue
+    }
+
     /// Words a Yes/No answer treats as affirmative when the raw value doesn't
     /// match a stored choice (case-insensitive, trimmed).
     private static let affirmativeWords: Set<String> = ["yes", "y", "true", "1", "on", "yep", "yeah"]
@@ -83,7 +93,11 @@ public enum IntentAnswerFiler {
 
     /// Files a minimal report containing the single coerced answer for the
     /// question identified by `questionID`. Returns nil (nothing saved) when
-    /// the question is missing or ineligible.
+    /// the question is missing or ineligible; throws
+    /// `FilingError.unrecordableValue` when the raw value coerces to
+    /// `.skipped` (whitespace-only, an empty token list, an unparseable
+    /// time) — filing that would create a phantom payload-less report and a
+    /// blank confirmation, so it's rejected before touching the store.
     @discardableResult
     public static func file(questionID: String, raw: String, trigger: ReportTrigger,
                             date: Date = Date(), in context: ModelContext) throws -> Report? {
@@ -94,6 +108,7 @@ public enum IntentAnswerFiler {
             type: question.type
         )
         let value = coercedValue(forType: question.type, choices: question.choices, raw: raw)
+        guard value != .skipped else { throw FilingError.unrecordableValue }
         return try ReportBuilder.save(
             kind: .regular,
             trigger: trigger,
