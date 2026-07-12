@@ -224,7 +224,13 @@ public enum QuestionPortability {
         guard let header = records.first else {
             throw QuestionPortabilityError.malformedCSV("empty file")
         }
-        let index = Dictionary(uniqueKeysWithValues: header.enumerated().map { ($1, $0) })
+        // Build the column index manually (first occurrence wins) rather than
+        // Dictionary(uniqueKeysWithValues:), which traps at runtime on a
+        // duplicate header column — and the header is user-provided input.
+        var index: [String: Int] = [:]
+        for (position, name) in header.enumerated() where index[name] == nil {
+            index[name] = position
+        }
         guard index["prompt"] != nil, index["type"] != nil else {
             throw QuestionPortabilityError.malformedCSV("missing required 'prompt'/'type' columns")
         }

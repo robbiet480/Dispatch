@@ -38,6 +38,19 @@ private func sampleDefinitions() -> [QuestionDefinition] {
     #expect(decoded == originals)
 }
 
+@Test func csvDuplicateHeaderColumnDoesNotCrash() throws {
+    // A malformed header with a duplicate column name must not trap the
+    // decoder (user-provided input) — first occurrence wins.
+    let csv = """
+    prompt,type,prompt
+    Did you sleep well?,yesNo,ignored
+    """
+    let decoded = try QuestionPortability.decodeCSV(csv)
+    #expect(decoded.count == 1)
+    #expect(decoded[0].prompt == "Did you sleep well?")
+    #expect(decoded[0].type == .yesNo)
+}
+
 @Test func csvHasDocumentedHeaderRow() {
     let csv = QuestionPortability.encodeCSV(sampleDefinitions())
     let firstLine = csv.split(separator: "\n", maxSplits: 1).first.map(String.init)
