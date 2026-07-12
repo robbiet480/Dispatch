@@ -9,12 +9,15 @@ public enum SensorKind: String, Codable, CaseIterable, Sendable {
     /// Windowed heart-rate statistics since the previous report (plan 43,
     /// issue #48). Additive raw value.
     case healthHeartRange
-    /// Location-fix-derived (plan 43, #61): rides the shared `LocationFixStore`
-    /// fix exactly like `altitude`.
-    case speed, course
-    /// Magnetometer-derived (plan 43, #61): its own CoreLocation heading
-    /// read, iPhone-only — see `HeadingProvider`.
-    case heading
+    /// Permission-grouped context-metadata toggles (plan 44, #61). These are
+    /// NOT capture providers — no checklist row, no CaptureCoordinator
+    /// outcome. They gate the capture-time context metadata stored as flat
+    /// payload fields (Report metadata / LocationSnapshot extras):
+    /// `motionFitness` gates motion activity + barometric pressure (rides the
+    /// existing Motion & Fitness OS authorization), `deviceContext` gates the
+    /// zero-permission device state (Low Power Mode, brightness, appearance,
+    /// audio route).
+    case motionFitness, deviceContext
 }
 
 public enum TemperatureUnit: String, Codable, Sendable { case fahrenheit, celsius }

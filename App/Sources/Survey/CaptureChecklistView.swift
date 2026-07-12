@@ -10,9 +10,6 @@ struct CaptureChecklistView: View {
         (.location, "mappin", "LOCATION"),
         (.weather, "cloud.fill", "WEATHER CONDITIONS"),
         (.altitude, "mountain.2.fill", "ALTITUDE"),
-        (.speed, "speedometer", "SPEED"),
-        (.course, "location.north.line.fill", "COURSE"),
-        (.heading, "location.north.circle.fill", "HEADING"),
         (.photos, "camera.fill", "PHOTOS"),
         (.audio, "mic.fill", "AUDIO"),
         (.healthSteps, "figure.walk", "STEPS"),
@@ -115,12 +112,6 @@ struct CaptureChecklistView: View {
             return (observation.condition ?? "WEATHER CAPTURED").uppercased()
         case .altitude(let meters):
             return "\(Int(meters * 3.28084)) FEET"
-        case .speed(let mps):
-            return "\(Int(MotionFormatting.mph(fromMPS: mps).rounded())) MPH"
-        case .course(let degrees):
-            return "\(Int(degrees.rounded()))° \(MotionFormatting.compassPoint(forDegrees: degrees))"
-        case .heading(let degrees):
-            return "\(Int(degrees.rounded()))° \(MotionFormatting.compassPoint(forDegrees: degrees))"
         case .photos(let count, _):
             return "\(count) PHOTOS ADDED"
         case .audio(let sample):

@@ -46,7 +46,8 @@ public enum ReportBuilder {
         answers: [AnswerDraft],
         in context: ModelContext,
         isBackdated: Bool = false,
-        promptGroupID: String? = nil
+        promptGroupID: String? = nil,
+        metadata: CaptureMetadata = CaptureMetadata()
     ) throws -> Report {
         let report = Report()
         report.date = date
@@ -62,6 +63,15 @@ public enum ReportBuilder {
         // provenance.
         report.sourceDeviceModel = DeviceIdentity.model
         report.sourceDeviceName = DeviceIdentity.deviceName
+        // Capture-time context metadata (plan 44, #61): flat, all-optional —
+        // absent fields (toggle off, platform N/A, authorization not granted)
+        // simply stay nil.
+        report.isLowPowerMode = metadata.isLowPowerMode
+        report.screenBrightness = metadata.screenBrightness
+        report.interfaceStyle = metadata.interfaceStyle
+        report.audioOutputRoute = metadata.audioOutputRoute
+        report.motionActivity = metadata.motionActivity
+        report.barometricPressureKPa = metadata.barometricPressureKPa
 
         var health: [HealthReading] = []
         for outcome in outcomes.values {
@@ -70,9 +80,6 @@ public enum ReportBuilder {
             case .location(let snapshot): report.location = snapshot
             case .weather(let observation): report.weather = observation
             case .altitude(let meters): report.altitudeMeters = meters
-            case .speed(let mps): report.speedMPS = mps
-            case .course(let degrees): report.courseDegrees = degrees
-            case .heading(let degrees): report.headingDegrees = degrees
             case .photos(_, let records): report.photos = records
             case .audio(let sample): report.audio = sample
             case .battery(let level): report.battery = level

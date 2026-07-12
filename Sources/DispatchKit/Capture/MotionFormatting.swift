@@ -1,11 +1,12 @@
 import Foundation
 
-/// Pure conversions for the speed/course/heading sensors (plan 43, #61).
-/// CoreLocation reports `-1` for `CLLocation.speed`/`.course` when the fix
-/// can't support a valid reading (stationary, poor accuracy, no course
-/// estimate) — these helpers degrade that sentinel to `nil` rather than
-/// surfacing a nonsensical negative value, matching the "degrade through
-/// absence, not zero" pattern used elsewhere (see plan 26's MediaSample).
+/// Pure conversions for the CLLocation motion metadata (plan 44, #61).
+/// CoreLocation reports `-1` for `CLLocation.speed`/`.course` (and the
+/// matching accuracy fields, and CLHeading degrees) when the fix can't
+/// support a valid reading (stationary, poor accuracy, no course estimate) —
+/// these helpers degrade that sentinel to `nil` rather than storing a
+/// nonsensical negative value, matching the "degrade through absence, not
+/// zero" pattern used elsewhere (see plan 26's MediaSample).
 public enum MotionFormatting {
     /// `nil` when CoreLocation's raw speed reading is invalid (negative).
     public static func validSpeed(_ metersPerSecond: Double) -> Double? {
@@ -15,6 +16,18 @@ public enum MotionFormatting {
     /// `nil` when CoreLocation's raw course reading is invalid (negative).
     public static func validCourse(_ degrees: Double) -> Double? {
         degrees >= 0 ? degrees : nil
+    }
+
+    /// `nil` when a CLHeading degree reading is invalid (negative —
+    /// CoreLocation reports -1 when the heading can't be determined).
+    public static func validHeading(_ degrees: Double) -> Double? {
+        degrees >= 0 ? degrees : nil
+    }
+
+    /// `nil` when a CoreLocation accuracy reading is invalid (negative means
+    /// "unusable" for every CL accuracy field).
+    public static func validAccuracy(_ value: Double) -> Double? {
+        value >= 0 ? value : nil
     }
 
     /// Meters/second → miles/hour (1 m/s = 2.2369362920544... mph).

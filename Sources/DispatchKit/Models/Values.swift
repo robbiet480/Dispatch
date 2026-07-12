@@ -168,8 +168,28 @@ public struct LocationSnapshot: Codable, Hashable, Sendable {
     public var altitude: Double?
     public var horizontalAccuracy: Double?
     public var verticalAccuracy: Double?
+    /// Motion metadata off the same CLLocation fix (plan 44, #61): stored as
+    /// payload metadata, never surfaced as their own sensors (owner design
+    /// decision on PR #72). All FLAT optional fields — no nested structs, no
+    /// custom CodingKeys (SwiftData composite-decoding trap). speed/course are
+    /// pre-validated via MotionFormatting (CoreLocation's -1 invalid sentinel
+    /// degrades to nil before storage).
     public var speed: Double?
+    public var speedAccuracy: Double?
     public var course: Double?
+    public var courseAccuracy: Double?
+    /// CLFloor.level — logical floor of the building, when the fix has one.
+    public var floorLevel: Int?
+    /// CLLocationSourceInformation flags, when the fix carries them.
+    public var isSimulatedBySoftware: Bool?
+    public var isProducedByAccessory: Bool?
+    /// Compass heading (plan 44, #61): a separate CLHeading read (extra
+    /// magnetometer activation) folded into the location sensor's capture —
+    /// gated on the location sensor being enabled, best-effort, nil when the
+    /// device has no heading hardware or the read times out.
+    public var trueHeading: Double?
+    public var magneticHeading: Double?
+    public var headingAccuracy: Double?
     public var timestamp: Date?
     public var placemark: Placemark?
     public init(latitude: Double? = nil, longitude: Double? = nil) {

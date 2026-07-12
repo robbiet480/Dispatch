@@ -120,18 +120,6 @@ struct MacReportDetailView: View {
             let feet = meters * 3.28084
             append("arrow.up.forward", "Altitude", String(format: "%.0f ft", feet))
         }
-        if let mps = report.speedMPS {
-            let mph = MotionFormatting.mph(fromMPS: mps)
-            append("speedometer", "Speed", String(format: "%.0f mph", mph))
-        }
-        if let degrees = report.courseDegrees {
-            append("location.north.line.fill", "Course",
-                   "\(Int(degrees.rounded()))° \(MotionFormatting.compassPoint(forDegrees: degrees))")
-        }
-        if let degrees = report.headingDegrees {
-            append("location.north.circle.fill", "Heading",
-                   "\(Int(degrees.rounded()))° \(MotionFormatting.compassPoint(forDegrees: degrees))")
-        }
         if let audio = report.audio {
             let display = AudioLevel.displayValue(fromRaw: audio.avg)
             let label = AudioLevel.label(forDisplay: display)

@@ -106,9 +106,6 @@ public enum V2Exporter {
         dto.wasInBackground = r.wasInBackground
         dto.battery = r.battery
         dto.altitudeMeters = r.altitudeMeters
-        dto.speedMPS = r.speedMPS
-        dto.courseDegrees = r.courseDegrees
-        dto.headingDegrees = r.headingDegrees
         dto.connection = r.connection
         dto.audio = r.audio
         dto.location = r.location
@@ -121,6 +118,18 @@ public enum V2Exporter {
         dto.promptGroupID = r.promptGroupID
         dto.sourceDeviceModel = r.sourceDeviceModel
         dto.sourceDeviceName = r.sourceDeviceName
+        // Capture-time context metadata (plan 44, #61): grouped blocks in the
+        // JSON, omitted entirely when every field is nil.
+        var deviceState = V2DeviceState()
+        deviceState.isLowPowerMode = r.isLowPowerMode
+        deviceState.screenBrightness = r.screenBrightness
+        deviceState.interfaceStyle = r.interfaceStyle
+        deviceState.audioOutputRoute = r.audioOutputRoute
+        dto.deviceState = deviceState.isEmpty ? nil : deviceState
+        var motion = V2MotionState()
+        motion.motionActivity = r.motionActivity
+        motion.barometricPressureKPa = r.barometricPressureKPa
+        dto.motion = motion.isEmpty ? nil : motion
         let responses = (r.responses ?? [])
             .sorted { $0.uniqueIdentifier < $1.uniqueIdentifier }
             .map { resp in

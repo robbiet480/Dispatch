@@ -140,7 +140,7 @@ extension SensorKind {
     /// SensorPermission).
     var permission: SensorPermission? {
         switch self {
-        case .location, .weather, .altitude, .speed, .course, .heading: .location
+        case .location, .weather, .altitude: .location
         case .photos: .photos
         case .audio: .microphone
         case .focus: .focus

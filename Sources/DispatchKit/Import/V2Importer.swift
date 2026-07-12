@@ -72,9 +72,6 @@ public enum V2Importer {
             report.wasInBackground = dto.wasInBackground
             report.battery = dto.battery
             report.altitudeMeters = dto.altitudeMeters
-            report.speedMPS = dto.speedMPS
-            report.courseDegrees = dto.courseDegrees
-            report.headingDegrees = dto.headingDegrees
             report.connection = dto.connection
             report.audio = dto.audio
             report.location = dto.location
@@ -90,6 +87,14 @@ public enum V2Importer {
             // they are never restamped with the importing device's identity.
             report.sourceDeviceModel = dto.sourceDeviceModel
             report.sourceDeviceName = dto.sourceDeviceName
+            // Capture-time context metadata (plan 44, #61): grouped in the
+            // JSON, flat on the model. Absent blocks import as nil fields.
+            report.isLowPowerMode = dto.deviceState?.isLowPowerMode
+            report.screenBrightness = dto.deviceState?.screenBrightness
+            report.interfaceStyle = dto.deviceState?.interfaceStyle
+            report.audioOutputRoute = dto.deviceState?.audioOutputRoute
+            report.motionActivity = dto.motion?.motionActivity
+            report.barometricPressureKPa = dto.motion?.barometricPressureKPa
             summary.reportsImported += 1
 
             for rdto in dto.responses ?? [] {
