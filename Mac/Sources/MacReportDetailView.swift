@@ -163,9 +163,11 @@ struct MacReportDetailView: View {
         }
         // Capture-time context metadata (plan 44, #61): trailing group,
         // non-nil fields only — mirrors the iOS detail view via the shared
-        // kit rows.
+        // kit rows. Namespace the ForEach id so the motion "Activity" row
+        // doesn't collide with the Activity Rings row above (CodeRabbit
+        // review, PR #72).
         for row in ContextMetadataDetail.contextRows(for: report) {
-            append(row.icon, row.label, row.value)
+            append(row.icon, row.label, row.value, id: "context-\(row.label)-\(row.value)")
         }
         return rows
     }

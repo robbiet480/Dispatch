@@ -165,8 +165,13 @@ struct ReportDetailView: View {
         // Capture-time context metadata (plan 44, #61): the trailing group —
         // activity, pressure, Low Power Mode, brightness, appearance, audio
         // route. Only captured (non-nil) fields render.
+        //
+        // Namespace the ForEach id: the motion "Activity" row would otherwise
+        // collide with the Activity Rings row above (both default to the
+        // "Activity" label id) and SwiftUI would drop one (CodeRabbit review,
+        // PR #72).
         for row in ContextMetadataDetail.contextRows(for: report) {
-            append(row.icon, row.label, row.value)
+            append(row.icon, row.label, row.value, id: "context-\(row.label)-\(row.value)")
         }
         // Media is rendered by mediaRow(_:) in sensorSection, not here — it
         // needs a tappable variant the plain-tuple rows can't express.
