@@ -30,6 +30,12 @@ targets:
       # WeatherKit/HealthKit/battery providers compile into BOTH app targets
       # from this group instead of moving into the kit.
       - path: Shared/Providers
+      # Shared place-search component (plan 50, #83): the MapKit
+      # autocomplete/geocode wrapper for place triggers. DispatchKit is
+      # MapKit-free, so — like Shared/Providers — it gets dual target
+      # membership, here into DispatchApp AND DispatchMac (both editors pick a
+      # place with it).
+      - path: Shared/Search
       - path: App/Assets.xcassets
       - path: App/PrivacyInfo.xcprivacy
     dependencies:
@@ -253,6 +259,10 @@ targets:
       # (they use UIKit/iOS-styled SwiftUI); the Mac gets its own catalog UI.
       - path: App/Sources/Catalog/CatalogStore.swift
       - path: App/Sources/Catalog/CatalogProvider.swift
+      # Shared place-search component (plan 50, #83): same dual-membership as
+      # Shared/Providers — the MapKit autocomplete/geocode wrapper lets the Mac
+      # editor pick a place, lifting the view-only restriction on place triggers.
+      - path: Shared/Search
       - path: Mac/Assets.xcassets
       - path: Mac/PrivacyInfo.xcprivacy
     dependencies:
@@ -327,6 +337,13 @@ targets:
     sources:
       - path: AppTests
       - path: App/Sources/Visualizations/OptionBlockLayout.swift
+      # Plan 50 (#83): the shared place-search wrapper is compiled directly into
+      # the hostless bundle so PlaceSearchModelTests can drive it with stub
+      # completer/resolver (no network) — the OptionBlockLayout precedent.
+      - path: Shared/Search/PlaceSearch.swift
+    dependencies:
+      # PlaceSearch.swift imports DispatchKit (MonitorDelay.floorRadiusMeters).
+      - package: DispatchKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.robbie.Dispatch.apptests
