@@ -167,6 +167,8 @@ final class CatalogUITests: XCTestCase {
         let placeholderField = app.textFields["catalog-submit-placeholder"]
         var placeholderScrolls = 6
         while !placeholderField.exists, placeholderScrolls > 0 { app.swipeUp(); placeholderScrolls -= 1 }
+        XCTAssertTrue(placeholderField.waitForExistence(timeout: 5),
+                      "PLACEHOLDER field should be reachable after scrolling the submit form")
         placeholderField.tap()
         placeholderField.typeText("1 to 5")
 
