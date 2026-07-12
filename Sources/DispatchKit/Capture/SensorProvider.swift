@@ -11,12 +11,6 @@ public enum SensorPayload: Sendable {
     case focus(FocusState)
     case health([HealthReading])
     case media(MediaSample)
-    /// Meters/second, degrees, degrees respectively (plan 43, #61) — raw
-    /// values, formatted per units preference at display time like every
-    /// other sensor.
-    case speed(Double)
-    case course(Double)
-    case heading(Double)
 }
 
 public enum SensorOutcome: Sendable {

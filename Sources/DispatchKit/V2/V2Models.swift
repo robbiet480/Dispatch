@@ -138,11 +138,6 @@ public struct V2Report: Codable {
     public var wasInBackground: Bool
     public var battery: Double?
     public var altitudeMeters: Double?
-    /// Location-fix-derived motion sensors (plan 43, #61).
-    public var speedMPS: Double?
-    public var courseDegrees: Double?
-    /// Magnetometer-derived compass heading (plan 43, #61), iPhone-only capture.
-    public var headingDegrees: Double?
     public var connection: Int?
     public var audio: AudioSample?
     public var location: LocationSnapshot?
@@ -162,6 +157,13 @@ public struct V2Report: Codable {
     /// decoded leniently — pre-provenance v2 files import with nil.
     public var sourceDeviceModel: String?
     public var sourceDeviceName: String?
+    /// Capture-time context metadata (plan 44, #61), grouped for JSON
+    /// readability. Omitted when empty; import tolerates absence. These are
+    /// pure-Codable DTO composites (fine here — the SwiftData model keeps
+    /// them flat). The CLLocation extras (speed/course/heading/floor/source
+    /// flags) ride the `location` LocationSnapshot object directly.
+    public var deviceState: V2DeviceState?
+    public var motion: V2MotionState?
 
     public init(uniqueIdentifier: String, date: Date, timeZone: String,
                 kind: ReportKind, trigger: ReportTrigger) {
@@ -173,6 +175,31 @@ public struct V2Report: Codable {
         self.isBackdated = false
         self.isDraft = false
         self.wasInBackground = false
+    }
+}
+
+/// Zero-permission device state at capture time (plan 44, #61).
+public struct V2DeviceState: Codable {
+    public var isLowPowerMode: Bool?
+    public var screenBrightness: Double?
+    public var interfaceStyle: String?
+    public var audioOutputRoute: String?
+    public init() {}
+
+    public var isEmpty: Bool {
+        isLowPowerMode == nil && screenBrightness == nil
+            && interfaceStyle == nil && audioOutputRoute == nil
+    }
+}
+
+/// Motion & Fitness context at capture time (plan 44, #61).
+public struct V2MotionState: Codable {
+    public var motionActivity: String?
+    public var barometricPressureKPa: Double?
+    public init() {}
+
+    public var isEmpty: Bool {
+        motionActivity == nil && barometricPressureKPa == nil
     }
 }
 

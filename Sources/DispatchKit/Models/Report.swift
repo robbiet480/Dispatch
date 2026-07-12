@@ -17,13 +17,6 @@ public final class Report {
     public var wasInBackground: Bool = false
     public var battery: Double?
     public var altitudeMeters: Double?
-    /// Location-fix-derived motion sensors (plan 43, #61): meters/second and
-    /// degrees respectively, mirroring `altitudeMeters`'s raw-storage rule.
-    public var speedMPS: Double?
-    public var courseDegrees: Double?
-    /// Magnetometer-derived compass heading in degrees (plan 43, #61),
-    /// iPhone-only capture.
-    public var headingDegrees: Double?
     public var connection: Int?
     public var audio: AudioSample?
     public var location: LocationSnapshot?
@@ -47,6 +40,20 @@ public final class Report {
     /// "Apple Watch") until the user-assigned-device-name entitlement is
     /// granted (see DeviceIdentity). Nil on pre-existing/imported reports.
     public var sourceDeviceName: String?
+    /// Capture-time context metadata (plan 44, #61, additive-optional —
+    /// lightweight-migration-safe): flat fields mirroring `CaptureMetadata`,
+    /// stamped by ReportBuilder from the app-side reader. Storage/export
+    /// surfaced in report DETAIL only — never their own sensors, never
+    /// capture-checklist rows (owner design decision on PR #72).
+    /// Device Context (zero-permission, gated by the `deviceContext` toggle):
+    public var isLowPowerMode: Bool?
+    public var screenBrightness: Double?
+    public var interfaceStyle: String?
+    public var audioOutputRoute: String?
+    /// Motion & Fitness (existing OS authorization, gated by the
+    /// `motionFitness` toggle):
+    public var motionActivity: String?
+    public var barometricPressureKPa: Double?
 
     /// Optional because CloudKit mirroring requires every relationship to be
     /// optional; relaxing optionality (same name/config) is lightweight-migration-safe.

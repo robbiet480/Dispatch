@@ -59,9 +59,6 @@ private func respond(_ report: Report, prompt: String, _ configure: (Response) -
     report.weather = weather
     report.battery = 0.8
     report.altitudeMeters = 12.5
-    report.speedMPS = 5.5
-    report.courseDegrees = 180.0
-    report.headingDegrees = 45.0
     report.health = [HealthReading(type: "steps", value: 481, unit: "count")]
     var snapshot = LocationSnapshot(latitude: 37.7749, longitude: -122.4194)
     var placemark = Placemark()
@@ -81,9 +78,6 @@ private func respond(_ report: Report, prompt: String, _ configure: (Response) -
     #expect(frontMatter.contains("temperature_f: 72"))
     #expect(frontMatter.contains("battery: 0.8"))
     #expect(frontMatter.contains("altitude_m: 12.5"))
-    #expect(frontMatter.contains("speed_mps: 5.5"))
-    #expect(frontMatter.contains("course_degrees: 180"))
-    #expect(frontMatter.contains("heading_degrees: 45"))
     #expect(frontMatter.contains("steps: 481"))
     #expect(frontMatter.contains("latitude: 37.7749"))
     #expect(frontMatter.contains("longitude: -122.4194"))

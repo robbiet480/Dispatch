@@ -27,7 +27,10 @@ public enum SensorFailureHint {
             return "Allow photo access for Dispatch in Settings."
         case .focus:
             return "Allow Focus status access for Dispatch in Settings."
-        case .altitude, .battery, .connection, .media, .speed, .course, .heading:
+        case .altitude, .battery, .connection, .media,
+             // Metadata toggles (plan 44): never providers, so no checklist
+             // row ever surfaces these hints — named only for exhaustiveness.
+             .motionFitness, .deviceContext:
             if let reason, !reason.isEmpty {
                 return reason
             }
@@ -40,9 +43,6 @@ public enum SensorFailureHint {
         case .location: "Location"
         case .weather: "Weather"
         case .altitude: "Altitude"
-        case .speed: "Speed"
-        case .course: "Course"
-        case .heading: "Heading"
         case .photos: "Photos"
         case .audio: "Audio"
         case .battery: "Battery"
@@ -60,6 +60,8 @@ public enum SensorFailureHint {
         case .healthMedications: "Medications"
         case .healthActivityRings: "Activity Rings"
         case .media: "Media"
+        case .motionFitness: "Motion & Fitness"
+        case .deviceContext: "Device Context"
         }
     }
 }

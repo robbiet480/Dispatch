@@ -13,7 +13,7 @@ import Testing
 
     // Header: fixed sensor columns then question prompts in sortOrder.
     let header = lines[0]
-    #expect(header.hasPrefix("date,timeZone,kind,trigger,latitude,longitude,place,weather,tempF,altitudeMeters,speedMPS,courseDegrees,headingDegrees,audioAvg,audioPeak,battery,steps,photoCount"))
+    #expect(header.hasPrefix("date,timeZone,kind,trigger,latitude,longitude,place,weather,tempF,altitudeMeters,audioAvg,audioPeak,battery,steps,photoCount"))
     #expect(header.contains("What are you doing?"))
     #expect(header.contains("Who are you with?"))
 

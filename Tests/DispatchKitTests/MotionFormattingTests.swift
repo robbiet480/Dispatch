@@ -14,6 +14,14 @@ import Testing
     #expect(MotionFormatting.validCourse(270) == 270)
 }
 
+@Test func negativeHeadingAndAccuracyDegradeToNil() {
+    #expect(MotionFormatting.validHeading(-1) == nil)
+    #expect(MotionFormatting.validHeading(0) == 0)
+    #expect(MotionFormatting.validHeading(359.9) == 359.9)
+    #expect(MotionFormatting.validAccuracy(-1) == nil)
+    #expect(MotionFormatting.validAccuracy(5) == 5)
+}
+
 @Test func mphConversionMatchesKnownFactor() {
     let mph = MotionFormatting.mph(fromMPS: 10)
     #expect(abs(mph - 22.369362920544) < 0.0000001)

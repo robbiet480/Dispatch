@@ -242,7 +242,7 @@ struct SensorSettingsView: View {
                 .healthMedications, .healthRestingHeart, .healthSleep,
                 .healthFlights, .healthSteps, .healthWorkouts,
             ]),
-            ("LOCATION & WEATHER", [.location, .weather, .altitude, .speed, .course, .heading]),
+            ("LOCATION & WEATHER", [.location, .weather, .altitude]),
             ("DEVICE", [.battery, .connection, .focus]),
             ("MEDIA & SURROUNDINGS", [.audio, .media, .photos]),
         ]
@@ -391,9 +391,6 @@ extension SensorKind {
         case .location: "Location"
         case .weather: "Weather"
         case .altitude: "Elevation"
-        case .speed: "Speed"
-        case .course: "Course"
-        case .heading: "Heading"
         case .photos: "Photos"
         case .audio: "Audio"
         case .battery: "Battery"
