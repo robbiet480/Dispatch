@@ -431,7 +431,9 @@ extension SensorKind {
     var caption: String? {
         switch self {
         case .location:
-            "Includes altitude, speed, course, accuracy, floor, and compass heading."
+            // Altitude is deliberately omitted: it's a separate SensorKind
+            // with its own toggle (CodeRabbit review, PR #72).
+            "Includes speed, course, accuracy, floor, and compass heading."
         case .motionFitness:
             "Activity type (walking, driving…) and barometric pressure."
         case .deviceContext:
