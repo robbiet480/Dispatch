@@ -227,7 +227,8 @@ Observable via settings UI, report-detail UI, and exported data:
 
 Reworked from the shipped v1 (three user-visible SensorKinds) to the final
 metadata shape per owner review on PR #72 — see History above. `swift test`:
-642 tests green. DispatchApp (App+Watch+widgets) and DispatchMac builds
+644 tests green (incl. Copilot-review wrap fix tests). DispatchApp
+(App+Watch+widgets) and DispatchMac builds
 clean. SensorSettingsUITests (--mock-sensors, iPhone 17 Pro simulator):
 result recorded on the PR. Simulator screenshot review of the new detail
 rows deferred to PR review.
