@@ -11,6 +11,7 @@ struct NotificationSettingsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(NotificationScheduler.self) private var scheduler
+    @Environment(SleepObserver.self) private var sleepObserver
     @Environment(\.notificationPrefs) private var prefs
     @Environment(\.scenePhase) private var scenePhase
 
@@ -22,6 +23,7 @@ struct NotificationSettingsView: View {
     @State private var nagIntervalMinutes: Int
     @State private var nagMaxCount: Int
     @State private var digestSchedules: [DigestSchedule]
+    @State private var autoSleepEnabled: Bool
     /// What the "NEXT NOTIFICATION" hero shows. `.loading` renders the
     /// same layout as `.empty` with blank strings so the slot doesn't jump
     /// when the async pending-requests read lands.
@@ -62,6 +64,7 @@ struct NotificationSettingsView: View {
         _nagIntervalMinutes = State(initialValue: prefs.nagIntervalMinutes)
         _nagMaxCount = State(initialValue: prefs.nagMaxCount)
         _digestSchedules = State(initialValue: prefs.digestSchedules)
+        _autoSleepEnabled = State(initialValue: prefs.autoSleepEnabled)
     }
 
     var body: some View {
@@ -72,6 +75,7 @@ struct NotificationSettingsView: View {
             List {
                 nextNotificationSection
                 focusFilterSection
+                sleepSection
                 frequencySection
                 distributionSection
                 scheduledSection
@@ -175,6 +179,32 @@ struct NotificationSettingsView: View {
             } header: {
                 sectionHeader("FOCUS FILTER")
             }
+        }
+    }
+
+    /// Plan 39: the one switch for the whole auto awake/asleep feature.
+    /// Lives here (not Sensors) because the awake state exists to gate the
+    /// prompt schedule and its siblings (hero empty-state, focus-filter
+    /// status row) already live on this screen; Sensors is about what a
+    /// REPORT captures, and this captures nothing.
+    private var sleepSection: some View {
+        Section {
+            Toggle("Set automatically from Sleep Focus & Health", isOn: $autoSleepEnabled)
+                .foregroundStyle(.white)
+                .tint(.white.opacity(0.4))
+                .accessibilityIdentifier("auto-sleep-toggle")
+                .onChange(of: autoSleepEnabled) { _, enabled in
+                    prefs.autoSleepEnabled = enabled
+                    sleepObserver.refresh()   // arm/disarm background delivery now
+                    replan()
+                }
+                .listRowBackground(Color.white.opacity(0.12))
+        } header: {
+            sectionHeader("SLEEP")
+        } footer: {
+            Text("Marks you asleep when a Focus with Dispatch's filter set to \"This Focus Means I'm Asleep\" turns on (Settings → Focus → Sleep → Focus Filters → Dispatch), and corrects the state from Health sleep data after the fact. Your manual toggle always wins for 90 minutes.")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
         }
     }
 
@@ -657,8 +687,19 @@ struct NotificationSettingsView: View {
                 .empty(title: "No prompts scheduled",
                        caption: "A NEW SCHEDULE IS PLANNED WHEN THE APP OPENS")
             } else {
-                .empty(title: "No prompts scheduled",
-                       caption: "YOU'RE MARKED ASLEEP — PROMPTS RESUME AT WAKE")
+                // Plan 39 honesty: name the automation source that marked
+                // the user asleep; the manual caption stays byte-identical.
+                switch awakeStore.lastChangeSource {
+                case .focusFilter:
+                    .empty(title: "No prompts scheduled",
+                           caption: "SLEEP FOCUS MARKED YOU ASLEEP — PROMPTS RESUME AT WAKE")
+                case .health:
+                    .empty(title: "No prompts scheduled",
+                           caption: "HEALTH DATA MARKED YOU ASLEEP — PROMPTS RESUME AT WAKE")
+                case .manual, nil:
+                    .empty(title: "No prompts scheduled",
+                           caption: "YOU'RE MARKED ASLEEP — PROMPTS RESUME AT WAKE")
+                }
             }
         default: // .denied, .notDetermined
             .empty(title: "Notifications are off",

@@ -126,12 +126,24 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
     @Parameter(title: "Pause Ungrouped Prompts", default: false)
     var pauseGlobalPrompts: Bool
 
+    /// Opt-in sleep marker (plan 39, Signal 1): the user attaches Dispatch's
+    /// filter to their Sleep Focus and flips this switch; activation then
+    /// marks Dispatch asleep and deactivation marks it awake (via
+    /// `awakeSignalInApp`). Deactivation deliveries arrive all-defaults by
+    /// Apple's documented lifecycle (this flag resets to false), so "sleep
+    /// focus ended" is detected from the PREVIOUS persisted state's
+    /// `indicatesSleep`, read before the clear — never from the delivered
+    /// instance.
+    @Parameter(title: "This Focus Means I'm Asleep", default: false)
+    var indicatesSleep: Bool
+
     var displayRepresentation: DisplayRepresentation {
         let title = displayName?.isEmpty == false ? displayName! : "Dispatch"
         let groupsText = allowedGroups.map { "\($0.count) group\($0.count == 1 ? "" : "s")" }
             ?? "all groups"
         let subtitle = groupsText
             + (pauseGlobalPrompts ? ", other prompts paused" : "")
+            + (indicatesSleep ? ", marks asleep" : "")
         return DisplayRepresentation(
             title: "\(title)", subtitle: "\(subtitle)"
         )
@@ -152,19 +164,32 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
     /// phantom parents.
     @MainActor static var filterClearedInApp: (@MainActor () -> Void)?
 
+    /// Set by DispatchApp alongside the two hooks above (plan 39): routes
+    /// sleep-marker Focus activations/deactivations into AwakeAutoController.
+    /// Invoked BEFORE `replanInApp` so the replan sees the new awake state —
+    /// the same ordering contract as `filterClearedInApp`.
+    @MainActor static var awakeSignalInApp: (@MainActor (AwakeAutoPolicy.Event) -> Void)?
+
     func perform() async throws -> some IntentResult {
         focusLog.info("""
         focus filter perform(): process=\(ProcessInfo.processInfo.processName, privacy: .public) \
         pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) \
         displayName=\(displayName ?? "<nil>", privacy: .public) \
         groups=\(allowedGroups?.map(\.id).joined(separator: ",") ?? "<nil>", privacy: .public) \
-        pauseGlobal=\(pauseGlobalPrompts, privacy: .public)
+        pauseGlobal=\(pauseGlobalPrompts, privacy: .public) \
+        indicatesSleep=\(indicatesSleep, privacy: .public)
         """)
 
         guard let defaults = UserDefaults(suiteName: StoreLocation.appGroupID) else {
             focusLog.error("focus filter: app group defaults unavailable")
             return .result()
         }
+
+        // Plan 39: the deactivation delivery is all-defaults by Apple's
+        // documented lifecycle (indicatesSleep resets to false), so "sleep
+        // focus ended" must be detected from the PREVIOUS persisted state,
+        // read before the write/clear below.
+        let previous = FocusFilterState.read(from: defaults)
 
         let cleared: Bool
         if let state = Self.state(from: self) {
@@ -180,7 +205,21 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
             cleared = true
         }
 
+        let sleepSignal: AwakeAutoPolicy.Event?
+        if !cleared, indicatesSleep {
+            sleepSignal = .focusSleepActivated
+        } else if cleared, previous?.indicatesSleep == true {
+            sleepSignal = .focusSleepDeactivated
+        } else {
+            sleepSignal = nil
+        }
+
         await MainActor.run {
+            // Awake-state change BEFORE the replan so it sees the new state
+            // (the filterClearedInApp-before-replanInApp ordering contract).
+            if let sleepSignal {
+                Self.awakeSignalInApp?(sleepSignal)
+            }
             if cleared {
                 // Floor nag parents BEFORE the replan reads lastActedAt.
                 Self.filterClearedInApp?()
@@ -197,7 +236,10 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
     static func state(from intent: DispatchFocusFilter) -> FocusFilterState? {
         let label = intent.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasLabel = label?.isEmpty == false
+        // A filter configured ONLY as a sleep marker (no name, no groups)
+        // still writes state on activation (plan 39).
         let isConfigured = hasLabel || intent.allowedGroups != nil || intent.pauseGlobalPrompts
+            || intent.indicatesSleep
         guard isConfigured else { return nil }
         // nil groups (parameter untouched) maps to nil allowedGroupIDs —
         // "no restriction": a name-only filter captures the Focus label
@@ -208,7 +250,8 @@ struct DispatchFocusFilter: SetFocusFilterIntent {
         return FocusFilterState(
             label: hasLabel ? label! : "Focus",
             allowedGroupIDs: intent.allowedGroups.map { $0.map(\.id) },
-            pauseGlobal: intent.pauseGlobalPrompts
+            pauseGlobal: intent.pauseGlobalPrompts,
+            indicatesSleep: intent.indicatesSleep ? true : nil
         )
     }
 }

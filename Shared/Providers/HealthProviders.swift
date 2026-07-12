@@ -101,6 +101,71 @@ final class HealthKitReader: Sendable {
         }
     }
 
+    /// Min and max over `[start, end]` in one statistics query (plan 43).
+    /// `errorNoData` (zero samples in the window) is "no reading" — nil, not
+    /// an error — matching `average`.
+    ///
+    /// Strict edges (Copilot review, PR #64): without the strict options,
+    /// `predicateForSamples` matches any sample that merely OVERLAPS the
+    /// interval, so a long sample spanning a window edge (e.g. a workout-
+    /// average HR written across the previous report's date) could
+    /// contribute extremes from OUTSIDE the window. "Since the last report"
+    /// means samples fully inside the window — edge-spanning samples belong
+    /// to the neighboring window. Untestable at the kit layer (HealthKit
+    /// predicate), hence pinned by comment.
+    func minMax(_ id: HKQuantityTypeIdentifier, unit: HKUnit,
+                from start: Date, to end: Date) async throws -> (min: Double, max: Double)? {
+        let type = HKQuantityType(id)
+        return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: end,
+                                                        options: [.strictStartDate, .strictEndDate])
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate,
+                                          options: [.discreteMin, .discreteMax]) { _, stats, error in
+                if let error {
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: nil)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+                guard let min = stats?.minimumQuantity()?.doubleValue(for: unit),
+                      let max = stats?.maximumQuantity()?.doubleValue(for: unit) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: (min, max))
+            }
+            store.execute(query)
+        }
+    }
+
+    /// The first (`newest: false`) or last (`newest: true`) sample strictly
+    /// inside `[start, end]` — the window's boundary readings (plan 43).
+    /// Strict edges for the same reason as `minMax` (Copilot review,
+    /// PR #64): an overlap-matched edge-spanning sample would make the
+    /// window's "start"/"end" reading one that isn't actually inside the
+    /// window at all.
+    func boundarySample(_ id: HKQuantityTypeIdentifier, unit: HKUnit,
+                        from start: Date, to end: Date,
+                        newest: Bool) async throws -> (value: Double, date: Date)? {
+        let type = HKQuantityType(id)
+        return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: end,
+                                                        options: [.strictStartDate, .strictEndDate])
+            let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: !newest)]
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1,
+                                      sortDescriptors: sort) { _, samples, error in
+                if let error { continuation.resume(throwing: error); return }
+                guard let sample = samples?.first as? HKQuantitySample else {
+                    continuation.resume(returning: nil); return
+                }
+                continuation.resume(returning: (sample.quantity.doubleValue(for: unit), sample.endDate))
+            }
+            store.execute(query)
+        }
+    }
+
     func latest(_ id: HKQuantityTypeIdentifier, unit: HKUnit) async throws -> (value: Double, date: Date)? {
         let type = HKQuantityType(id)
         // Bound to the last 24h so HRV/resting/latest-HR can't surface
@@ -381,6 +446,50 @@ struct HealthMetricProvider: SensorProvider {
                                               endDate: latest.date))
             }
             guard !readings.isEmpty else { throw ProviderError("no heart rate samples") }
+            return .health(readings)
+        case .healthHeartRange:
+            // Change-since-last-report window (plan 43, issue #48). Degrades
+            // to absent — never a fake zero — when there's no previous report
+            // (nil since) or no samples landed in the window. Windows over
+            // 24h are clamped by CaptureWindow; the readings' startDate
+            // carries the CLAMPED start so display never overstates coverage.
+            guard let captureWindow = CaptureWindow.compute(anchor: since, now: now) else {
+                throw ProviderError("no previous report to measure from")
+            }
+            let bpm = HKUnit.count().unitDivided(by: .minute())
+            var readings: [HealthReading] = []
+            func windowReading(_ type: String, _ value: Double) -> HealthReading {
+                HealthReading(type: type, value: value, unit: "bpm",
+                              startDate: captureWindow.start, endDate: captureWindow.end)
+            }
+            // The three queries are independent reads (the healthHeart
+            // precedent): a no-data min/max must not destroy valid
+            // boundary samples, and vice versa.
+            if let extremes = try? await reader.minMax(.heartRate, unit: bpm,
+                                                       from: captureWindow.start,
+                                                       to: captureWindow.end) {
+                readings.append(windowReading(HeartRateWindowFormatter.minType, extremes.min))
+                readings.append(windowReading(HeartRateWindowFormatter.maxType, extremes.max))
+            }
+            if let first = try? await reader.boundarySample(.heartRate, unit: bpm,
+                                                            from: captureWindow.start,
+                                                            to: captureWindow.end,
+                                                            newest: false) {
+                readings.append(HealthReading(type: HeartRateWindowFormatter.startType,
+                                              value: first.value, unit: "bpm",
+                                              startDate: captureWindow.start, endDate: first.date))
+            }
+            if let last = try? await reader.boundarySample(.heartRate, unit: bpm,
+                                                           from: captureWindow.start,
+                                                           to: captureWindow.end,
+                                                           newest: true) {
+                readings.append(HealthReading(type: HeartRateWindowFormatter.endType,
+                                              value: last.value, unit: "bpm",
+                                              startDate: captureWindow.start, endDate: last.date))
+            }
+            guard !readings.isEmpty else {
+                throw ProviderError("no heart rate samples since the last report")
+            }
             return .health(readings)
         case .healthHRV:
             guard let latest = try await reader.latest(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) else {

@@ -25,8 +25,8 @@ struct DispatchApp: App {
     let privacyCoverWindow: PrivacyCoverWindow
     let permissionCascade: PermissionCascade
     let workoutEndObserver: WorkoutEndObserver
-    // PLAN-39 TASK 0 PROBE — remove after measurement.
-    let sleepDeliveryProbe: SleepDeliveryProbe
+    let awakeAutoController: AwakeAutoController
+    let sleepObserver: SleepObserver
     let visitObserver: VisitObserver
     let calendarEventObserver: CalendarEventObserver
     let backupManager: BackupManager
@@ -138,14 +138,6 @@ struct DispatchApp: App {
         )
         workoutEndObserver = workoutObserver
 
-        // PLAN-39 TASK 0 PROBE — remove after measurement. Diagnostic
-        // sleepAnalysis delivery-timing observer, toggled in Settings >
-        // Sensors; persisted flag so headless background relaunches
-        // re-register it below.
-        sleepDeliveryProbe = SleepDeliveryProbe(
-            defaults: appDefaults, isTestEnvironment: isTestEnvironment
-        )
-
         // Visit-arrival observer (plan 16): same lifecycle contract as the
         // workout-end observer — launch registration, refresh on group
         // edits and remote-change sync, test-gated internally.
@@ -253,6 +245,31 @@ struct DispatchApp: App {
             onDedupePass: { summary, date in diagnostics.recordDedupePass(summary, at: date) }
         )
 
+        // Auto awake/asleep state (plan 39): the single funnel both signals
+        // route through. The Sleep Focus filter path arrives via the intent
+        // hook set below (perform() runs in this process, so the live stores
+        // are reachable with no new IPC); HealthKit's lagged correction
+        // arrives via SleepObserver. Transitions are mirrored into the
+        // plan-37 diagnostics ring buffer with the same reason string os_log
+        // gets.
+        let autoController = AwakeAutoController(
+            awakeStore: awakeForReplan, prefs: prefsForReplan, scheduler: scheduler,
+            mirrorToDiagnostics: { reason in
+                diagnostics.record(SyncEventRecord(
+                    date: Date(), kindRaw: "awakeAuto", succeeded: nil, detail: reason))
+            }
+        )
+        awakeAutoController = autoController
+
+        // Signal 2 (plan 39): HealthKit sleepAnalysis background delivery —
+        // the lagged, authoritative correction (measured ≈4h post-wake, one
+        // batch; see SleepObserver's type comment). Toggle-gated inside
+        // refresh(); test-gated internally like the workout observer.
+        sleepObserver = SleepObserver(
+            controller: autoController, prefs: notificationPrefs,
+            defaults: appDefaults, isTestEnvironment: isTestEnvironment
+        )
+
         seedDefaultQuestionsIfNeeded()
         // Screenshot fixture (plan 23): test-environment-gated like every
         // launch argument — the in-memory store guarantee above means this
@@ -275,6 +292,13 @@ struct DispatchApp: App {
         }
         if arguments.contains("--skip-onboarding") {
             appDefaults.set(true, forKey: OnboardingFlag.key)
+        }
+        // Plan 39 UI-test hook: stands in for a Sleep Focus activation so
+        // the source-honest hero caption is assertable without HealthKit or
+        // real Focus state. Test-environment-gated like every launch
+        // argument.
+        if isTestEnvironment, arguments.contains("--auto-asleep") {
+            awakeStore.setAwake(false, source: .focusFilter)
         }
 
         scheduler.registerCategory()
@@ -316,6 +340,18 @@ struct DispatchApp: App {
             scheduler.focusFilterCleared()
         }
 
+        // Auto awake/asleep (plan 39): route sleep-marker Focus deliveries
+        // into the controller constructed above.
+        DispatchFocusFilter.awakeSignalInApp = { event in
+            autoController.handle(event)
+        }
+        // Liveness-gate parity: a stale sleep-marker blob cleared by
+        // activeFocusFilter (missed deactivation delivery) emits the same
+        // wake signal the intent path would have.
+        scheduler.staleSleepFilterCleared = {
+            autoController.handle(.focusSleepDeactivated)
+        }
+
         // Register the workout-end observer at LAUNCH, not just onAppear:
         // HealthKit background delivery relaunches a terminated app headless
         // (no scene, ContentView.onAppear never runs), so the HKObserverQuery
@@ -324,9 +360,12 @@ struct DispatchApp: App {
         // and the no-groups case; the onAppear call stays for group edits.
         workoutEndObserver.refresh()
 
-        // PLAN-39 TASK 0 PROBE — remove after measurement. Same launch
-        // registration rationale as the workout observer directly above.
-        sleepDeliveryProbe.refresh()
+        // Sleep observer launch registration (plan 39): the same
+        // headless-relaunch contract as the workout observer directly above —
+        // HealthKit background delivery relaunches a terminated app with no
+        // scene, so the HKObserverQuery must be re-registered here or the
+        // fire is missed and HealthKit throttles future deliveries.
+        sleepObserver.refresh()
 
         // Visit monitoring must likewise restart at LAUNCH: per Apple's
         // startMonitoringVisits() docs the system relaunches a terminated
@@ -382,7 +421,8 @@ struct DispatchApp: App {
                 .environment(appLockStore)
                 .environment(permissionCascade)
                 .environment(workoutEndObserver)
-                .environment(sleepDeliveryProbe)
+                .environment(awakeAutoController)
+                .environment(sleepObserver)
                 .environment(visitObserver)
                 .environment(calendarEventObserver)
                 .environment(backupManager)
@@ -420,6 +460,7 @@ struct DispatchApp: App {
                     // Start (or stop) the event observers according to the
                     // current groups; test-gated internally.
                     workoutEndObserver.refresh()
+                    sleepObserver.refresh()
                     visitObserver.refresh()
                     calendarEventObserver.refresh()
                     // Cold launch with lock enabled (or the --enable-app-lock
@@ -564,6 +605,24 @@ struct DispatchApp: App {
                     _ = try? await DispatchFocusFilter().perform()
                     let cleared = groupDefaults.flatMap(FocusFilterState.read(from:))
                     print("FOCUS-PROBE-DEACTIVATED: state=\(cleared == nil ? "cleared" : "STILL PRESENT")")
+
+                    // Plan 39 slice: a sleep-marker activation flips the
+                    // awake state through the intent hook → policy →
+                    // AwakeAutoController chain, and the all-defaults
+                    // deactivation flips it back (detected from the
+                    // PREVIOUS persisted state, per the documented
+                    // lifecycle). The auto toggle is forced on for the
+                    // probe's scope and restored after — the same
+                    // leave-no-residue discipline as the state clear above.
+                    let previousAutoSleep = notificationPrefs.autoSleepEnabled
+                    notificationPrefs.autoSleepEnabled = true
+                    defer { notificationPrefs.autoSleepEnabled = previousAutoSleep }
+                    let sleepActivation = DispatchFocusFilter()
+                    sleepActivation.indicatesSleep = true
+                    _ = try? await sleepActivation.perform()
+                    print("FOCUS-PROBE-SLEEP: asleep=\(!awakeStore.isAwake) source=\(awakeStore.lastChangeSource?.rawValue ?? "<nil>")")
+                    _ = try? await DispatchFocusFilter().perform()
+                    print("FOCUS-PROBE-SLEEP-WAKE: awake=\(awakeStore.isAwake) source=\(awakeStore.lastChangeSource?.rawValue ?? "<nil>")")
                 }
                 .task {
                     guard ProcessInfo.processInfo.arguments.contains("--probe-remote-change") else { return }

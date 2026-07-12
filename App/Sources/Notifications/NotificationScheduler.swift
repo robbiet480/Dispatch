@@ -47,6 +47,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     /// which would otherwise call `requestPermissionIfNeeded` again).
     private var hasRequestedThisLaunch = false
 
+    /// Plan 39: set by DispatchApp to route a wake signal through
+    /// AwakeAutoController when the liveness gate below clears a STALE
+    /// sleep-marker filter — the gate can be the first place a missed
+    /// deactivation delivery is noticed, and without this the state would
+    /// strand asleep until HealthKit's lagged (hours-scale) correction.
+    var staleSleepFilterCleared: (() -> Void)?
+
     /// EventKit seam (plan 31), wired by DispatchApp to CalendarEventObserver.
     /// The scheduler never touches EventKit directly: a nil source (tests,
     /// pre-wiring) simply plans no calendar prompts, so `replanNow` stays
@@ -83,8 +90,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
            INFocusStatusCenter.default.authorizationStatus == .authorized,
            INFocusStatusCenter.default.focusStatus.isFocused == false {
             notificationLog.info("focus filter state (\(state.label, privacy: .public)) is stale — no Focus active; clearing and planning the full schedule")
+            // Plan 39: capture the sleep marker BEFORE the clear — the wake
+            // signal is derived from the outgoing state, matching the
+            // intent path's previous-state read.
+            let wasSleepMarker = state.indicatesSleep == true
             FocusFilterState.clear(in: focusFilterDefaults)
             focusFilterCleared()
+            if wasSleepMarker {
+                staleSleepFilterCleared?()
+            }
             return nil
         }
         return state
@@ -260,6 +274,17 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         // presented with, which is acceptable (the user already saw them).
         registerCategory(question: question)
 
+        // Focus-filter liveness gate BEFORE any awake-state read (plan 39
+        // review): accessing `activeFocusFilter` is what detects a STALE
+        // sleep-marker blob (missed deactivation delivery), clears it, and
+        // emits the wake signal via `staleSleepFilterCleared` — which flips
+        // `awakeStore` SYNCHRONOUSLY (AwakeAutoController.handle). If this
+        // read lived only in the awake path below, a state stranded asleep
+        // by that same stale filter would return at the asleep guard first
+        // and never reach the gate — stranded until HealthKit's hours-scale
+        // correction. Reading it here lets THIS pass see the corrected state.
+        let focusFilter = activeFocusFilter
+
         // gprompt- removals MUST share this batch with prompt-/nag- (plan 12):
         // a remove issued after the adds below could race the daemon and
         // delete the fresh schedule (this codebase shipped that bug once).
@@ -341,8 +366,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         // Deactivation (Focus off/switched) clears the state and triggers a
         // replan, restoring the full schedule; past-parent nag resurrection
         // still works because planned dates are recomputed deterministically
-        // from the day seed.
-        let focusFilter = activeFocusFilter
+        // from the day seed. (`focusFilter` was read above, before the
+        // asleep guard — see the liveness-gate comment.)
         if let focusFilter {
             let groupsSummary = focusFilter.allowedGroupIDs.map { "\($0.count) groups allowed" } ?? "all groups allowed"
             notificationLog.info("focus filter active (\(focusFilter.label, privacy: .public)): \(groupsSummary, privacy: .public), global \(focusFilter.allowsGlobal ? "on" : "paused", privacy: .public)")
@@ -908,9 +933,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Current notification authorization, for the hero's empty state
-    /// ("Notifications are off" vs "No prompts scheduled").
+    /// ("Notifications are off" vs "No prompts scheduled"). Test
+    /// environments report authorized — UI tests never grant permission
+    /// (the dialog would block the runner, the same rationale as the
+    /// replan gate's bypass above) but must still exercise the authorized
+    /// empty states (awake/asleep captions, plan 39).
     func authorizationStatus() async -> UNAuthorizationStatus {
-        await center.notificationSettings().authorizationStatus
+        guard !isTestEnvironment else { return .authorized }
+        return await center.notificationSettings().authorizationStatus
     }
 
     // MARK: - Delegate

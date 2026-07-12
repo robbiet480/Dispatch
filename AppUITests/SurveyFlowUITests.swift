@@ -18,6 +18,22 @@ final class SurveyFlowUITests: XCTestCase {
         return counter
     }
 
+    /// Swipes up (bounded) until `element` materializes; returns whether it
+    /// did. The report detail screen is a lazy List with the SENSORS section
+    /// above the answers — rows below the fold don't exist in the
+    /// accessibility tree until scrolled to, and the sensor block grows as
+    /// sensors are added (plan 43's heart-rate window row pushed the answers
+    /// down), so detail-content assertions must scroll, not just wait.
+    @MainActor
+    private func scrollDownUntil(_ element: XCUIElement, _ app: XCUIApplication, max: Int = 10) -> Bool {
+        var remaining = max
+        while !element.exists, remaining > 0 {
+            app.swipeUp()
+            remaining -= 1
+        }
+        return element.exists
+    }
+
     /// Waits for the "N / M" page counter to reach `page`.
     @MainActor
     private func waitForPage(_ page: Int, counter: XCUIElement,
@@ -214,7 +230,8 @@ final class SurveyFlowUITests: XCTestCase {
         firstRow.tap()
 
         let savedText = app.staticTexts[flushProbeText]
-        XCTAssertTrue(savedText.waitForExistence(timeout: 10),
+        _ = savedText.waitForExistence(timeout: 10)
+        XCTAssertTrue(scrollDownUntil(savedText, app),
                        "typed text '\(flushProbeText)' was not found in the saved report — debounced flush was lost")
     }
 
@@ -276,7 +293,8 @@ final class SurveyFlowUITests: XCTestCase {
         firstRow.tap()
 
         let savedToken = app.staticTexts[tokenText]
-        XCTAssertTrue(savedToken.waitForExistence(timeout: 10),
+        _ = savedToken.waitForExistence(timeout: 10)
+        XCTAssertTrue(scrollDownUntil(savedToken, app),
                       "token '\(tokenText)' was not found in the saved report — draft was dropped by NEXT/DONE")
     }
 

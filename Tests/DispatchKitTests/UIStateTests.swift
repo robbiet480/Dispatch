@@ -38,6 +38,51 @@ private func freshSuite() -> UserDefaults {
     #expect(!AwakeStore(defaults: defaults).isAwake)
 }
 
+// MARK: - Source tracking (plan 39)
+
+// (d) An automatic source flips state and records the source, but does NOT
+// stamp the manual-cooldown timestamp — only manual changes outrank
+// automation.
+@Test func setAwakeFromFocusFilterRecordsSourceButNotManualStamp() {
+    let store = AwakeStore(defaults: freshSuite())
+    #expect(store.isAwake)
+    store.setAwake(false, source: .focusFilter)
+    #expect(!store.isAwake)
+    #expect(store.lastChangeSource == .focusFilter)
+    #expect(store.lastManualChangeAt == nil)
+}
+
+// (e) toggle() records .manual and stamps the cooldown timestamp.
+@Test func toggleRecordsManualSourceAndStampsTimestamp() {
+    let store = AwakeStore(defaults: freshSuite())
+    let now = Date(timeIntervalSince1970: 1_780_000_000)
+    #expect(store.toggle(now: now) == .sleep)
+    #expect(!store.isAwake)
+    #expect(store.lastChangeSource == .manual)
+    #expect(store.lastManualChangeAt == now)
+}
+
+// (f) Persistence — a second store on the same suite reads back the recorded
+// source and manual timestamp.
+@Test func sourceAndManualStampPersistAcrossStores() {
+    let defaults = freshSuite()
+    let now = Date(timeIntervalSince1970: 1_780_000_000)
+    AwakeStore(defaults: defaults).setAwake(false, source: .manual, now: now)
+    let reloaded = AwakeStore(defaults: defaults)
+    #expect(reloaded.lastChangeSource == .manual)
+    #expect(reloaded.lastManualChangeAt == now)
+}
+
+// (g) The plain isAwake setter stays source-less — existing callers (tests,
+// previews) record nothing.
+@Test func plainIsAwakeSetterRecordsNoSource() {
+    let store = AwakeStore(defaults: freshSuite())
+    store.isAwake = false
+    #expect(!store.isAwake)
+    #expect(store.lastChangeSource == nil)
+    #expect(store.lastManualChangeAt == nil)
+}
+
 @Test func appLockPolicyNeverLocksWhenDisabled() {
     let now = Date()
     #expect(!AppLockPolicy.shouldLock(enabled: false, backgroundedAt: now.addingTimeInterval(-1000), now: now))

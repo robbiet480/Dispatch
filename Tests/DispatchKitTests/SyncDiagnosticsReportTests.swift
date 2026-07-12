@@ -157,20 +157,20 @@ struct SyncDiagnosticsReportTests {
 
         let container = try DispatchStore.inMemoryContainer()
         let context = ModelContext(container)
-        DeviceIdentity.deviceName = "Robbie's iPhone"
-        defer { DeviceIdentity.deviceName = nil }
-
-        let ref = QuestionRef(
-            uniqueIdentifier: "q-note", prompt: sentinelPrompt, type: .note
-        )
-        _ = try ReportBuilder.save(
-            kind: .regular, trigger: .manual, date: Date(), timeZone: .current,
-            outcomes: [:],
-            answers: [AnswerDraft(question: ref, value: .note(sentinelAnswer))],
-            in: context
-        )
-
-        let reports = try context.fetch(FetchDescriptor<Report>())
+        // Gate, don't set directly: deviceName is process-global and suites
+        // run in parallel (see DeviceIdentityGate).
+        let reports = try DeviceIdentityGate.withDeviceName("Robbie's iPhone") {
+            let ref = QuestionRef(
+                uniqueIdentifier: "q-note", prompt: sentinelPrompt, type: .note
+            )
+            _ = try ReportBuilder.save(
+                kind: .regular, trigger: .manual, date: Date(), timeZone: .current,
+                outcomes: [:],
+                answers: [AnswerDraft(question: ref, value: .note(sentinelAnswer))],
+                in: context
+            )
+            return try context.fetch(FetchDescriptor<Report>())
+        }
         let pairs = reports.map { (name: $0.sourceDeviceName, model: $0.sourceDeviceModel) }
         let provenance = DeviceProvenance.breakdown(pairs)
 

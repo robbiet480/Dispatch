@@ -19,7 +19,7 @@ enum WatchProviders {
     /// array and the settings screen's toggle list.
     static let watchCapableKinds: [SensorKind] = [
         .location, .altitude, .weather, .battery,
-        .healthSteps, .healthFlights, .healthHeart, .healthHRV,
+        .healthSteps, .healthFlights, .healthHeart, .healthHeartRange, .healthHRV,
         .healthRestingHeart, .healthSleep, .healthWorkouts, .healthCaffeine,
         .healthMedications, .healthActivityRings,
     ]
@@ -43,6 +43,7 @@ enum WatchProviders {
             HealthMetricProvider(kind: .healthSteps, reader: health, since: since),
             HealthMetricProvider(kind: .healthFlights, reader: health, since: since),
             HealthMetricProvider(kind: .healthHeart, reader: health, since: since),
+            HealthMetricProvider(kind: .healthHeartRange, reader: health, since: since),
             HealthMetricProvider(kind: .healthHRV, reader: health, since: since),
             HealthMetricProvider(kind: .healthRestingHeart, reader: health, since: since),
             HealthMetricProvider(kind: .healthSleep, reader: health, since: since),
@@ -88,6 +89,7 @@ extension SensorKind {
         case .healthSteps: "Steps"
         case .healthFlights: "Stairs"
         case .healthHeart: "Heart Rate"
+        case .healthHeartRange: "Heart Rate Range"
         case .healthHRV: "HRV"
         case .healthRestingHeart: "Resting Heart Rate"
         case .healthSleep: "Sleep"

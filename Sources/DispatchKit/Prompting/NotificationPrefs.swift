@@ -97,6 +97,18 @@ public final class NotificationPrefs: @unchecked Sendable {
         }
     }
 
+    /// Automatic AWAKE/ASLEEP state from Sleep Focus + HealthKit (plan 39).
+    /// Default OFF — a user who never opens the toggle sees zero behavior
+    /// change; the manual pill keeps its exact semantics either way.
+    public var autoSleepEnabled: Bool {
+        get {
+            defaults.bool(forKey: "autoSleepEnabled") // default false
+        }
+        set {
+            defaults.set(newValue, forKey: "autoSleepEnabled")
+        }
+    }
+
     /// Configurable digest reminders (plan 40). Stored as JSON `Data` under
     /// `digestSchedules` — the `scheduledTimes` storage pattern verbatim,
     /// including silent decode/encode failure.

@@ -16,8 +16,6 @@ struct SensorSettingsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(PermissionCascade.self) private var permissionCascade
     @Environment(SpotifyController.self) private var spotifyController
-    // PLAN-39 TASK 0 PROBE — remove after measurement.
-    @Environment(SleepDeliveryProbe.self) private var sleepDeliveryProbe
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
 
@@ -184,25 +182,6 @@ struct SensorSettingsView: View {
                     sectionHeader("UNITS")
                 }
                 .listRowBackground(Color.white.opacity(0.12))
-
-                // PLAN-39 TASK 0 PROBE — remove after measurement. Diagnostic
-                // toggle for the sleepAnalysis delivery-timing spike; the
-                // probe registers/unregisters immediately and re-registers on
-                // launch while enabled.
-                Section {
-                    Toggle("Sleep Delivery Probe", isOn: probeBinding)
-                        .tint(.white.opacity(0.4))
-                        .foregroundStyle(.white)
-                        .accessibilityIdentifier("sleep-delivery-probe-toggle")
-                } header: {
-                    sectionHeader("DIAGNOSTICS")
-                } footer: {
-                    Text("Temporary diagnostic for measuring Health sleep-data delivery. Logs to Files > Dispatch > sleep-probe.log")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
-                        .listRowBackground(Color.clear)
-                }
-                .listRowBackground(Color.white.opacity(0.12))
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -254,11 +233,12 @@ struct SensorSettingsView: View {
 
     /// Sensor rows grouped into categories, each sorted alphabetically by
     /// display name. Every SensorKind appears in exactly one category — the
-    /// four groups partition all 19 cases.
+    /// four groups partition all 20 cases.
     private var sensorCategories: [SensorCategory] {
         let groups: [(String, [SensorKind])] = [
             ("HEALTH", [
-                .healthActivityRings, .healthCaffeine, .healthHeart, .healthHRV,
+                .healthActivityRings, .healthCaffeine, .healthHeart,
+                .healthHeartRange, .healthHRV,
                 .healthMedications, .healthRestingHeart, .healthSleep,
                 .healthFlights, .healthSteps, .healthWorkouts,
             ]),
@@ -392,14 +372,6 @@ struct SensorSettingsView: View {
         )
     }
 
-    // PLAN-39 TASK 0 PROBE — remove after measurement.
-    private var probeBinding: Binding<Bool> {
-        Binding(
-            get: { sleepDeliveryProbe.isEnabled },
-            set: { sleepDeliveryProbe.isEnabled = $0 }
-        )
-    }
-
     private var spotifyStatusCaption: String {
         if !spotifyController.isConfigured { return "Not configured" }
         return spotifyController.isConnected ? "Connected" : "Not connected"
@@ -427,6 +399,7 @@ extension SensorKind {
         case .healthSteps: "Steps"
         case .healthFlights: "Stairs"
         case .healthHeart: "Heart Rate"
+        case .healthHeartRange: "Heart Rate Range"
         case .healthHRV: "HRV"
         case .healthRestingHeart: "Resting Heart Rate"
         case .healthSleep: "Sleep"

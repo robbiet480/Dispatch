@@ -15,7 +15,7 @@ public enum SensorFailureHint {
         switch kind {
         case .healthSteps, .healthFlights, .healthHeart, .healthHRV, .healthRestingHeart,
              .healthSleep, .healthWorkouts, .healthCaffeine, .healthMedications,
-             .healthActivityRings:
+             .healthActivityRings, .healthHeartRange:
             return "Check Health → Data Access & Devices → Dispatch."
         case .location:
             return "Allow location access for Dispatch in Settings."
@@ -48,6 +48,7 @@ public enum SensorFailureHint {
         case .healthSteps: "Steps"
         case .healthFlights: "Flights Climbed"
         case .healthHeart: "Heart Rate"
+        case .healthHeartRange: "Heart Rate Range"
         case .healthHRV: "Heart Rate Variability"
         case .healthRestingHeart: "Resting Heart Rate"
         case .healthSleep: "Sleep"

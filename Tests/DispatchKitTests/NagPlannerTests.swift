@@ -85,6 +85,15 @@ private let base = ISO8601DateFormatter().date(from: "2026-07-08T10:00:00Z")!
     #expect(p.nagMaxCount == 3)
 }
 
+@Test func autoSleepPrefDefaultsOffAndRoundTrips() {
+    let p = freshPrefs()
+    #expect(p.autoSleepEnabled == false) // default OFF (plan 39)
+    p.autoSleepEnabled = true
+    #expect(p.autoSleepEnabled == true)
+    p.autoSleepEnabled = false
+    #expect(p.autoSleepEnabled == false)
+}
+
 @Test func digestPrefDefaultsOffAndRoundTrips() {
     let p = freshPrefs()
     #expect(p.digestEnabled == false)
