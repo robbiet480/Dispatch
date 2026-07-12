@@ -114,6 +114,10 @@ final class MacExportController {
         panel.prompt = "Import"
         panel.message = "Choose a question CSV or JSON file."
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess { url.stopAccessingSecurityScopedResource() }
+        }
         do {
             let data = try Data(contentsOf: url)
             let definitions: [QuestionDefinition]

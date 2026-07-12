@@ -33,12 +33,19 @@ struct MacQuestionImportSheet: View {
                     }
                 }
                 if !plan.skips.isEmpty {
-                    Section("Skipped (already exist)") {
+                    Section("Skipped (duplicates)") {
                         ForEach(Array(plan.skips.enumerated()), id: \.offset) { _, skip in
-                            Label(skip.prompt.isEmpty ? "(empty prompt)" : skip.prompt,
-                                  systemImage: "equal.circle")
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(skip.prompt.isEmpty ? "(empty prompt)" : skip.prompt)
+                                        .lineLimit(1)
+                                    Text(Self.skipReasonText(skip.reason))
+                                        .font(.caption)
+                                }
+                            } icon: {
+                                Image(systemName: "equal.circle")
+                            }
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -73,6 +80,13 @@ struct MacQuestionImportSheet: View {
             .padding()
         }
         .frame(minWidth: 480, minHeight: 460)
+    }
+
+    private static func skipReasonText(_ reason: QuestionImportSkipReason) -> String {
+        switch reason {
+        case .duplicateOfExisting: "Already exists"
+        case .duplicateWithinImport: "Duplicate within file"
+        }
     }
 
     private func countTile(_ label: String, _ count: Int, _ color: Color) -> some View {
