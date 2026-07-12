@@ -44,7 +44,10 @@ public enum MonitorTriggerEngine {
         let firesOn: MonitorConditionState = direction == .arrival ? .satisfied : .unsatisfied
         let cancelsOn: MonitorConditionState = direction == .arrival ? .unsatisfied : .satisfied
         if state == firesOn {
-            let delay = TimeInterval(max(0, delayMinutes) * 60)
+            // Multiply in `TimeInterval` (Double), NOT Int: a corrupt/hand-edited
+            // import could carry a huge `delayMinutes`, and `x * 60` in Int would
+            // overflow and trap here.
+            let delay = TimeInterval(max(0, delayMinutes)) * 60
             return .schedule(fireDate: eventDate.addingTimeInterval(delay))
         }
         if state == cancelsOn {

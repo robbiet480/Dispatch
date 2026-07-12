@@ -59,3 +59,13 @@ private let t0 = Date(timeIntervalSinceReferenceDate: 1_000_000)
         state: .satisfied, eventDate: t0)
     #expect(outcome == .schedule(fireDate: t0))
 }
+
+@Test func hugeDelayDoesNotOverflow() {
+    // A corrupt/hand-edited import could carry a `delayMinutes` near `Int.max`;
+    // `delayMinutes * 60` in Int would overflow and trap. The engine multiplies
+    // in TimeInterval instead, so this must not crash.
+    let outcome = MonitorTriggerEngine.outcome(
+        direction: .arrival, delayMinutes: .max, cancelOnContradiction: true,
+        state: .satisfied, eventDate: t0)
+    #expect(outcome == .schedule(fireDate: t0.addingTimeInterval(TimeInterval(Int.max) * 60)))
+}
