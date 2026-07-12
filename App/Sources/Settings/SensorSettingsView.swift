@@ -129,6 +129,7 @@ struct SensorSettingsView: View {
                     Text("Apple Music is read automatically when the Media sensor is on. Connect Spotify to record its now-playing track too.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
+                        .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
 

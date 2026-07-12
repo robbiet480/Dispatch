@@ -63,6 +63,7 @@ struct SpotifySettingsView: View {
                     }
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.6))
+                    .listRowBackground(Color.clear)
                 }
                 .listRowBackground(Color.white.opacity(0.12))
             }

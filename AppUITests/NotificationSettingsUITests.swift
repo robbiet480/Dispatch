@@ -116,6 +116,33 @@ final class NotificationSettingsUITests: XCTestCase {
         )
     }
 
+    /// Regression guard for the themed section-footer background fix: the
+    /// FREQUENCY caption is a `Section { … } footer:` whose Text must carry
+    /// `.listRowBackground(Color.clear)` so the coral theme shows through
+    /// (without it the footer draws on the system default list background —
+    /// black in dark mode, invisible white-on-white in light mode). We can't
+    /// read the pixel color from a UI test, but asserting the identified
+    /// caption is present in the tree proves the footer still renders after
+    /// the fix and pins the identifier the fix depends on.
+    @MainActor
+    func testRandomCheckInsCaptionRenders() throws {
+        let app = launchToNotificationSettings()
+
+        // Random Check-ins defaults ON, so the "Random prompts a few times a
+        // day…" caption footer is present. It sits just below the FREQUENCY
+        // toggle near the top, but scroll defensively in case of small screens.
+        let caption = app.staticTexts["random-checkins-caption"]
+        var scrolls = 0
+        while !caption.exists && scrolls < 4 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        XCTAssertTrue(
+            caption.waitForExistence(timeout: 10),
+            "Random Check-ins caption footer should render (themed footer background regression)"
+        )
+    }
+
     @MainActor
     private func waitForNonExistence(of element: XCUIElement) -> Bool {
         let predicate = NSPredicate(format: "exists == false")

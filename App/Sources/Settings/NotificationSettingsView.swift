@@ -212,6 +212,7 @@ struct NotificationSettingsView: View {
             Text("Marks you asleep when a Focus with Dispatch's filter set to \"This Focus Means I'm Asleep\" turns on (Settings → Focus → Sleep → Focus Filters → Dispatch), and corrects the state from Health sleep data after the fact. Your manual toggle always wins for 90 minutes.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
+                .listRowBackground(Color.clear)
         }
     }
 
@@ -274,6 +275,7 @@ struct NotificationSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
                 .accessibilityIdentifier("random-checkins-caption")
+                .listRowBackground(Color.clear)
         }
     }
 
