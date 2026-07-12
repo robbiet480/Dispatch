@@ -31,6 +31,31 @@ public enum PromptPlanner {
              seed: seed, calendar: calendar)
     }
 
+    /// The global (non-group) plan for one awake window, honoring the user's
+    /// "Random check-ins" toggle (plan 51). This is the single source of truth
+    /// for the gate — `NotificationScheduler.plannedDates` routes every plan
+    /// window through here.
+    ///
+    /// When `randomCheckInsEnabled` is false the distribution is skipped
+    /// entirely (alertsPerDay treated as 0, the documented "materialize only
+    /// scheduledTimes" path below), so ZERO random global prompts are planned
+    /// — only the user's explicit `scheduledTimes` still fire. When true, this
+    /// is identical to `plan(prefs:awakeStart:awakeEnd:seed:calendar:)`.
+    public static func globalPlan(
+        randomCheckInsEnabled: Bool,
+        prefs: NotificationPrefs,
+        awakeStart: Date,
+        awakeEnd: Date,
+        seed: UInt64,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        plan(alertsPerDay: randomCheckInsEnabled ? prefs.alertsPerDay : 0,
+             distribution: prefs.distribution,
+             scheduledTimes: prefs.scheduledTimes,
+             awakeStart: awakeStart, awakeEnd: awakeEnd,
+             seed: seed, calendar: calendar)
+    }
+
     /// Parameterized core (plan 12): prompt groups reuse the same
     /// distribution machinery without a UserDefaults-backed prefs object.
     /// `alertsPerDay: 0` skips distribution planning entirely and only

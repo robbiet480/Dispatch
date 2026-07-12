@@ -97,6 +97,30 @@ public final class NotificationPrefs: @unchecked Sendable {
         }
     }
 
+    /// The app's own random/global check-in schedule — the FREQUENCY
+    /// (alerts-per-day) + DISTRIBUTION prompts that fire "What are you up to
+    /// right now?" a few times a day, separate from Prompt Groups (plan 51).
+    /// When OFF the scheduler plans ZERO random global prompts, so a user can
+    /// rely on Prompt Groups only; explicit SCHEDULED times are unaffected.
+    ///
+    /// Default TRUE, and migration-safe: `UserDefaults.bool(forKey:)` returns
+    /// `false` for an ABSENT key, which would SILENTLY disable the randoms of
+    /// every existing user (who has never written this key). So absence is
+    /// detected explicitly via `object(forKey:) == nil` and mapped to `true` —
+    /// only an explicit stored `false` (the user flipping the toggle off)
+    /// disables the randoms.
+    public var randomCheckInsEnabled: Bool {
+        get {
+            guard defaults.object(forKey: "randomCheckInsEnabled") != nil else {
+                return true // absent ⇒ existing user / fresh install: keep randoms on
+            }
+            return defaults.bool(forKey: "randomCheckInsEnabled")
+        }
+        set {
+            defaults.set(newValue, forKey: "randomCheckInsEnabled")
+        }
+    }
+
     /// Automatic AWAKE/ASLEEP state from Sleep Focus + HealthKit (plan 39).
     /// Default OFF — a user who never opens the toggle sees zero behavior
     /// change; the manual pill keeps its exact semantics either way.

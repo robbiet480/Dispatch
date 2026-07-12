@@ -80,6 +80,49 @@ final class NotificationSettingsUITests: XCTestCase {
         )
     }
 
+    /// Plan 51: the Random Check-ins switch defaults ON, and turning it off
+    /// hides the alerts-per-day stepper and the DISTRIBUTION rows (they only
+    /// shape the random schedule it disables). Toggling back on restores them.
+    @MainActor
+    func testRandomCheckInsToggleHidesFrequencyControls() throws {
+        let app = launchToNotificationSettings()
+
+        let toggle = app.switches["random-checkins-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        XCTAssertEqual(toggle.value as? String, "1", "Random Check-ins defaults ON")
+
+        // While ON: the alerts-per-day stepper and a distribution row are shown.
+        XCTAssertTrue(app.staticTexts["alerts-per-day-count"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["distribution-semiRandom"].waitForExistence(timeout: 5))
+
+        // Turn it OFF.
+        toggle.switches.firstMatch.tap()
+
+        // The stepper and distribution rows disappear (only the random schedule
+        // controls; SCHEDULED times are unaffected and stay).
+        let count = app.staticTexts["alerts-per-day-count"]
+        XCTAssertTrue(
+            waitForNonExistence(of: count),
+            "Alerts per Day stepper should hide when Random Check-ins is off"
+        )
+        XCTAssertFalse(app.buttons["distribution-semiRandom"].exists,
+                       "DISTRIBUTION rows should hide when Random Check-ins is off")
+
+        // Turn it back ON — the stepper returns.
+        toggle.switches.firstMatch.tap()
+        XCTAssertTrue(
+            app.staticTexts["alerts-per-day-count"].waitForExistence(timeout: 5),
+            "Alerts per Day stepper should reappear when Random Check-ins is on"
+        )
+    }
+
+    @MainActor
+    private func waitForNonExistence(of element: XCUIElement) -> Bool {
+        let predicate = NSPredicate(format: "exists == false")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+    }
+
     @MainActor
     private func waitForLabel(of element: XCUIElement, toEqual expected: String) -> Bool {
         let predicate = NSPredicate(format: "label == %@", expected)

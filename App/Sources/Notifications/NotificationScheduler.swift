@@ -767,11 +767,21 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
         ]
     }
 
+    /// Global (non-group) prompt dates across the plan windows. Gated by the
+    /// user's "Random check-ins" toggle (plan 51): with it OFF, every window
+    /// routes through `PromptPlanner.globalPlan` with the distribution skipped,
+    /// so ZERO random global prompts are planned (explicit scheduledTimes still
+    /// materialize) — and because the whole global family flows from here, the
+    /// downstream `dates`, past-global nag parents, and global nag chains all
+    /// go empty for the random prompts too. Prompt groups are planned by a
+    /// separate path (`groupPlans`) and are untouched by this gate.
     private func plannedDates(prefs: NotificationPrefs, now: Date, calendar: Calendar) -> [Date] {
         planWindows(now: now, calendar: calendar)
             .flatMap { window in
-                PromptPlanner.plan(prefs: prefs, awakeStart: window.start, awakeEnd: window.end,
-                                   seed: window.seed, calendar: calendar)
+                PromptPlanner.globalPlan(
+                    randomCheckInsEnabled: prefs.randomCheckInsEnabled, prefs: prefs,
+                    awakeStart: window.start, awakeEnd: window.end,
+                    seed: window.seed, calendar: calendar)
             }
             .sorted()
     }
