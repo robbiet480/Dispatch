@@ -17,10 +17,11 @@ struct MacCatalogView: View {
     @State private var statusMessage: String?
 
     var body: some View {
-        @Bindable var store = store
-        content
+        VStack(spacing: 0) {
+            catalogSearchField
+            content
+        }
             .navigationTitle("Question Catalog")
-            .searchable(text: $store.searchText, prompt: "Search questions")
             .toolbar {
                 ToolbarItem {
                     Button {
@@ -53,6 +54,32 @@ struct MacCatalogView: View {
             .task {
                 if store.phase == .idle { await store.loadFirstPage() }
             }
+    }
+
+    /// In-content search field. This replaces a toolbar `.searchable`, which
+    /// collided with the reports-list sidebar's `.searchable`: both split-view
+    /// columns are alive at once, so both tried to add the single
+    /// `com.apple.SwiftUI.search` item to the one window toolbar and AppKit
+    /// threw NSInternalInconsistencyException — crashing the app when the
+    /// catalog pane opened (shipped in build 30).
+    private var catalogSearchField: some View {
+        @Bindable var store = store
+        return HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search questions", text: $store.searchText)
+                .textFieldStyle(.plain)
+                .accessibilityIdentifier("mac-catalog-search")
+            if !store.searchText.isEmpty {
+                Button { store.searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(8)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        .padding([.horizontal, .top])
     }
 
     @ViewBuilder
