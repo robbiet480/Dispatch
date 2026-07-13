@@ -84,8 +84,8 @@ struct InsightsView: View {
             }
         }
         .navigationTitle("Insights")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .inlineNavTitleOnPhone()
+        .darkNavBarOnPhone()
         .accessibilityIdentifier("insights-view")
         // Memoized compute: the engine is a pure, fast in-memory pass, and
         // @Model instances aren't Sendable, so it runs in this non-blocking

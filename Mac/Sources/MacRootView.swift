@@ -83,7 +83,7 @@ struct MacRootView: View {
         } else {
             switch navigation.pane {
             case .dashboard: MacDashboardView(searchQuery: searchQuery)
-            case .insights: MacInsightsView()
+            case .insights: InsightsView()
             case .questions: MacQuestionsView()
             case .groups: MacPromptGroupsView()
             case .catalog: CatalogView()
