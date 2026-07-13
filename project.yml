@@ -289,6 +289,18 @@ targets:
       # this directly, retiring the Mac-only MacInsightsView twin.
       - path: App/Sources/Insights/InsightsView.swift
       - path: App/Sources/Insights/QuestionCorrelationView.swift
+      # Task 2.3 (iPad/Mac UI convergence): the shared, themed Questions list
+      # + editor + choice-options editor now compile unmodified on macOS
+      # (their few iOS-only bits — nav-bar chrome, .keyboardType — go through
+      # the Task 2.1 PlatformModifiers no-ops / #if os(iOS) guards). The Mac
+      # Questions pane renders QuestionSettingsView directly, retiring the
+      # Mac-only MacQuestionsView/MacQuestionEditorView twins.
+      # MacQuestionImportSheet.swift (Mac/Sources, file-picker CSV/JSON
+      # question import — no iOS equivalent) stays and is now presented from
+      # QuestionSettingsView's #if os(macOS) toolbar instead.
+      - path: App/Sources/Settings/QuestionSettingsView.swift
+      - path: App/Sources/Settings/QuestionEditorView.swift
+      - path: App/Sources/Settings/ChoiceOptionsEditorView.swift
       # Shared place-search component (plan 50, #83): same dual-membership as
       # Shared/Providers — the MapKit autocomplete/geocode wrapper lets the Mac
       # editor pick a place, lifting the view-only restriction on place triggers.

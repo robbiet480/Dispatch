@@ -25,8 +25,9 @@ final class MacExportController {
     var isImportRunning = false
 
     /// Plan 47: question-definition import preview state. The open panel +
-    /// parse + plan run here; `MacQuestionsView` presents the preview sheet
-    /// and calls `commitQuestionImport` on confirm.
+    /// parse + plan run here; `QuestionSettingsView` (Task 2.3's shared Mac
+    /// Questions pane) presents the preview sheet and calls
+    /// `commitQuestionImport` on confirm.
     var questionImportPlan: QuestionImportPlan?
     var showingQuestionImport = false
 

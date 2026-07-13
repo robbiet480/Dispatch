@@ -7,6 +7,14 @@ struct QuestionSettingsView: View {
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query private var responses: [Response]
     @Environment(ThemeStore.self) private var themeStore
+    #if os(macOS)
+    // Task 2.3 (iPad/Mac UI convergence): the Mac file-picker question
+    // import/export lives on `MacExportController` (NSOpenPanel/NSSavePanel
+    // driven) — no iOS equivalent, so it's wired in here behind an os
+    // guard rather than dropped when this view replaced `MacQuestionsView`.
+    @Environment(MacExportController.self) private var exportController
+    @State private var pendingDelete: Question?
+    #endif
 
     private var theme: Theme { themeStore.theme }
 
@@ -15,47 +23,115 @@ struct QuestionSettingsView: View {
             Color.themeBackground(theme)
                 .ignoresSafeArea()
 
-            List {
-                ForEach(questions, id: \.uniqueIdentifier) { question in
-                    QuestionRowView(question: question, responseCount: responseCount(for: question))
-                        .listRowBackground(Color.white.opacity(0.12))
-                }
-                .onMove(perform: move)
-                .onDelete(perform: delete)
+            // Group wraps the List so the Mac screenshot identifier lands on
+            // a container that survives AppKit's AXOutline translation
+            // (this List has no `selection:` binding, unlike CatalogListView's,
+            // so an id placed directly on the List risks not resolving there).
+            Group {
+                List {
+                    ForEach(questions, id: \.uniqueIdentifier) { question in
+                        QuestionRowView(question: question, responseCount: responseCount(for: question))
+                            .listRowBackground(Color.white.opacity(0.12))
+                            #if os(macOS)
+                            // Mac-only safety net: MacQuestionsView offered a
+                            // confirmation dialog before deleting a question;
+                            // the shared list's swipe/edit-mode delete (below)
+                            // has no confirmation, so this stays desktop-only.
+                            .contextMenu {
+                                Button("Delete", role: .destructive) { pendingDelete = question }
+                            }
+                            #endif
+                    }
+                    .onMove(perform: move)
+                    .onDelete(perform: delete)
 
-                NavigationLink(destination: QuestionEditorView(question: nil)) {
-                    Text("ADD A QUESTION…")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                }
-                .listRowBackground(Color.white.opacity(0.12))
-                .accessibilityIdentifier("add-question-button")
+                    NavigationLink(destination: QuestionEditorView(question: nil)) {
+                        Text("ADD A QUESTION…")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+                    .accessibilityIdentifier("add-question-button")
 
-                NavigationLink(destination: CatalogView()) {
-                    Text("QUESTION CATALOG…")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
+                    NavigationLink(destination: CatalogView()) {
+                        Text("QUESTION CATALOG…")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                    }
+                    .listRowBackground(Color.white.opacity(0.12))
+                    .accessibilityIdentifier("question-catalog-link")
                 }
-                .listRowBackground(Color.white.opacity(0.12))
-                .accessibilityIdentifier("question-catalog-link")
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                // Plan 27: readable column on iPad; no-op at iPhone widths.
+                .readableColumn()
+                .accessibilityIdentifier("question-settings-list")
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            // Plan 27: readable column on iPad; no-op at iPhone widths.
-            .readableColumn()
-            .accessibilityIdentifier("question-settings-list")
+            .accessibilityIdentifier("mac-questions-list")
         }
         .navigationTitle("Questions")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .inlineNavTitleOnPhone()
+        .darkNavBarOnPhone()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            // `EditButton` doesn't exist on macOS — its List already
+            // supports drag-reorder/delete without an edit-mode toggle (the
+            // pattern the retired MacQuestionsView shipped with, plus the
+            // context-menu delete confirmation below), so this is iOS-only,
+            // not a dropped capability.
+            #if os(iOS)
+            ToolbarItem(placement: .primaryAction) {
                 EditButton()
                     .tint(.white)
             }
+            #endif
+            #if os(macOS)
+            ToolbarItem {
+                Button {
+                    exportController.importQuestions(existingPrompts: questions.map(\.prompt))
+                } label: {
+                    Label("Import…", systemImage: "square.and.arrow.down")
+                }
+                .accessibilityIdentifier("mac-questions-import")
+            }
+            ToolbarItem {
+                Menu {
+                    Button("CSV…") { exportController.exportQuestionsCSV() }
+                    Button("JSON…") { exportController.exportQuestionsJSON() }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .accessibilityIdentifier("mac-questions-export")
+            }
+            #endif
         }
+        #if os(macOS)
+        .sheet(isPresented: Binding(
+            get: { exportController.showingQuestionImport },
+            set: { exportController.showingQuestionImport = $0 }
+        )) {
+            if let plan = exportController.questionImportPlan {
+                MacQuestionImportSheet(plan: plan) {
+                    exportController.commitQuestionImport(into: context)
+                }
+            }
+        }
+        .confirmationDialog(
+            "Delete this question?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { question in
+            Button("Delete", role: .destructive) {
+                context.delete(question)
+                try? context.save()
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { question in
+            Text("“\(question.prompt)” will be removed. Filed answers are kept.")
+        }
+        #endif
     }
 
     private func responseCount(for question: Question) -> Int {
@@ -106,6 +182,9 @@ struct QuestionRowView: View {
                 Toggle("", isOn: enabledBinding)
                     .labelsHidden()
                     .tint(.white.opacity(0.4))
+                    #if os(macOS)
+                    .accessibilityIdentifier("mac-question-enabled-\(question.uniqueIdentifier)")
+                    #endif
             }
         }
     }
