@@ -3,6 +3,17 @@
 #
 #   ./scripts/upload-testflight.sh [--mac|--mac-only] [notes-file.md]
 #
+# BEFORE YOU CUT A BUILD — release checklist:
+#   1. Bump CURRENT_PROJECT_VERSION across all targets in project.yml.
+#   2. Add scripts/notes-build<N>.md ("What to Test").
+#   3. If this build carries any change to a CloudKit-mirrored @Model
+#      (DispatchStore.allModels), DEPLOY THE CLOUDKIT SCHEMA FIRST — an
+#      undeployed field makes every export fail with CKError.partialFailure and
+#      silently breaks sync. Confirm Production is current:
+#        python3 scripts/cloudkit_schema.py verify-production \
+#          --team-id UTQFCBPQRF --container-id iCloud.io.robbie.Dispatch
+#      (must print "up to date"; if not, see docs/cloudkit-schema.md to deploy).
+#
 # Default uploads the iOS app (which embeds watch + widgets). --mac ALSO
 # archives and uploads the DispatchMac target; --mac-only skips iOS.
 # The Mac lane signs MANUALLY: Apple Distribution + "Dispatch macOS App
