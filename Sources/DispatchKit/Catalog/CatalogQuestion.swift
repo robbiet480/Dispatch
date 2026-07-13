@@ -75,7 +75,12 @@ public enum CatalogChoicesJSON {
 
 /// An approved, world-readable catalog entry. Created exclusively by the
 /// server-to-server key (see the moderation boundary note above).
-public struct CatalogQuestion: Equatable, Sendable, Identifiable {
+///
+/// `Hashable` (Task 1.4, iPad/Mac UI convergence): `CatalogListView`'s
+/// `List(selection:)` and `CatalogView`'s `navigationDestination(item:)` both
+/// require it; every stored property is itself Hashable so synthesis is
+/// exact and behavior-preserving.
+public struct CatalogQuestion: Equatable, Hashable, Sendable, Identifiable {
     public var recordName: String
     public var prompt: String
     public var typeRaw: Int
