@@ -253,6 +253,10 @@ targets:
       # platform seam (#if canImport(UIKit)). OptionBlockLayout is pure math.
       - path: App/Sources/Visualizations/QuestionVisualizationView.swift
       - path: App/Sources/Visualizations/OptionBlockLayout.swift
+      # Task 1.2 (iPad/Mac UI convergence): non-interactive question input
+      # preview renderer for QuestionPreviewControl (Task 1.1, DispatchKit) —
+      # UIKit-free SwiftUI, so it compiles unmodified on macOS too.
+      - path: App/Sources/Catalog/QuestionInputPreviewView.swift
       # Plan 47 (issue #58): the catalog store + provider are already
       # UIKit-free (CloudKit framework, available on macOS) — dual target
       # membership rather than a Mac twin. The catalog VIEWS stay iOS-only
