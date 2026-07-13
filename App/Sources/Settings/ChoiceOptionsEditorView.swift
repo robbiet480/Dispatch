@@ -91,12 +91,17 @@ struct ChoiceOptionsEditorView: View {
             .readableColumn()
         }
         .navigationTitle("Choices")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .inlineNavTitleOnPhone()
+        .darkNavBarOnPhone()
         .toolbar {
             // Edit mode enables drag-reorder handles; swipe-delete works in
-            // the default mode as well.
-            ToolbarItem(placement: .topBarTrailing) { EditButton() }
+            // the default mode as well. `EditButton` doesn't exist on macOS —
+            // its List already supports drag-reorder/delete without an
+            // edit-mode toggle (the pattern the retired MacQuestionsView
+            // shipped with), so this is iOS-only, not a dropped capability.
+            #if os(iOS)
+            ToolbarItem(placement: .primaryAction) { EditButton() }
+            #endif
         }
         .onDisappear(perform: commitNewOption)
         .accessibilityIdentifier("choice-options-editor")

@@ -193,21 +193,27 @@ struct QuestionEditorView: View {
                         .accessibilityIdentifier("input-style")
                         if configFields.min {
                             TextField("Minimum", text: $inputMin)
+                                #if os(iOS)
                                 .keyboardType(.decimalPad)
+                                #endif
                                 .foregroundStyle(.white)
                                 .tint(.white)
                                 .accessibilityIdentifier("input-min")
                         }
                         if configFields.max {
                             TextField("Maximum", text: $inputMax)
+                                #if os(iOS)
                                 .keyboardType(.decimalPad)
+                                #endif
                                 .foregroundStyle(.white)
                                 .tint(.white)
                                 .accessibilityIdentifier("input-max")
                         }
                         if configFields.step {
                             TextField("Step", text: $inputStep)
+                                #if os(iOS)
                                 .keyboardType(.decimalPad)
+                                #endif
                                 .foregroundStyle(.white)
                                 .tint(.white)
                                 .accessibilityIdentifier("input-step")
@@ -225,7 +231,9 @@ struct QuestionEditorView: View {
 
                     Section {
                         TextField("Value for empty responses", text: $defaultAnswer)
+                            #if os(iOS)
                             .keyboardType(.decimalPad)
+                            #endif
                             .foregroundStyle(.white)
                             .tint(.white)
                             .accessibilityIdentifier("default-answer-field")
@@ -304,10 +312,10 @@ struct QuestionEditorView: View {
             .readableColumn()
         }
         .navigationTitle(question == nil ? "Add Question" : "Edit Question")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .inlineNavTitleOnPhone()
+        .darkNavBarOnPhone()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 Button("Save") { save() }
                     .disabled(!canSave)
             }
