@@ -2,7 +2,18 @@ import DispatchKit
 import SwiftData
 import SwiftUI
 
-struct QuestionSettingsView: View {
+/// The reusable, themed list of questions. Selection-based (like
+/// `CatalogListView`) so the same view is BOTH a push-list — iPhone/Settings,
+/// wrapped by `QuestionSettingsView` in an ambient `NavigationStack` with a
+/// `.navigationDestination(item:)` that pushes the editor — AND, once the
+/// Sprint-3 shell lands, a split-view sidebar whose selection drives a
+/// `QuestionEditorView` in the adjacent detail column.
+///
+/// Rows are tagged by `question.uniqueIdentifier` and participate in
+/// `List(selection:)`; the enclosing host owns what a selection means (push vs
+/// detail column). Carries the Task 2.3 Mac affordances (file-picker
+/// import/export + the delete-confirmation dialog) behind `#if os(macOS)`.
+struct QuestionsList: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query private var responses: [Response]
@@ -16,6 +27,16 @@ struct QuestionSettingsView: View {
     @State private var pendingDelete: Question?
     #endif
 
+    /// The selected question's `uniqueIdentifier`, owned by the host. The host
+    /// decides what a selection means: `QuestionSettingsView` pushes the editor
+    /// via `.navigationDestination(item:)`; the future shell shows it in a
+    /// detail column.
+    @Binding var selection: String?
+
+    init(selection: Binding<String?>) {
+        _selection = selection
+    }
+
     private var theme: Theme { themeStore.theme }
 
     var body: some View {
@@ -23,14 +44,18 @@ struct QuestionSettingsView: View {
             Color.themeBackground(theme)
                 .ignoresSafeArea()
 
-            // Group wraps the List so the Mac screenshot identifier lands on
-            // a container that survives AppKit's AXOutline translation
-            // (this List has no `selection:` binding, unlike CatalogListView's,
-            // so an id placed directly on the List risks not resolving there).
+            // SwiftUI keeps only the LAST `.accessibilityIdentifier` applied to
+            // a given view, so the two ids are split across the `List` and an
+            // enclosing `Group` (the proven CatalogListView pattern). This List
+            // now carries a `selection:` binding, so — unlike the pre-3.2
+            // version — the Mac screenshot id sits DIRECTLY on the `List`
+            // (MacCatalogUITests proves a List-level id survives AppKit's
+            // AXOutline translation); the iOS-test id lives on the `Group`.
             Group {
-                List {
+                List(selection: $selection) {
                     ForEach(questions, id: \.uniqueIdentifier) { question in
                         QuestionRowView(question: question, responseCount: responseCount(for: question))
+                            .tag(question.uniqueIdentifier)
                             .listRowBackground(Color.white.opacity(0.12))
                             #if os(macOS)
                             // Mac-only safety net: MacQuestionsView offered a
@@ -67,9 +92,9 @@ struct QuestionSettingsView: View {
                 .scrollContentBackground(.hidden)
                 // Plan 27: readable column on iPad; no-op at iPhone widths.
                 .readableColumn()
-                .accessibilityIdentifier("question-settings-list")
+                .accessibilityIdentifier("mac-questions-list")
             }
-            .accessibilityIdentifier("mac-questions-list")
+            .accessibilityIdentifier("question-settings-list")
         }
         .navigationTitle("Questions")
         .inlineNavTitleOnPhone()
@@ -159,33 +184,60 @@ struct QuestionSettingsView: View {
     }
 }
 
+/// iPhone / Settings push-host over `QuestionsList`. Reached via a
+/// `NavigationLink` from `SettingsView` (iPhone) and wrapped in
+/// `NavigationStack { QuestionSettingsView() }` by `MacRootView` (Mac), so it
+/// deliberately does NOT create its own `NavigationStack` — it relies on that
+/// ambient stack and registers a `.navigationDestination(item:)` that pushes
+/// the editor for the selected question. The "add a question" / "catalog" rows
+/// keep their own `NavigationLink` pushes (see `QuestionsList`). Same entry
+/// point and same user-visible behavior as before Task 3.2.
+struct QuestionSettingsView: View {
+    @Query(sort: \Question.sortOrder) private var questions: [Question]
+    @State private var selection: String?
+
+    var body: some View {
+        QuestionsList(selection: $selection)
+            .navigationDestination(item: $selection) { identifier in
+                // A selection can outlive its question (deleted while selected);
+                // guard the lookup so a stale id never opens the new-question
+                // editor (`QuestionEditorView(question: nil)`).
+                if let question = questions.first(where: { $0.uniqueIdentifier == identifier }) {
+                    QuestionEditorView(question: question)
+                }
+            }
+    }
+}
+
 struct QuestionRowView: View {
     let question: Question
     let responseCount: Int
 
     var body: some View {
-        NavigationLink(destination: QuestionEditorView(question: question)) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(question.prompt.uppercased())
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Text("\(question.type.displayName) – \(responseCount) response\(responseCount == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                Toggle("", isOn: enabledBinding)
-                    .labelsHidden()
-                    .tint(.white.opacity(0.4))
-                    #if os(macOS)
-                    .accessibilityIdentifier("mac-question-enabled-\(question.uniqueIdentifier)")
-                    #endif
+        // Plain, selectable row content — no `NavigationLink`. Navigation is
+        // driven by the enclosing `List(selection:)` + the host's
+        // `.navigationDestination(item:)` (Task 3.2), which lets the same row
+        // act as a push on iPhone and a detail-column selection in the shell.
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(question.prompt.uppercased())
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Text("\(question.type.displayName) – \(responseCount) response\(responseCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
             }
+
+            Spacer()
+
+            Toggle("", isOn: enabledBinding)
+                .labelsHidden()
+                .tint(.white.opacity(0.4))
+                #if os(macOS)
+                .accessibilityIdentifier("mac-question-enabled-\(question.uniqueIdentifier)")
+                #endif
         }
     }
 
