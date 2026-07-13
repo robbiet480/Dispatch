@@ -79,3 +79,20 @@ jobs:
         # generic simulator destination: compiles against the SDK without
         # requiring a concrete simulator runtime to be installed.
         run: xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination 'generic/platform=iOS Simulator' -derivedDataPath "$HOME/ci-cache/${RUNNER_NAME}/DerivedData-build" build
+
+  cloudkit-schema:
+    # Guard against the failure that silently broke sync: a CloudKit-mirrored
+    # @Model (DispatchStore.allModels) gaining a field that the deployed
+    # CloudKit schema lacks. NSPersistentCloudKitContainer never auto-creates
+    # fields in Production, so such a build's exports fail with
+    # CKError.partialFailure and no data reaches other devices.
+    #
+    # Hermetic: pure Python over the model source + the committed
+    # CloudKit/schema.ckdb — no Xcode, no CloudKit, no secrets. So it runs on a
+    # GitHub-hosted runner and safely covers fork PRs too (unlike the signing
+    # jobs above, which are pinned to the self-hosted minis).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Models must not outrun CloudKit/schema.ckdb
+        run: python3 scripts/cloudkit_schema.py check
