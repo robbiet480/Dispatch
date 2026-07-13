@@ -31,15 +31,6 @@ struct QuestionSettingsView: View {
                 }
                 .listRowBackground(Color.white.opacity(0.12))
                 .accessibilityIdentifier("add-question-button")
-
-                NavigationLink(destination: CatalogView()) {
-                    Text("QUESTION CATALOG…")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                }
-                .listRowBackground(Color.white.opacity(0.12))
-                .accessibilityIdentifier("question-catalog-link")
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -51,7 +42,14 @@ struct QuestionSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NavigationLink(destination: CatalogView()) {
+                    Image(systemName: "books.vertical")
+                }
+                .tint(.white)
+                .accessibilityLabel("Question Catalog")
+                .accessibilityIdentifier("question-catalog-link")
+
                 EditButton()
                     .tint(.white)
             }
