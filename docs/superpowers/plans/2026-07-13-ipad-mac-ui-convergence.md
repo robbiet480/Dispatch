@@ -486,11 +486,13 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `App/Sources/Catalog/CatalogView.swift` (the `CatalogDetailView` struct, lines 135–270)
-- Modify: `project.yml` (add `App/Sources/Catalog/CatalogView.swift` to DispatchMac membership)
+- Create: `AppUITests/CatalogUITests.swift`
+
+> **Sequencing note (controller correction):** `CatalogView.swift`'s DispatchMac membership is deferred to Task 1.4, where `CatalogView` is rewritten cross-platform. Adding it to DispatchMac here would break the Mac build (this file still has iOS-only modifiers). This task therefore only makes `CatalogDetailView` *Mac-ready* (guarding its iOS-only nav modifiers) and builds/tests iOS.
 
 **Interfaces:**
 - Consumes: `QuestionInputPreviewView` (1.2), `QuestionInputPreview.control(for:)` (1.1), existing `CatalogStore.addToMyQuestions`, `store.flag`, `store.accountStatus`.
-- Produces: `CatalogDetailView(entry: CatalogQuestion, store: CatalogStore)` unchanged signature; now renders metadata header, tag chips, "What you'll get" config summary, the input preview, then Add + Flag.
+- Produces: `CatalogDetailView(entry: CatalogQuestion, store: CatalogStore)` unchanged signature; now renders metadata header, tag chips, "What you'll get" config summary, the input preview, then Add + Flag. Its iOS-only nav modifiers are guarded so the file compiles on macOS when 1.4 adds it to DispatchMac.
 
 - [ ] **Step 1: Add a UI test asserting the preview appears (iOS, failing)**
 
@@ -599,15 +601,21 @@ private func trimmed(_ v: Double) -> String {
 
 Delete the now-unused `choices` `ForEach` rows and the standalone "Type"/"Submitted by" rows (folded into `metadataLine`).
 
-- [ ] **Step 3: Add `CatalogView.swift` to DispatchMac membership in `project.yml`**
+- [ ] **Step 3: Make `CatalogDetailView` Mac-ready — guard its iOS-only nav modifiers**
 
-Adjacent to the `QuestionInputPreviewView.swift` line added in Task 1.2:
+`CatalogDetailView` currently ends with `.navigationTitle("Catalog Question")` + `.navigationBarTitleDisplayMode(.inline)` + `.toolbarColorScheme(.dark, for: .navigationBar)`. The last two are iOS-only and would fail the Mac build when 1.4 adds this file to DispatchMac. Guard them:
 
-```yaml
-      - path: App/Sources/Catalog/CatalogView.swift
+```swift
+.navigationTitle("Catalog Question")
+#if os(iOS)
+.navigationBarTitleDisplayMode(.inline)
+.toolbarColorScheme(.dark, for: .navigationBar)
+#endif
 ```
 
-- [ ] **Step 4: Regenerate, build, run the test**
+(Do NOT add `CatalogView.swift` to `project.yml`/DispatchMac in this task — that happens in 1.4. This task builds and tests iOS only.)
+
+- [ ] **Step 4: Regenerate (to pick up the new test file), build iOS, run the test**
 
 Run:
 ```bash
@@ -615,12 +623,12 @@ xcodegen generate
 xcodebuild -project Dispatch.xcodeproj -scheme DispatchApp -destination 'generic/platform=iOS Simulator' build
 xcodebuild test -project Dispatch.xcodeproj -scheme DispatchApp -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:DispatchUITests/CatalogUITests/testCatalogDetailShowsInputPreview
 ```
-Expected: build succeeds; test PASSES.
+Expected: build succeeds; test PASSES. (`xcodegen generate` is needed because `CatalogUITests.swift` is a new file the DispatchUITests target globs.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add App/Sources/Catalog/CatalogView.swift project.yml AppUITests/CatalogUITests.swift
+git add App/Sources/Catalog/CatalogView.swift AppUITests/CatalogUITests.swift
 git commit -m "feat(catalog): rich shared detail with input preview
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -630,7 +638,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `App/Sources/Catalog/CatalogListView.swift`
-- Modify: `project.yml` (dual-target membership)
+- Modify: `project.yml` — add **both** `App/Sources/Catalog/CatalogListView.swift` **and** `App/Sources/Catalog/CatalogView.swift` to DispatchMac membership (the latter deferred from Task 1.3). `CatalogView.swift` also contains the now-Mac-ready `CatalogDetailView` (guarded in 1.3), and its own `CatalogView` is rewritten cross-platform in Step 2, so both compile on macOS after this task.
 - Modify: `App/Sources/Catalog/CatalogView.swift` (`CatalogView` becomes the push host over `CatalogListView`)
 
 **Interfaces:**
