@@ -7,13 +7,20 @@ import SwiftUI
 /// replan so the pending-notification schedule always reflects the models.
 struct PromptGroupsView: View {
     @Environment(\.modelContext) private var context
+    @Environment(ThemeStore.self) private var themeStore
+    // The notification scheduler and the sensor observers live in the iOS app
+    // target only — the Mac has no scheduler or sensor providers (plan 36). On
+    // macOS a group edit just WRITES the PromptGroup fields; CloudKit syncs them
+    // and the iPhone's RemoteChangeObserver replans (plan 47). So every use of
+    // these is `#if os(iOS)`-guarded and `replan()` is a no-op on macOS.
+    #if os(iOS)
     @Environment(\.notificationPrefs) private var notificationPrefs
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(AwakeStore.self) private var awakeStore
-    @Environment(ThemeStore.self) private var themeStore
     @Environment(WorkoutEndObserver.self) private var workoutEndObserver
     @Environment(VisitObserver.self) private var visitObserver
     @Environment(CalendarEventObserver.self) private var calendarEventObserver
+    #endif
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
     private var theme: Theme { themeStore.theme }
@@ -59,13 +66,25 @@ struct PromptGroupsView: View {
             .accessibilityIdentifier("prompt-groups")
         }
         .navigationTitle("Prompt Groups")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        #if os(macOS)
+        // AppKit's AXOutline can drop an identifier set on the inner List, so
+        // the Mac screenshot rig's list id lives on this wrapping container
+        // (the ZStack), where it survives the accessibility tree (Task 2.4).
+        .accessibilityIdentifier("mac-groups-list")
+        #endif
+        .inlineNavTitleOnPhone()
+        .darkNavBarOnPhone()
         .toolbar {
+            // `EditButton` doesn't exist on macOS — its List already supports
+            // drag-reorder/swipe-delete without an edit-mode toggle (the pattern
+            // the retired MacPromptGroupsView shipped with), so this is iOS-only,
+            // not a dropped capability.
+            #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
                 EditButton()
                     .tint(.white)
             }
+            #endif
         }
     }
 
@@ -88,17 +107,27 @@ struct PromptGroupsView: View {
     }
 
     private func replan() {
+        // No scheduler or observers on macOS (plan 36): the save above is enough
+        // — CloudKit syncs the change and the iPhone's RemoteChangeObserver
+        // replans (plan 47). On iOS, replan the local schedule immediately.
+        #if os(iOS)
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
         workoutEndObserver.refresh()
         visitObserver.refresh()
         calendarEventObserver.refresh()
+        #endif
     }
 }
 
 struct PromptGroupRowView: View {
+    // The "won't fire" hints below read the iOS sensor observers, which don't
+    // exist on macOS (plan 36). The Mac never owns firing or sensor permissions
+    // — the paired iPhone does — so the hints (and these observers) are iOS-only.
+    #if os(iOS)
     @Environment(VisitObserver.self) private var visitObserver
     @Environment(MonitorObserver.self) private var monitorObserver
     @Environment(CalendarEventObserver.self) private var calendarEventObserver
+    #endif
     let group: PromptGroup
     let onChange: () -> Void
 
@@ -114,6 +143,10 @@ struct PromptGroupRowView: View {
                     Text("\(group.schedule.summary) – \(questionCountText)")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.7))
+                    // These "won't fire" hints reflect iOS sensor-permission
+                    // state, which the Mac neither owns nor can read (plan 36) —
+                    // iOS-only.
+                    #if os(iOS)
                     // A visit group without Always location simply doesn't
                     // fire (plan 16) — say so where the user will look.
                     if group.schedule == .visitArrival, !visitObserver.hasAlwaysAuthorization {
@@ -146,6 +179,7 @@ struct PromptGroupRowView: View {
                             .foregroundStyle(.yellow)
                             .accessibilityIdentifier("group-row-over-budget")
                     }
+                    #endif
                 }
 
                 Spacer()
@@ -217,6 +251,23 @@ private enum EditableScheduleKind: String, CaseIterable, Identifiable {
         case .beaconTrigger: "When I'm near a beacon"
         }
     }
+
+    #if os(macOS)
+    /// Sensor/schedule kinds that run on device sensors: configurable on the
+    /// Mac, but they FIRE on the paired iPhone (plan 36). Drives the Mac's
+    /// "fires on your iPhone" note (`mac-group-ios-only-note`).
+    var isDeviceOnly: Bool {
+        switch self {
+        case .everyNHours, .timesPerDay, .dailyAt: false
+        case .workoutEnd, .visitArrival, .calendarEventEnd, .placeTrigger, .beaconTrigger: true
+        }
+    }
+
+    /// Beacon groups can only be VIEWED (not created) on the Mac — there's no
+    /// beacon scanner (issue #84). Places ARE creatable via the shared place
+    /// search (plan 50), so only beacon is "trigger-only" on the Mac.
+    var isMacTriggerOnly: Bool { self == .beaconTrigger }
+    #endif
 }
 
 /// The editor's draft of a calendar group's match rule kind (plan 31);
@@ -237,14 +288,20 @@ private enum CalendarMatchKindDraft: String, CaseIterable, Identifiable {
 struct PromptGroupEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeStore.self) private var themeStore
+    // Scheduler + sensor observers are iOS-only (plan 36). On macOS this editor
+    // just writes the PromptGroup fields; the paired iPhone replans on the
+    // synced change, and the sensor-permission asks / auth hints below are
+    // suppressed (there's nothing to authorize on the Mac).
+    #if os(iOS)
     @Environment(\.notificationPrefs) private var notificationPrefs
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(AwakeStore.self) private var awakeStore
-    @Environment(ThemeStore.self) private var themeStore
     @Environment(WorkoutEndObserver.self) private var workoutEndObserver
     @Environment(VisitObserver.self) private var visitObserver
     @Environment(MonitorObserver.self) private var monitorObserver
     @Environment(CalendarEventObserver.self) private var calendarEventObserver
+    #endif
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
@@ -284,6 +341,17 @@ struct PromptGroupEditorView: View {
     @State private var placeSearch = PlaceSearchModel.makeForCurrentProcess()
     @State private var placeSearchText = ""
 
+    #if os(macOS)
+    /// A `.calendars([...])` rule references the phone's calendars, which the
+    /// Mac can't enumerate — preserved read-only when already set (plan 47), so
+    /// editing such a group on the Mac never drops its calendar selection.
+    private let pinnedCalendarIDs: [String]?
+    /// A BEACON trigger (plan 45) the Mac can't reconfigure (no scanner, issue
+    /// #84) — preserved verbatim on save so viewing a beacon group here never
+    /// drops its iPhone trigger. Places are NOT locked (plan 50 place search).
+    private let lockedTriggerSchedule: GroupSchedule?
+    #endif
+
     private var theme: Theme { themeStore.theme }
 
     init(group: PromptGroup?) {
@@ -311,6 +379,12 @@ struct PromptGroupEditorView: View {
         var major = ""
         var minor = ""
         var beaconNameDraft = ""
+        #if os(macOS)
+        // A phone-set specific-calendars rule / an existing beacon trigger the
+        // Mac can't reconfigure — captured here and preserved on save.
+        var pinned: [String]? = nil
+        var lockedTrigger: GroupSchedule? = nil
+        #endif
         switch group?.schedule {
         case .everyNHours(let n):
             kind = .everyNHours; hours = n
@@ -329,7 +403,13 @@ struct PromptGroupEditorView: View {
             case .allEvents:
                 matchKind = .allEvents
             case .calendars(let ids):
+                #if os(iOS)
                 matchKind = .calendars; calendarIDs = ids
+                #else
+                // The Mac can't read the phone's calendars — keep the rule
+                // pinned and default the visible match to "all events".
+                matchKind = .allEvents; pinned = ids
+                #endif
             case .titleContains(let filter):
                 matchKind = .titleContains; title = filter
             }
@@ -351,6 +431,11 @@ struct PromptGroupEditorView: View {
             major = trigger.beacon.major.map(String.init) ?? ""
             minor = trigger.beacon.minor.map(String.init) ?? ""
             beaconNameDraft = trigger.beacon.name ?? ""
+            #if os(macOS)
+            // View-only on the Mac (no beacon scanner, issue #84) — preserve the
+            // iPhone-set trigger verbatim on save.
+            lockedTrigger = group?.schedule
+            #endif
         case .disabled, nil:
             break
         }
@@ -373,6 +458,10 @@ struct PromptGroupEditorView: View {
         _beaconMajor = State(initialValue: major)
         _beaconMinor = State(initialValue: minor)
         _beaconName = State(initialValue: beaconNameDraft)
+        #if os(macOS)
+        pinnedCalendarIDs = pinned
+        lockedTriggerSchedule = lockedTrigger
+        #endif
     }
 
     var body: some View {
@@ -411,14 +500,20 @@ struct PromptGroupEditorView: View {
             .readableColumn()
         }
         .navigationTitle(group == nil ? "Add Group" : "Edit Group")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .inlineNavTitleOnPhone()
+        .darkNavBarOnPhone()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            // `.primaryAction` resolves to the nav-bar trailing slot on iOS and
+            // the window toolbar on macOS (the QuestionEditorView precedent) —
+            // one placement for both platforms.
+            ToolbarItem(placement: .primaryAction) {
                 // A group with no questions would fire prompts that open an
                 // empty survey — require at least one question to save.
                 Button("Save") { save() }
                     .disabled(questionIDs.isEmpty || scheduleValidationMessage != nil)
+                    #if os(macOS)
+                    .keyboardShortcut(.defaultAction)
+                    #endif
                     .accessibilityIdentifier("group-save")
             }
         }
@@ -463,13 +558,27 @@ struct PromptGroupEditorView: View {
     private var scheduleSection: some View {
         Section {
             Picker("Schedule", selection: $scheduleKind) {
-                ForEach(EditableScheduleKind.allCases) { kind in
+                ForEach(availableKinds) { kind in
                     Text(kind.displayName).tag(kind)
                 }
             }
             .foregroundStyle(.white)
             .tint(.white.opacity(0.7))
             .accessibilityIdentifier("group-schedule-kind")
+
+            #if os(macOS)
+            // The Mac has no scheduler/sensors (plan 36): sensor-driven kinds are
+            // configured here but FIRE on the paired iPhone. This note carries
+            // the retired MacPromptGroupsView's `mac-group-ios-only-note` so a
+            // Mac user knows which schedules are Mac-settable vs iPhone-run.
+            if scheduleKind.isDeviceOnly {
+                Text("Fires on your iPhone — this schedule uses device sensors "
+                    + "and runs on iOS/watch only. You can configure it here.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .accessibilityIdentifier("mac-group-ios-only-note")
+            }
+            #endif
 
             switch scheduleKind {
             case .everyNHours:
@@ -528,35 +637,61 @@ struct PromptGroupEditorView: View {
                     + "Needs “Always” location access to work when Dispatch is closed.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.7))
+                #if os(iOS)
                 if !visitObserver.hasAlwaysAuthorization {
                     visitAuthorizationHint
                 }
+                #endif
             case .calendarEventEnd:
                 Text("Fires a prompt when a matching calendar event ends — "
                     + "e.g. “How was the meeting?”. Needs full calendar access "
                     + "to read your events.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.7))
+                #if os(macOS)
+                // A phone-set specific-calendars rule the Mac can't enumerate —
+                // shown so the user knows it's preserved (default match "all
+                // events" keeps it; changing the match type overrides it).
+                if let pinnedCalendarIDs {
+                    Text("Matching \(pinnedCalendarIDs.count) specific calendar"
+                        + "\(pinnedCalendarIDs.count == 1 ? "" : "s") chosen on your "
+                        + "iPhone. Change the match type to override.")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                #endif
                 Picker("Match", selection: $calendarMatchKind) {
-                    ForEach(CalendarMatchKindDraft.allCases) { kind in
+                    ForEach(calendarMatchKinds) { kind in
                         Text(kind.displayName).tag(kind)
                     }
                 }
                 .foregroundStyle(.white)
                 .tint(.white.opacity(0.7))
                 .accessibilityIdentifier("group-calendar-match")
+                // "Specific calendars" needs to read the user's calendars, which
+                // the Mac can't (plan 36) — so its picker option and selection
+                // list are iOS-only (a phone-set rule is preserved via pinning).
+                #if os(iOS)
                 if calendarMatchKind == .calendars {
                     calendarSelectionList
                 }
+                #endif
                 if calendarMatchKind == .titleContains {
                     TextField("Title contains", text: $titleFilter)
                         .foregroundStyle(.white)
                         .tint(.white)
                         .accessibilityIdentifier("group-calendar-title")
                 }
+                #if os(iOS)
                 if !calendarEventObserver.hasFullAccess {
                     calendarAuthorizationHint
                 }
+                #else
+                Text("Matching by specific calendars must be set on your iPhone "
+                    + "(the Mac can't read your calendars).")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                #endif
             case .placeTrigger:
                 Text("Fires a prompt when you arrive at (or leave) a place — "
                     + "e.g. “30 minutes after arriving at the office”. Search for "
@@ -574,10 +709,13 @@ struct PromptGroupEditorView: View {
                 placeManualEntry
                 monitorControls
                 monitorValidationHint
+                #if os(iOS)
                 if !monitorObserver.hasAlwaysAuthorization {
                     monitorAuthorizationHint
                 }
+                #endif
             case .beaconTrigger:
+                #if os(iOS)
                 Text("Fires a prompt when you come into (or leave) range of an "
                     + "iBeacon — finer-grained than a geofence, e.g. a beacon on "
                     + "your desk or in your car. Cheap ESP32 or tile-style beacons "
@@ -605,6 +743,18 @@ struct PromptGroupEditorView: View {
                 if !monitorObserver.hasAlwaysAuthorization {
                     monitorAuthorizationHint
                 }
+                #else
+                // The Mac can't scan for a beacon (issue #84), so a beacon group
+                // is view-only here — its iPhone-set trigger is preserved verbatim
+                // on save (draftSchedule → lockedTriggerSchedule). Name/questions
+                // stay editable. Carries the retired Mac's `mac-group-trigger-note`.
+                Text("Triggered by a beacon set on your iPhone. Configure the "
+                    + "beacon on iOS; you can still edit this group's questions "
+                    + "and name here.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .accessibilityIdentifier("mac-group-trigger-note")
+                #endif
             }
         } header: {
             sectionHeader("SCHEDULE")
@@ -613,7 +763,9 @@ struct PromptGroupEditorView: View {
         // Editor-contextual permission asks (plans 16 + 31): the ONLY places
         // the app ever asks — picking the visit/calendar schedule is the
         // moment the section text above has just explained why. Never part
-        // of onboarding.
+        // of onboarding. iOS-only: the Mac has no sensor permissions to ask for
+        // (plan 36) — the paired iPhone requests them when the group syncs over.
+        #if os(iOS)
         .onChange(of: scheduleKind) { _, newKind in
             if newKind == .visitArrival, !visitObserver.hasAlwaysAuthorization {
                 Task { await visitObserver.requestAlwaysAuthorization() }
@@ -626,6 +778,29 @@ struct PromptGroupEditorView: View {
                 Task { await monitorObserver.requestAlwaysAuthorization() }
             }
         }
+        #endif
+    }
+
+    /// Schedule kinds offered in the editor's picker. On the Mac, beacon
+    /// triggers can't be created (no scanner, issue #84) — they appear only when
+    /// editing a group that already has one (matching the retired Mac editor).
+    private var availableKinds: [EditableScheduleKind] {
+        #if os(macOS)
+        EditableScheduleKind.allCases.filter { !$0.isMacTriggerOnly || $0 == scheduleKind }
+        #else
+        EditableScheduleKind.allCases
+        #endif
+    }
+
+    /// Calendar match kinds offered in the picker. The Mac can't read the user's
+    /// calendars, so "Specific calendars" is iOS-only — a phone-set rule is
+    /// preserved through `pinnedCalendarIDs` instead.
+    private var calendarMatchKinds: [CalendarMatchKindDraft] {
+        #if os(macOS)
+        CalendarMatchKindDraft.allCases.filter { $0 != .calendars }
+        #else
+        CalendarMatchKindDraft.allCases
+        #endif
     }
 
     /// Validation for the place/beacon coordinate & identity fields — gates
@@ -640,6 +815,7 @@ struct PromptGroupEditorView: View {
             else { return "Search for a place and choose a result (or enter coordinates manually)." }
             return nil
         case .beaconTrigger:
+            #if os(iOS)
             guard UUID(uuidString: beaconUUID.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
             else { return "Enter a valid beacon UUID (e.g. E2C56DB5-DFFB-48D2-B060-D0F5A71096E0)." }
             for value in [beaconMajor, beaconMinor] where !value.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -647,6 +823,11 @@ struct PromptGroupEditorView: View {
                 else { return "Major and minor must be whole numbers from 0 to 65535." }
             }
             return nil
+            #else
+            // Beacon is view-only on the Mac; the phone-set trigger is preserved
+            // unchanged (issue #84), so there's nothing to validate.
+            return nil
+            #endif
         default:
             return nil
         }
@@ -671,7 +852,9 @@ struct PromptGroupEditorView: View {
         TextField("Search for a place or address", text: $placeSearchText)
             .foregroundStyle(.white).tint(.white)
             .autocorrectionDisabled()
+            #if os(iOS)
             .textInputAutocapitalization(.words)
+            #endif
             .accessibilityIdentifier("group-place-search")
             .onChange(of: placeSearchText) { _, text in
                 placeSearch.updateQuery(text)
@@ -745,11 +928,15 @@ struct PromptGroupEditorView: View {
     private var placeManualEntry: some View {
         DisclosureGroup {
             TextField("Latitude", text: $placeLatitude)
+                #if os(iOS)
                 .keyboardType(.numbersAndPunctuation)
+                #endif
                 .foregroundStyle(.white).tint(.white)
                 .accessibilityIdentifier("group-place-latitude")
             TextField("Longitude", text: $placeLongitude)
+                #if os(iOS)
                 .keyboardType(.numbersAndPunctuation)
+                #endif
                 .foregroundStyle(.white).tint(.white)
                 .accessibilityIdentifier("group-place-longitude")
             TextField("Place name (optional)", text: $placeName)
@@ -810,7 +997,8 @@ struct PromptGroupEditorView: View {
 
     /// Inline "needs Always" state while a place/beacon schedule is selected —
     /// the visit twin (denied/restricted points at Settings, else re-offers
-    /// the prompt).
+    /// the prompt). iOS-only: reads `MonitorObserver`, which is absent on macOS.
+    #if os(iOS)
     @ViewBuilder
     private var monitorAuthorizationHint: some View {
         switch monitorObserver.authorizationStatus {
@@ -836,7 +1024,7 @@ struct PromptGroupEditorView: View {
     /// `.calendars` match rule (the questionsSection checkmark pattern).
     /// Empty WITH full access (no calendars at all) gets its own footnote;
     /// without access the list is empty and the authorization hint below
-    /// explains why.
+    /// explains why. iOS-only: the Mac can't enumerate the user's calendars.
     @ViewBuilder
     private var calendarSelectionList: some View {
         let calendars = calendarEventObserver.eventCalendars()
@@ -918,6 +1106,7 @@ struct PromptGroupEditorView: View {
             .accessibilityIdentifier("group-visit-needs-always")
         }
     }
+    #endif
 
     private func toggleCalendarSelection(of calendarID: String) {
         if let index = selectedCalendarIDs.firstIndex(of: calendarID) {
@@ -971,6 +1160,7 @@ struct PromptGroupEditorView: View {
                 delayMinutes: monitorDelayMinutes,
                 cancelOnContradiction: monitorCancelOnContradiction))
         case .beaconTrigger:
+            #if os(iOS)
             .beaconTrigger(BeaconTrigger(
                 beacon: MonitorBeaconIdentity(
                     uuid: beaconUUID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
@@ -981,6 +1171,12 @@ struct PromptGroupEditorView: View {
                 direction: monitorDirection,
                 delayMinutes: monitorDelayMinutes,
                 cancelOnContradiction: monitorCancelOnContradiction))
+            #else
+            // View-only on the Mac (issue #84): preserve the iPhone-set beacon
+            // trigger verbatim. Unreachable for a fresh group (beacon isn't in
+            // the Mac picker), so the `.disabled` fallback is purely defensive.
+            lockedTriggerSchedule ?? .disabled
+            #endif
         }
     }
 
@@ -989,6 +1185,15 @@ struct PromptGroupEditorView: View {
     /// degenerate configs are prevented here; `.calendars([])` remains
     /// storable and matches nothing — fails safe).
     private var draftCalendarRule: CalendarEventMatchRule {
+        #if os(macOS)
+        // Preserve a phone-set specific-calendars rule unless the user picked a
+        // different match type here (the Mac can't enumerate calendars, so it
+        // can't rebuild the selection — only keep or replace it).
+        if let pinnedCalendarIDs, calendarMatchKind == .allEvents,
+           titleFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .calendars(pinnedCalendarIDs)
+        }
+        #endif
         switch calendarMatchKind {
         case .allEvents:
             return .allEvents
@@ -1012,11 +1217,15 @@ struct PromptGroupEditorView: View {
         target.schedule = draftSchedule
         target.isEnabled = isEnabled
         try? context.save()
+        // On macOS the save is enough — CloudKit syncs it and the iPhone's
+        // RemoteChangeObserver replans (plan 47). iOS replans/refreshes locally.
+        #if os(iOS)
         scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
         workoutEndObserver.refresh()
         visitObserver.refresh()
         monitorObserver.refresh()
         calendarEventObserver.refresh()
+        #endif
         dismiss()
     }
 
