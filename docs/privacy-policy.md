@@ -19,8 +19,9 @@ app, so this policy is blunt about exactly where it lives.
   yourself (only if you configure one), and Spotify (only if you tap
   "Connect Spotify," to read what you're currently playing). Dispatch
   uses no analytics, advertising, tracking, or data-broker SDKs.
-- **No account.** Nothing to sign up for; we never see your email or
-  name.
+- **No Dispatch account.** Nothing to sign up for; we never see your
+  email or name. Spotify sign-in is required only when connecting
+  Spotify for now-playing detection.
 - You can **export** everything (JSON/CSV), and **Delete All Data**
   (Settings → Data) erases every record, including the iCloud copy
   while sync is on.
@@ -166,7 +167,7 @@ any time in Settings, which deletes the token.
   to read your current track and only if you opt in by connecting
   Spotify (see "Spotify," above) — never for analytics, advertising,
   or tracking.
-- No accounts. Contacts are read only if you turn on the optional
+- No Dispatch accounts. Contacts are read only if you turn on the optional
   suggestions feature above (off by default), and even then nothing
   from your contact book leaves your device.
 

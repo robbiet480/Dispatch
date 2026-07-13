@@ -89,9 +89,13 @@ tracking. The only third-party code is Spotify's official SDK — used
 just to read your current track, and only if you connect Spotify
 yourself. Data stays on your device and — if you leave iCloud Sync and
 iCloud Drive backups on — in your own private iCloud storage, which
-includes the Health readings attached to your reports. Turn those off
-and nothing leaves the device unless you point a webhook somewhere
-yourself. Full policy inside the app and at the privacy policy link.
+includes the Health readings attached to your reports. The app makes
+documented requests to Apple's weather service (WeatherKit) to fetch
+conditions for your location, and — if you explicitly submit a question
+set — uploads it to a shared community catalog. Optional webhooks send
+reports to an endpoint you configure. With iCloud Sync and backups off,
+and absent those opt-in actions, nothing else leaves the device. Full
+policy inside the app and at the privacy policy link.
 
 Dispatch is an independent, open-source reimplementation inspired by
 Reporter, the discontinued self-tracking app — original code and
