@@ -4,7 +4,19 @@ import SwiftData
 public enum VocabularyBuilder {
     /// Rebuilds token/person vocabularies from all stored responses.
     /// People-type questions feed PersonEntity; token-type feed TokenEntity.
-    public static func rebuild(in context: ModelContext) throws {
+    ///
+    /// Idempotent: a rebuild whose inputs are unchanged mutates nothing and
+    /// returns `false` WITHOUT saving. This is load-bearing for sync — the
+    /// pipeline runs on every `NSPersistentStoreRemoteChange` (which fires for
+    /// this process's OWN saves too), so a rebuild that saved unconditionally
+    /// would post a change, re-trigger `RemoteChangeObserver`, and loop every
+    /// 2s forever — churning every vocabulary CKRecord and thrashing CloudKit
+    /// export (Mac never receives a stable snapshot). Rows are matched and
+    /// updated in place; only genuine deltas dirty the context.
+    ///
+    /// - Returns: whether the store was actually changed (and saved).
+    @discardableResult
+    public static func rebuild(in context: ModelContext) throws -> Bool {
         let questions = try context.fetch(FetchDescriptor<Question>())
         let typeByPrompt = Dictionary(questions.map { ($0.prompt, $0.type) },
                                       uniquingKeysWith: { first, _ in first })
@@ -25,14 +37,38 @@ public enum VocabularyBuilder {
             }
         }
 
-        try context.delete(model: TokenEntity.self)
-        for (text, tally) in tokenTally {
-            let entity = TokenEntity()
-            entity.text = text
-            entity.usageCount = tally.uses
-            entity.questionCount = tally.prompts.count
-            context.insert(entity)
+        // Delta upsert (was: delete-all + re-insert, which recreated every
+        // TokenEntity with a fresh identity on every pass — see the loop note
+        // in the doc comment). Match existing rows by text, collapsing any
+        // pre-dedupe duplicates onto a deterministic survivor; update counts
+        // in place only when they actually differ; insert the genuinely new;
+        // delete the rows no response feeds anymore.
+        var tokenByText: [String: TokenEntity] = [:]
+        for token in try context.fetch(FetchDescriptor<TokenEntity>()) {
+            if let kept = tokenByText[token.text] {
+                if SyncDedupe.persistentIDString(token) < SyncDedupe.persistentIDString(kept) {
+                    context.delete(kept)
+                    tokenByText[token.text] = token
+                } else {
+                    context.delete(token)
+                }
+            } else {
+                tokenByText[token.text] = token
+            }
         }
+        for (text, tally) in tokenTally {
+            if let token = tokenByText.removeValue(forKey: text) {
+                if token.usageCount != tally.uses { token.usageCount = tally.uses }
+                if token.questionCount != tally.prompts.count { token.questionCount = tally.prompts.count }
+            } else {
+                let entity = TokenEntity()
+                entity.text = text
+                entity.usageCount = tally.uses
+                entity.questionCount = tally.prompts.count
+                context.insert(entity)
+            }
+        }
+        for stale in tokenByText.values { context.delete(stale) }
 
         // People are the person REGISTRY (plan 22): registry fields
         // (uniqueIdentifier, alternateNames) must survive a rebuild, so
@@ -58,13 +94,13 @@ public enum VocabularyBuilder {
         }
         for person in existingPeople {
             if let tally = tallies[ObjectIdentifier(person)] {
-                person.usageCount = tally.uses
-                person.questionCount = tally.prompts.count
+                if person.usageCount != tally.uses { person.usageCount = tally.uses }
+                if person.questionCount != tally.prompts.count { person.questionCount = tally.prompts.count }
             } else if person.alternateNames.isEmpty {
                 context.delete(person)
             } else {
-                person.usageCount = 0
-                person.questionCount = 0
+                if person.usageCount != 0 { person.usageCount = 0 }
+                if person.questionCount != 0 { person.questionCount = 0 }
             }
         }
         for (text, tally) in unmatched {
@@ -74,7 +110,13 @@ public enum VocabularyBuilder {
             entity.questionCount = tally.prompts.count
             context.insert(entity)
         }
-        try context.save()
+
+        // Save (and report a change) ONLY when the pass actually mutated the
+        // store. An unchanged rebuild leaves the context clean, so this posts
+        // no NSPersistentStoreRemoteChange — the sync-loop terminator.
+        let didChange = context.hasChanges
+        if didChange { try context.save() }
+        return didChange
     }
 
     /// One-time backfill for the SwiftData lightweight-migration trap: the

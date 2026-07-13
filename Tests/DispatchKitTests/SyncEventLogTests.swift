@@ -98,4 +98,29 @@ struct SyncEventLogTests {
         let descriptionPortion = sanitized.replacingOccurrences(of: "TestDomain(42): ", with: "")
         #expect(descriptionPortion.count == 200)
     }
+
+    @Test func sanitizeSurfacesPartialFailureSubCodesWithoutLeakingContent() {
+        // Mirrors a CloudKit partialFailure (code 2): the actionable reasons
+        // live in a per-record sub-error map keyed by record identifiers whose
+        // names (and any field content) must never leak.
+        let partial = NSError(
+            domain: "CKErrorDomain", code: 2,
+            userInfo: [
+                NSLocalizedDescriptionKey: "The operation couldn’t be completed.",
+                "CKPartialErrors": [
+                    "CD_Report_SECRET-RECORD-NAME-1": NSError(domain: "CKErrorDomain", code: 14, userInfo: nil),
+                    "CD_Report_SECRET-RECORD-NAME-2": NSError(domain: "CKErrorDomain", code: 14, userInfo: nil),
+                    "CD_TokenEntity_SECRET-RECORD-NAME-3": NSError(domain: "CKErrorDomain", code: 26, userInfo: nil),
+                ],
+            ]
+        )
+        let sanitized = SyncEventRecord.sanitize(error: partial)
+        // Sub-error codes surface (14 seen twice, 26 once) so the reason is
+        // actually diagnosable.
+        #expect(sanitized.contains("CKErrorDomain(2):"))
+        #expect(sanitized.contains("CKErrorDomain(14)×2"))
+        #expect(sanitized.contains("CKErrorDomain(26)×1"))
+        // Record identifiers (the dictionary keys) never leak.
+        #expect(!sanitized.contains("SECRET-RECORD-NAME"))
+    }
 }
