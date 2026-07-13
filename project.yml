@@ -301,6 +301,18 @@ targets:
       - path: App/Sources/Settings/QuestionSettingsView.swift
       - path: App/Sources/Settings/QuestionEditorView.swift
       - path: App/Sources/Settings/ChoiceOptionsEditorView.swift
+      # Task 2.4 (iPad/Mac UI convergence): the shared, themed Prompt Groups
+      # list + editor now compiles on macOS. Its iOS-only coupling — the
+      # notification scheduler and the sensor observers (WorkoutEnd/Visit/
+      # Monitor/CalendarEvent), which live in the iOS app target — is entirely
+      # `#if os(iOS)`-guarded: on macOS the editor just writes PromptGroup
+      # fields and the paired iPhone replans on the synced change (plan 47).
+      # Place triggers stay fully settable via the shared place search
+      # (Shared/Search, already in this target); beacon triggers are view-only
+      # (no scanner, issue #84) and specific-calendar rules are preserved
+      # read-only. The Mac's "fires on your iPhone" note is kept. This retired
+      # the Mac-only MacPromptGroupsView/MacPromptGroupEditorView twins.
+      - path: App/Sources/Settings/PromptGroupsView.swift
       # Shared place-search component (plan 50, #83): same dual-membership as
       # Shared/Providers — the MapKit autocomplete/geocode wrapper lets the Mac
       # editor pick a place, lifting the view-only restriction on place triggers.

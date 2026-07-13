@@ -83,15 +83,16 @@ struct MacRootView: View {
         } else {
             switch navigation.pane {
             case .dashboard: MacDashboardView(searchQuery: searchQuery)
-            // Insights and Questions push-navigate (NavigationLink(destination:))
-            // into per-question correlation / editor screens; the detail column
-            // of a NavigationSplitView has no NavigationStack of its own, so
-            // those pushes are inert without one wrapped here. (Catalog and
-            // Groups are unaffected: CatalogView wraps itself in a
-            // NavigationStack, and MacPromptGroupsView doesn't push-navigate.)
+            // Insights, Questions and Groups push-navigate
+            // (NavigationLink(destination:)) into per-question correlation /
+            // editor screens; the detail column of a NavigationSplitView has no
+            // NavigationStack of its own, so those pushes are inert without one
+            // wrapped here. Task 2.4 retired the Mac-only MacPromptGroupsView for
+            // the shared PromptGroupsView, whose rows/add push the group editor —
+            // hence Groups now needs the wrap too. (Catalog wraps itself.)
             case .insights: NavigationStack { InsightsView() }
             case .questions: NavigationStack { QuestionSettingsView() }
-            case .groups: MacPromptGroupsView()
+            case .groups: NavigationStack { PromptGroupsView() }
             case .catalog: CatalogView()
             }
         }
