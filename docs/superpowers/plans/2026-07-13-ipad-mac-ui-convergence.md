@@ -1128,6 +1128,16 @@ Expected: `swift test` passes; both builds succeed; all 7 Mac shots capture. Con
 
 Delivers: `PaneNavigation` (shared logic), `LargeScreenShell` adopted by both iPad and Mac, the iPad pane picker + trailing Settings gear, the Settings restructure (slim on iPad/Mac; iPhone Manage section), and the two remaining Mac fixes (hide reports sidebar off Dashboard, drop the duplicate pane title). Ends with iPad and Mac on one shell; full suite green.
 
+> **REVISED for full side-by-side (owner decision, 2026-07-13).** The owner chose the design spec's §4 model — *list (sidebar) + selection → detail* — for EVERY management pane, not just the catalog. Sprint 2 shared Questions/Groups as self-contained push views, so the shell needs them decomposed into a `*List(selection:)` + a detail/editor first. Revised task sequence (Tasks 3.2–3.6 below are superseded; briefs authored directly by the controller and tracked in `.superpowers/sdd/progress.md`):
+> - **3.1** `PaneNavigation` (done).
+> - **3.2** Decompose Questions → `QuestionsList(selection:)` + `QuestionEditorView` as a standalone detail; `QuestionSettingsView` becomes the iPhone push-host over `QuestionsList`.
+> - **3.3** Decompose Groups → `GroupsList(selection:)` + `PromptGroupEditorView` as a standalone detail; `PromptGroupsView` becomes the iPhone push-host.
+> - **3.4** `LargeScreenShell` — one `NavigationSplitView`; sidebar swaps by pane (reports on Dashboard; the pane's `*List(selection:)` on Questions/Groups/Catalog; collapsed on Insights); detail = the selected item's editor/detail (or dashboard/report/insights); principal pane picker (sole title); iPad trailing Settings gear. Editors hosted in the detail column: `Save` persists, re-`.id()` per selection, no dismiss.
+> - **3.5** Mac adopts the shell (`MacRootView` → `LargeScreenShell`; delete `MacNavigation`/`MacDetailPane`).
+> - **3.6** iPad adopts the shell (`RootNavigationView` iPad branch → `LargeScreenShell`; delete `PadRootView`) + iPad UI test.
+> - **3.7** Settings restructure (slim iPad/Mac; iPhone Manage section).
+> - **3.8** Gate + drop duplicate pane title + verification; enumerate deferred macOS-UI runtime checks for the end pass.
+
 ### Task 3.1: `PaneNavigation` (shared logic)
 
 **Files:**
