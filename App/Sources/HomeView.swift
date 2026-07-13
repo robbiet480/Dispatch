@@ -5,22 +5,19 @@ import SwiftUI
 struct HomeView: View {
     @Query private var reports: [Report]
     @Query(sort: \Question.sortOrder) private var questions: [Question]
-    /// Person registry (plan 22): people visualizations/filters resolve
-    /// alternate names through it.
-    @Query private var people: [PersonEntity]
     @Environment(ThemeStore.self) private var themeStore
     @Environment(AwakeStore.self) private var awakeStore
     @Environment(VisualizationFilterStore.self) private var filterStore
     @Environment(SurveyPresenter.self) private var surveyPresenter
     @Environment(NotificationScheduler.self) private var scheduler
     @Environment(\.notificationPrefs) private var notificationPrefs
-    @Environment(AppLockStore.self) private var appLockStore
     /// Plan 27: layout (grid vs pager) keys off the size class — NOT the
     /// idiom — so iPad Split View/Slide Over at compact width degrades to
     /// the iPhone pager automatically.
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var isShowingFilter = false
-    @State private var visualizations: [String: QuestionVisualization] = [:]
+    /// Page selection lives here (not in the shared `DashboardContentView`) so
+    /// the bottom-strip page dots stay the source of truth; the pager binds to
+    /// it through the shared view.
     @State private var selectedQuestionID: String?
 
     /// Plan 27: when embedded as the detail-column root of the iPad
@@ -39,72 +36,10 @@ struct HomeView: View {
     /// roomier spacing.
     private var isCompact: Bool { horizontalSizeClass != .regular }
 
+    /// Only the bottom-strip page dots need this (count + current index); the
+    /// shared `DashboardContentView` computes its own copy for the grid/pager.
     private var visibleQuestions: [Question] {
         questions.filter { $0.isEnabled && filterStore.isVisible($0.uniqueIdentifier) }
-    }
-
-    /// Combines everything that should trigger a visualization rebuild: report count, the
-    /// newest report's date (catches edits/new reports without per-field diffing), a
-    /// report-identity fingerprint, and the set of currently visible question ids (covers
-    /// both filter toggles and enable/disable changes). Unrelated re-renders (theme, awake
-    /// toggle) don't change this key, so `.task(id:)` won't refire and the cached
-    /// visualizations stay put.
-    ///
-    /// The report-identity fingerprint (XOR of each report's `uniqueIdentifier` hash) exists
-    /// because count + newest-date alone can't distinguish "delete report A, backfill report
-    /// B at the same newest date" from a no-op: count and newest date can both stay identical
-    /// across such a delete+backfill, which would leave the memo stale and skip the rebuild.
-    /// XOR (rather than a sorted/concatenated hash) keeps this order-independent and O(n) with
-    /// no allocation, which is all we need since it's just a change-detection fingerprint, not
-    /// a stable identifier.
-    private var visualizationTaskID: String {
-        let newestDate = reports.map(\.date).max()?.timeIntervalSinceReferenceDate ?? 0
-        let identityFingerprint = reports.reduce(into: 0) { partial, report in
-            partial ^= report.uniqueIdentifier.hashValue
-        }
-        let visibleIDs = visibleQuestions.map(\.uniqueIdentifier).sorted().joined(separator: ",")
-        // canonicalKey, not displayText: kind-aware, so swapping a person
-        // filter for a same-named token filter still changes the memo key.
-        let criteria = filterStore.criteria.map(\.canonicalKey).joined(separator: ",")
-        // Person registry fingerprint (plan 22): renames/merges change how
-        // people visualizations aggregate, so they must refire the rebuild.
-        let peopleFingerprint = people.reduce(into: 0) { partial, person in
-            // Hash each person as ONE combined unit — XORing the field
-            // hashes separately would let two people swapping alternates
-            // (or a rename mirrored by an alias change) cancel out.
-            var hasher = Hasher()
-            hasher.combine(person.uniqueIdentifier)
-            hasher.combine(person.text)
-            hasher.combine(person.alternateNames)
-            partial ^= hasher.finalize()
-        }
-        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)|\(peopleFingerprint)"
-    }
-
-    /// Content-filtered reports feeding the viz pages. Only computed inside
-    /// `rebuildVisualizations()` (the memoized `.task(id:)` path) — never per frame.
-    private func filteredReports() -> [Report] {
-        let criteria = filterStore.criteria
-        guard !criteria.isEmpty else { return reports }
-        let peopleQuestionIDs = Set(questions.filter { $0.type == .people }.map(\.uniqueIdentifier))
-        return reports.filter {
-            ReportFilter.matches(report: $0, criteria: criteria,
-                                 peopleQuestionIDs: peopleQuestionIDs, people: people)
-        }
-    }
-
-    private func rebuildVisualizations() {
-        let matching = filteredReports()
-        var next: [String: QuestionVisualization] = [:]
-        for question in visibleQuestions {
-            next[question.uniqueIdentifier] = VisualizationData.build(for: question, reports: matching,
-                                                                      people: people)
-        }
-        // Only replace values that actually changed so QuestionVisualizationView identity/diffing
-        // (via Equatable QuestionVisualization) stays cheap for unaffected pages.
-        if next != visualizations {
-            visualizations = next
-        }
     }
 
     var body: some View {
@@ -135,8 +70,15 @@ struct HomeView: View {
                             .accessibilityIdentifier("report-count")
                         Spacer()
                     } else {
-                        filterBar
-                        visualizationPages
+                        // Shared dashboard body (Task 2.5): filter bar +
+                        // grid/pager. The iOS-only survey strip stays in
+                        // `bottomBar` below (SurveyPresenter never crosses into
+                        // the shared view). iPhone uses the pager; the iPad
+                        // passes its shipped two-column fixed grid.
+                        DashboardContentView(
+                            columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)],
+                            selectedQuestionID: $selectedQuestionID
+                        )
                     }
                     bottomBar
                 }
@@ -147,134 +89,6 @@ struct HomeView: View {
                 .ignoresSafeArea(.container, edges: isCompact ? .bottom : [])
             }
             .navigationBarHidden(true)
-            // Gated on the lock, mirroring ContentView's survey-cover pattern: if the
-            // lock engages while this sheet is up, the getter flips to false so the
-            // sheet dismisses and the lock's fullScreenCover in ContentView can present
-            // without this sheet blocking it.
-            .sheet(isPresented: Binding(
-                get: { isShowingFilter && !appLockStore.isLocked },
-                set: { isShowingFilter = $0 })) {
-                VisualizationFilterView(
-                    questions: questions.filter(\.isEnabled),
-                    reports: reports,
-                    filterStore: filterStore
-                )
-            }
-    }
-
-    /// Plan 29 parity: left-aligned "+ Filter Visualizations…" row with a
-    /// hairline divider (replaces the centered pill). The report count lives
-    /// on the row's trailing edge so the chart owns everything below.
-    private var filterBar: some View {
-        let activeCount = filterStore.criteria.count
-        return VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Button {
-                    isShowingFilter = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus.square")
-                            .font(.subheadline)
-                        // Explicit singular/plural — the ^[…](inflect:) markup only
-                        // inflects when the string lands in a LocalizedStringKey,
-                        // which a ternary like this silently defeats (it becomes
-                        // String).
-                        Text(activeCount == 0
-                             ? "Filter Visualizations…"
-                             : (activeCount == 1 ? "1 filter active" : "\(activeCount) filters active"))
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(.white.opacity(0.7))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .accessibilityIdentifier("viz-filter-button")
-
-                Text("\(reports.count) reports")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
-                    .accessibilityIdentifier("report-count")
-            }
-            .padding(.horizontal, 20)
-            Rectangle()
-                .fill(Color.white.opacity(0.25))
-                .frame(height: 0.5)
-        }
-        .padding(.bottom, isCompact ? 0 : 4)
-    }
-
-    @ViewBuilder
-    private var visualizationPages: some View {
-        if visibleQuestions.isEmpty {
-            Spacer()
-            Text("No visualizations to show")
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.7))
-            Spacer()
-        } else {
-            Group {
-                if horizontalSizeClass == .regular {
-                    visualizationGrid
-                } else {
-                    visualizationPager
-                }
-            }
-            .task(id: visualizationTaskID) {
-                rebuildVisualizations()
-                // If the previously selected page's question was hidden/disabled (or this is
-                // the first render), fall back to the first visible page. Leaving `selection`
-                // pointed at a tag that no longer exists in the ForEach can leave the TabView
-                // showing stale content instead of truly removing that page. (Harmless in the
-                // grid layout — selection only matters to the pager — but kept unconditional
-                // so a size-class change back to compact lands on a valid page.)
-                if selectedQuestionID == nil || !visibleQuestions.contains(where: { $0.uniqueIdentifier == selectedQuestionID }) {
-                    selectedQuestionID = visibleQuestions.first?.uniqueIdentifier
-                }
-            }
-        }
-    }
-
-    private var visualizationPager: some View {
-        TabView(selection: $selectedQuestionID) {
-            ForEach(visibleQuestions, id: \.uniqueIdentifier) { question in
-                QuestionVisualizationView(
-                    question: question,
-                    visualization: visualizations[question.uniqueIdentifier] ?? .empty,
-                    theme: theme
-                )
-                .tag(Optional(question.uniqueIdentifier))
-            }
-        }
-        // Plan 29: the UIPageControl overlay is off entirely — plain dots
-        // render in the reserved bottom strip (see `bottomBar`), so pages
-        // never need dot-avoidance padding again.
-        .tabViewStyle(.page(indexDisplayMode: .never))
-    }
-
-    /// Plan 27 (regular width): every visible question's visualization at
-    /// once as a two-column card grid — an iPad-sized screen shouldn't hide
-    /// N−1 visualizations behind pager swipes. Consumes the same memoized
-    /// `visualizations` dictionary as the pager.
-    private var visualizationGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)],
-                      spacing: 16) {
-                ForEach(visibleQuestions, id: \.uniqueIdentifier) { question in
-                    QuestionVisualizationView(
-                        question: question,
-                        visualization: visualizations[question.uniqueIdentifier] ?? .empty,
-                        theme: theme
-                    )
-                    .frame(height: 340)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
-            }
-            .padding(.horizontal)
-        }
-        .accessibilityIdentifier("viz-grid")
     }
 
     private var topBar: some View {
