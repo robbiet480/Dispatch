@@ -102,6 +102,54 @@ Reporter, the discontinued self-tracking app — original code and
 design, and it imports your old Reporter export directly.
 ```
 
+## Description (macOS)
+
+*The Mac app is a SEPARATE App Store record (`io.robbie.Dispatch.mac`), so
+it needs its own description — this block. Honest about the Mac being a
+companion: it does NOT file reports or capture sensors (no HealthKit/mic/
+motion/photos/Spotify on the Mac build) — reports are filed on iPhone/Watch
+and sync here — and its only sensor is a one-shot location fix for setting
+up place triggers. `asc-listing.swift` targets the iOS record only; pushing
+this to the Mac record is a separate lane (or set it by hand in ASC).*
+
+```
+Dispatch on the Mac is the companion to the iPhone and iPad app: your
+self-tracking history, on a screen with room to see it. You file reports
+on your iPhone or Apple Watch — a short set of your own questions, a few
+times a day, at moments you don't pick — and everything syncs here through
+your own private iCloud.
+
+On the Mac, that history opens up:
+• A dashboard of every report, with charts of each answer over time
+• An insights view that surfaces patterns across your history
+• Full-text search over everything you've logged
+• The people you mention, with stable identities you can rename and
+  merge — and your whole history follows
+
+Your questions live here too. Write and edit them, pick from a community
+catalog of shared question sets (or contribute your own), and import the
+questions you used in Reporter. Organize the prompt groups that decide when
+your iPhone asks — including groups that fire when you arrive at a place,
+which you can set up right on the Mac.
+
+When you want your data elsewhere, export everything as JSON or CSV.
+
+The rich context on each report — Apple Health, weather, what's playing,
+ambient loudness, which Focus was on — is captured by Dispatch on iPhone
+and Apple Watch and appears here through sync. The Mac itself only ever
+reads your location, and only for the one-time fix when you set up a place
+trigger.
+
+Privacy, plainly: there is no server, no account, and no analytics or
+tracking. Your reports stay on your devices and in your own private iCloud
+storage — the developer can't see them. Turn iCloud Sync off and nothing
+leaves your Mac.
+
+Dispatch is an independent, open-source reimplementation inspired by
+Reporter, the discontinued self-tracking app — original code and design,
+and it imports your old Reporter export directly.
+```
+
 ## Keywords (100 chars max)
 
 ```
