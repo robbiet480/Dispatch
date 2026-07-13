@@ -142,8 +142,9 @@ trigger.
 
 Privacy, plainly: there is no server, no account, and no analytics or
 tracking. Your reports stay on your devices and in your own private iCloud
-storage — the developer can't see them. Turn iCloud Sync off and nothing
-leaves your Mac.
+storage — the developer can't see them. Turn iCloud Sync off and your data
+stays on the Mac, except for question sets you explicitly submit to the
+community catalog and exports you save yourself.
 
 Dispatch is an independent, open-source reimplementation inspired by
 Reporter, the discontinued self-tracking app — original code and design,
