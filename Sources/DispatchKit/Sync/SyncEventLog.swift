@@ -88,7 +88,44 @@ public struct SyncEventRecord: Codable, Sendable, Equatable {
         let truncated = description.count > 200
             ? String(description.prefix(200))
             : description
-        return "\(nsError.domain)(\(nsError.code)): \(truncated)"
+        var line = "\(nsError.domain)(\(nsError.code)): \(truncated)"
+
+        // CloudKit's partialFailure (CKErrorDomain code 2) buries the ACTIONABLE
+        // reasons in a per-record sub-error map (CKPartialErrorsByItemIDKey),
+        // leaving the top line an opaque "operation couldn't be completed". A
+        // batch export can fail for a handful of very different reasons —
+        // serverRecordChanged (14) conflicts, an undeployed Production field
+        // (invalidArguments 12 / unknownItem 11), quotaExceeded (25) — and only
+        // the sub-codes distinguish them. Surface a histogram of the DISTINCT
+        // sub-error `domain(code)`s: codes are diagnostic classifiers, never
+        // user content, and the record identifiers (the dictionary KEYS) are
+        // dropped, so the privacy guarantee holds.
+        let subCodes = partialErrorHistogram(in: nsError)
+        if !subCodes.isEmpty {
+            let histogram = subCodes
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key)×\($0.value)" }
+                .joined(separator: ", ")
+            line += " [partial: \(histogram)]"
+        }
+        return line
+    }
+
+    /// `domain(code)` → count over any nested per-item error dictionary in
+    /// `error`'s userInfo (CloudKit's partial-failure map). Pure Foundation:
+    /// finds the sub-error dictionary structurally rather than importing
+    /// CloudKit for its key constant, and reads ONLY error codes — never the
+    /// dictionary keys (record identifiers) or any other userInfo value.
+    private static func partialErrorHistogram(in nsError: NSError) -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for value in nsError.userInfo.values {
+            guard let dictionary = value as? [AnyHashable: Any] else { continue }
+            for sub in dictionary.values {
+                guard let subError = sub as? NSError else { continue }
+                counts["\(subError.domain)(\(subError.code))", default: 0] += 1
+            }
+        }
+        return counts
     }
 }
 
