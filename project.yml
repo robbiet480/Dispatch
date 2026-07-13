@@ -282,6 +282,13 @@ targets:
       # (@ViewBuilder returning self) since navigationBarTitleDisplayMode and
       # toolbarColorScheme(for: .navigationBar) don't exist there.
       - path: App/Sources/Shell/PlatformModifiers.swift
+      # Task 2.2 (iPad/Mac UI convergence): the shared Insights pane + its
+      # per-question correlation drill-in. Their only iOS-only chrome
+      # (navigationBarTitleDisplayMode/toolbarColorScheme) now goes through
+      # the Task 2.1 PlatformModifiers no-ops; the Mac Insights pane renders
+      # this directly, retiring the Mac-only MacInsightsView twin.
+      - path: App/Sources/Insights/InsightsView.swift
+      - path: App/Sources/Insights/QuestionCorrelationView.swift
       # Shared place-search component (plan 50, #83): same dual-membership as
       # Shared/Providers — the MapKit autocomplete/geocode wrapper lets the Mac
       # editor pick a place, lifting the view-only restriction on place triggers.

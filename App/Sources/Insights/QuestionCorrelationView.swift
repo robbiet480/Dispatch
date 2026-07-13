@@ -67,8 +67,8 @@ struct QuestionCorrelationView: View {
             }
         }
         .navigationTitle(prompt)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .inlineNavTitleOnPhone()
+        .darkNavBarOnPhone()
         .accessibilityIdentifier("question-correlations-view")
         .task(id: correlationTaskID) {
             result = .some(CorrelationEngine.compute(questionID: questionID,
