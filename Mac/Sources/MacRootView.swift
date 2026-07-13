@@ -83,8 +83,14 @@ struct MacRootView: View {
         } else {
             switch navigation.pane {
             case .dashboard: MacDashboardView(searchQuery: searchQuery)
-            case .insights: InsightsView()
-            case .questions: QuestionSettingsView()
+            // Insights and Questions push-navigate (NavigationLink(destination:))
+            // into per-question correlation / editor screens; the detail column
+            // of a NavigationSplitView has no NavigationStack of its own, so
+            // those pushes are inert without one wrapped here. (Catalog and
+            // Groups are unaffected: CatalogView wraps itself in a
+            // NavigationStack, and MacPromptGroupsView doesn't push-navigate.)
+            case .insights: NavigationStack { InsightsView() }
+            case .questions: NavigationStack { QuestionSettingsView() }
             case .groups: MacPromptGroupsView()
             case .catalog: CatalogView()
             }
