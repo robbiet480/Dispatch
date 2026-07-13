@@ -99,8 +99,8 @@ Dispatch for Mac is the companion to Dispatch on iPhone, iPad, and Apple
 Watch: it displays the user's self-tracking history and lets them manage
 their questions. It does NOT file reports (no HealthKit/microphone/motion/
 photo/Spotify capture on macOS) — reports are filed on iPhone/Apple Watch
-and sync here via the user's private iCloud. No account or sign-in; no demo
-credentials.
+and sync here via the user's private iCloud. No separate account, sign-in,
+or demo credentials for Dispatch itself.
 
 QUICK LOOK: sign in to the same iCloud account as the iOS app; existing
 reports and questions sync into the Dashboard, Insights, Questions, Groups,
@@ -117,8 +117,9 @@ PERMISSIONS (macOS)
 ICLOUD
 Syncs via SwiftData's CloudKit mirroring to the user's own private CloudKit
 database (Settings → iCloud turns it off). Export to a user-selected file
-(JSON/CSV) uses the sandbox file picker. Nothing is accessible to the
-developer or any third party.
+(JSON/CSV) uses the sandbox file picker. Synced data is not accessible to the
+developer; question sets submitted to the Catalog and exported files are
+user-directed actions.
 
 COMMUNITY CATALOG (user-generated content)
 The Catalog pane browses shared question sets from a public CloudKit
