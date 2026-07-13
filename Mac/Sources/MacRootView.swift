@@ -86,7 +86,7 @@ struct MacRootView: View {
             case .insights: MacInsightsView()
             case .questions: MacQuestionsView()
             case .groups: MacPromptGroupsView()
-            case .catalog: MacCatalogView()
+            case .catalog: CatalogView()
             }
         }
     }

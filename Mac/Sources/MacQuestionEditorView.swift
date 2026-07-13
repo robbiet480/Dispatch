@@ -147,7 +147,7 @@ struct MacQuestionEditorView: View {
         }
         .frame(minWidth: 460, minHeight: 520)
         .sheet(isPresented: $showingCatalogSubmit) {
-            MacCatalogSubmitView(
+            CatalogSubmitView(
                 store: catalogStore, prompt: prompt, type: type,
                 choices: type == .multipleChoice ? choices : [],
                 inputStyle: type == .number ? inputStyle : .textField,
