@@ -26,6 +26,13 @@
 #            CURRENT_PROJECT_VERSION from project.yml) when that file is
 #            committed; otherwise the GitHub Release body is used.
 #
+# BEFORE releasing a build that changes a CloudKit-mirrored @Model
+# (DispatchStore.allModels): deploy the CloudKit schema to Production FIRST, or
+# every export fails with CKError.partialFailure and sync silently breaks.
+# Verify with `python3 scripts/cloudkit_schema.py verify-production ...`
+# (see docs/cloudkit-schema.md). CI's `cloudkit-schema` job only checks the
+# models against CloudKit/schema.ckdb — deploying that schema is manual.
+#
 # Manual dry run:
 #   Actions → "Release → TestFlight" → Run workflow → pick a tag/branch,
 #   optionally untick "Upload macOS too" for an iOS-only test.
