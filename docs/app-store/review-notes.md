@@ -95,11 +95,12 @@ macOS has no HealthKit/microphone/motion/photo capture and no Spotify, and
 the Mac app does not file reports.)*
 
 ```
-Dispatch for Mac is the desktop companion to the iOS app: it displays the
-user's self-tracking history and lets them manage their questions. It does
-NOT file reports (no HealthKit/microphone/motion/photo/Spotify capture on
-macOS) — reports are filed on iPhone/Apple Watch and sync here via the
-user's private iCloud. No account or sign-in; no demo credentials.
+Dispatch for Mac is the companion to Dispatch on iPhone, iPad, and Apple
+Watch: it displays the user's self-tracking history and lets them manage
+their questions. It does NOT file reports (no HealthKit/microphone/motion/
+photo/Spotify capture on macOS) — reports are filed on iPhone/Apple Watch
+and sync here via the user's private iCloud. No account or sign-in; no demo
+credentials.
 
 QUICK LOOK: sign in to the same iCloud account as the iOS app; existing
 reports and questions sync into the Dashboard, Insights, Questions, Groups,

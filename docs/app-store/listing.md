@@ -113,11 +113,11 @@ up place triggers. `asc-listing.swift` targets the iOS record only; pushing
 this to the Mac record is a separate lane (or set it by hand in ASC).*
 
 ```
-Dispatch on the Mac is the companion to the iPhone and iPad app: your
-self-tracking history, on a screen with room to see it. You file reports
-on your iPhone or Apple Watch — a short set of your own questions, a few
-times a day, at moments you don't pick — and everything syncs here through
-your own private iCloud.
+Dispatch for Mac is the companion to Dispatch on iPhone, iPad, and Apple
+Watch — your self-tracking history, on a screen with room to see it. You
+file reports on your iPhone or Apple Watch — a short set of your own
+questions, a few times a day, at moments you don't pick — and everything
+syncs here through your own private iCloud.
 
 On the Mac, that history opens up:
 • A dashboard of every report, with charts of each answer over time
