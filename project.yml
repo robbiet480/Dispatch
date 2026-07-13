@@ -277,6 +277,11 @@ targets:
       - path: App/Sources/Catalog/CatalogView.swift
       - path: App/Sources/Catalog/CatalogSubmitView.swift
       - path: App/Sources/ReadableColumn.swift
+      # Task 2.1 (iPad/Mac UI convergence): nav-chrome View extensions for the
+      # Sprint 2 shared pane ports. Both helpers are true no-ops on macOS
+      # (@ViewBuilder returning self) since navigationBarTitleDisplayMode and
+      # toolbarColorScheme(for: .navigationBar) don't exist there.
+      - path: App/Sources/Shell/PlatformModifiers.swift
       # Shared place-search component (plan 50, #83): same dual-membership as
       # Shared/Providers — the MapKit autocomplete/geocode wrapper lets the Mac
       # editor pick a place, lifting the view-only restriction on place triggers.
