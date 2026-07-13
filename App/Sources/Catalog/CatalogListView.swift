@@ -108,6 +108,7 @@ struct CatalogListView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .readableColumn()
             .accessibilityIdentifier("mac-catalog-list")
         }
         .accessibilityIdentifier("question-catalog-list")
