@@ -828,57 +828,22 @@ git commit -m "feat(catalog): shared themed CatalogListView + push host
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
-### Task 1.5: Share `CatalogSubmitView`; delete Mac catalog duplicates
+### Task 1.5: Wire the Mac catalog pane to the shared host; delete Mac catalog duplicates
+
+> **Reduced scope (resequenced):** `CatalogSubmitView` was already made cross-platform and added to `DispatchMac` in Task 1.4 (it's referenced by `CatalogView`, which 1.4 added to the Mac target). This task is now only the pane swap + duplicate deletion.
 
 **Files:**
-- Modify: `App/Sources/Catalog/CatalogSubmitView.swift` (platform-condition the chrome; keep logic)
-- Modify: `project.yml` (add `CatalogSubmitView.swift` to DispatchMac; remove the two Mac files' membership)
 - Modify: `Mac/Sources/MacRootView.swift` (`.catalog` case → `CatalogView()`)
 - Delete: `Mac/Sources/MacCatalogView.swift`, `Mac/Sources/MacCatalogSubmitView.swift`
-- Modify: `MacUITests/MacScreenshotTests.swift` (identifiers unchanged — verify only)
+- (Verify only, no edit expected: `MacUITests/MacScreenshotTests.swift` — the `mac-catalog-list` identifier now comes from the shared `CatalogListView`.)
 
 **Interfaces:**
-- Consumes: `CatalogSubmitView(store:…)` existing init (unchanged).
-- Produces: one shared `CatalogSubmitView`; `MacCatalogSubmitView` retired.
+- Consumes: the shared `CatalogView()` push host (1.4), already compiled into `DispatchMac`.
+- Produces: the live Mac catalog pane renders the shared catalog; `MacCatalogView`/`MacCatalogSubmitView` retired.
 
-- [ ] **Step 1: Platform-condition `CatalogSubmitView` chrome so it compiles on macOS**
+- [ ] **Step 1: Point the Mac catalog pane at the shared host**
 
-`CatalogSubmitView` uses `navigationBarTitleDisplayMode`, `.toolbarColorScheme(.dark, for: .navigationBar)`, and `.topBarLeading`/`.topBarTrailing` placements — all iOS-only. Guard them. Change the toolbar/title modifiers on the `NavigationStack` body to:
-
-```swift
-.navigationTitle("Submit a Question")
-#if os(iOS)
-.navigationBarTitleDisplayMode(.inline)
-.toolbarColorScheme(.dark, for: .navigationBar)
-#endif
-.toolbar {
-    ToolbarItem(placement: .cancellationAction) {
-        Button(submitted ? "Done" : "Cancel") { dismiss() }.tint(.white)
-    }
-    if !submitted {
-        ToolbarItem(placement: .confirmationAction) {
-            Button("Send") { submit() }
-                .tint(.white).fontWeight(.semibold)
-                .disabled(isSubmitting || store.submissionsRemaining == 0)
-                .accessibilityIdentifier("catalog-submit-send")
-        }
-    }
-}
-```
-
-(`.cancellationAction`/`.confirmationAction` resolve to the leading/trailing nav bar on iOS and the window's Cancel/Send affordance on macOS — one code path, native on both.) Leave `submit()`, `form`, `confirmation`, and all `@State` untouched.
-
-- [ ] **Step 2: Update `project.yml` membership**
-
-- Add to DispatchMac (adjacent to the other Catalog entries):
-  ```yaml
-      - path: App/Sources/Catalog/CatalogSubmitView.swift
-  ```
-- The `DispatchMac` target globs `Mac/Sources` — deleting the two files (next step) removes them from the target automatically; no explicit membership line to remove unless one exists (check: `grep -n "MacCatalogView\|MacCatalogSubmitView" project.yml`).
-
-- [ ] **Step 3: Point the Mac catalog pane at the shared host and delete the duplicates**
-
-In `Mac/Sources/MacRootView.swift`, change:
+In `Mac/Sources/MacRootView.swift`, change the pane switch:
 ```swift
 case .catalog: MacCatalogView()
 ```
@@ -886,13 +851,16 @@ to:
 ```swift
 case .catalog: CatalogView()
 ```
+Confirm nothing else in the Mac target references `MacCatalogView` or `MacCatalogSubmitView`: `grep -rn "MacCatalogView\|MacCatalogSubmitView" Mac/ project.yml` — the only hits should be the two files themselves (about to be deleted).
 
-Then:
+- [ ] **Step 2: Delete the duplicates**
+
 ```bash
 git rm Mac/Sources/MacCatalogView.swift Mac/Sources/MacCatalogSubmitView.swift
 ```
+(The `DispatchMac` target globs `Mac/Sources`, so removing the files drops them from the target — no `project.yml` membership line to remove for these.)
 
-- [ ] **Step 4: Regenerate, build Mac, run the Mac catalog screenshot test**
+- [ ] **Step 3: Regenerate, build Mac, run the Mac catalog screenshot test**
 
 Run:
 ```bash
@@ -900,9 +868,9 @@ xcodegen generate
 xcodebuild -project Dispatch.xcodeproj -scheme DispatchMac -destination 'platform=macOS' build
 env TEST_RUNNER_SCREENSHOT_MODE=1 xcodebuild test -project Dispatch.xcodeproj -scheme DispatchMac -destination 'platform=macOS' -only-testing:DispatchMacUITests/MacScreenshotTests/testCaptureMacScreenshots
 ```
-Expected: build succeeds; screenshot test passes (shot 07 finds `mac-catalog-list` via the shared `CatalogListView`; ⌘5 still opens the catalog pane).
+Expected: build succeeds; screenshot test passes (shot 07 finds `mac-catalog-list` via the shared `CatalogListView`; ⌘5 still opens the catalog pane). If the screenshot suite's catalog navigation changed shape (the shared host is a `NavigationStack` inside the detail column), confirm shot 07 still resolves `mac-catalog-list`; if not, report it — do not weaken the assertion.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
