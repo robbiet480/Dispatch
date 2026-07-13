@@ -58,3 +58,33 @@ import Testing
     #expect(tokenIDsAfter == tokenIDsBefore, "rebuild recreated token rows — this is the CloudKit export loop")
     #expect(personIDsAfter == personIDsBefore, "rebuild recreated person rows — this is the CloudKit export loop")
 }
+
+/// A no-op rebuild's "changed" verdict (and its save) must reflect ONLY what
+/// rebuild itself did, never `context.hasChanges` (which is context-wide). A
+/// caller that passes a context carrying its own pending edit must not make a
+/// no-op rebuild report a change or silently persist that unrelated edit.
+@Test func rebuildIgnoresCallerPendingEditsWhenReportingChange() throws {
+    let container = try DispatchStore.inMemoryContainer()
+    let context = ModelContext(container)
+    _ = try V1Importer.importExport(try fixtureData("v1-sample"), into: context)
+    #expect(try VocabularyBuilder.rebuild(in: context))
+    try context.save()
+
+    // Caller dirties the context with an edit rebuild neither reads for
+    // vocabulary (only prompt/type feed the tally) nor writes, then calls
+    // rebuild WITHOUT saving first.
+    let question = try #require(try context.fetch(FetchDescriptor<Question>()).first)
+    question.isEnabled.toggle()
+    question.sortOrder += 999
+
+    let changed = try VocabularyBuilder.rebuild(in: context)
+    #expect(!changed, "rebuild reported a caller's pending edit as its own change")
+
+    // The pending edit was never persisted by rebuild: a fresh context (which
+    // sees only saved state) still shows the original values.
+    let fresh = ModelContext(container)
+    let persisted = try #require(
+        try fresh.fetch(FetchDescriptor<Question>())
+            .first { $0.uniqueIdentifier == question.uniqueIdentifier })
+    #expect(persisted.sortOrder != question.sortOrder, "rebuild persisted an unrelated caller edit")
+}
