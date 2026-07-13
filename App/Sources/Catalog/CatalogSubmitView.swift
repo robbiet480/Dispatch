@@ -2,6 +2,18 @@ import DispatchKit
 import SwiftData
 import SwiftUI
 
+private extension View {
+    /// `.keyboardType(.decimalPad)` is iOS/UIKit-only; a no-op on macOS,
+    /// which has no software keyboard type to request.
+    @ViewBuilder func decimalKeyboard() -> some View {
+        #if os(iOS)
+        self.keyboardType(.decimalPad)
+        #else
+        self
+        #endif
+    }
+}
+
 /// "Submit a question" form: writes a SubmittedQuestion record to the public
 /// database for moderation. Anonymous by default with an optional credit
 /// name. Requires an iCloud account (and says so); the catalog itself is
@@ -68,15 +80,17 @@ struct CatalogSubmitView: View {
                 }
             }
             .navigationTitle("Submit a Question")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button(submitted ? "Done" : "Cancel") { dismiss() }
                         .tint(.white)
                 }
                 if !submitted {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .confirmationAction) {
                         Button("Send") { submit() }
                             .tint(.white)
                             .fontWeight(.semibold)
@@ -133,21 +147,21 @@ struct CatalogSubmitView: View {
                     .accessibilityIdentifier("catalog-submit-input-style")
                     if configFields.min {
                         TextField("Minimum", text: $inputMin)
-                            .keyboardType(.decimalPad)
+                            .decimalKeyboard()
                             .foregroundStyle(.white)
                             .listRowBackground(Color.white.opacity(0.12))
                             .accessibilityIdentifier("catalog-submit-input-min")
                     }
                     if configFields.max {
                         TextField("Maximum", text: $inputMax)
-                            .keyboardType(.decimalPad)
+                            .decimalKeyboard()
                             .foregroundStyle(.white)
                             .listRowBackground(Color.white.opacity(0.12))
                             .accessibilityIdentifier("catalog-submit-input-max")
                     }
                     if configFields.step {
                         TextField("Step", text: $inputStep)
-                            .keyboardType(.decimalPad)
+                            .decimalKeyboard()
                             .foregroundStyle(.white)
                             .listRowBackground(Color.white.opacity(0.12))
                             .accessibilityIdentifier("catalog-submit-input-step")
@@ -165,7 +179,7 @@ struct CatalogSubmitView: View {
 
                 Section {
                     TextField("Value for empty responses", text: $defaultAnswer)
-                        .keyboardType(.decimalPad)
+                        .decimalKeyboard()
                         .foregroundStyle(.white)
                         .listRowBackground(Color.white.opacity(0.12))
                         .accessibilityIdentifier("catalog-submit-default-answer")

@@ -263,6 +263,19 @@ targets:
       # (they use UIKit/iOS-styled SwiftUI); the Mac gets its own catalog UI.
       - path: App/Sources/Catalog/CatalogStore.swift
       - path: App/Sources/Catalog/CatalogProvider.swift
+      # Task 1.4 (iPad/Mac UI convergence): the shared themed catalog list +
+      # the CatalogView push host (which also carries CatalogDetailView,
+      # Mac-guarded in Task 1.3) now compile unmodified on macOS. CatalogView's
+      # `.sheet` references CatalogSubmitView, which pulls that in too (its
+      # remaining iOS-only modifiers are now `#if os(iOS)`-guarded); readable
+      # column support pulls in ReadableColumn.swift, the no-op-below-cap
+      # width constrainer both views use. Mac still gets its own catalog UI
+      # (MacCatalogView/MacCatalogSubmitView) via MacRootView — Task 1.5 wires
+      # the shared views in and retires the Mac-only twins.
+      - path: App/Sources/Catalog/CatalogListView.swift
+      - path: App/Sources/Catalog/CatalogView.swift
+      - path: App/Sources/Catalog/CatalogSubmitView.swift
+      - path: App/Sources/ReadableColumn.swift
       # Shared place-search component (plan 50, #83): same dual-membership as
       # Shared/Providers — the MapKit autocomplete/geocode wrapper lets the Mac
       # editor pick a place, lifting the view-only restriction on place triggers.
