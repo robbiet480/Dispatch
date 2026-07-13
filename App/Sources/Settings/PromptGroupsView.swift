@@ -22,6 +22,13 @@ struct PromptGroupsView: View {
     @Environment(CalendarEventObserver.self) private var calendarEventObserver
     #endif
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
+    #if os(macOS)
+    // Mac-only safety net: mirrors QuestionSettingsView's confirmation
+    // dialog before deleting a group — the shared list's swipe/edit-mode
+    // delete (`delete(at:)` below) has no confirmation, so this stays
+    // desktop-only.
+    @State private var pendingDelete: PromptGroup?
+    #endif
 
     private var theme: Theme { themeStore.theme }
 
@@ -46,6 +53,16 @@ struct PromptGroupsView: View {
                 ForEach(groups, id: \.uniqueIdentifier) { group in
                     PromptGroupRowView(group: group, onChange: replan)
                         .listRowBackground(Color.white.opacity(0.12))
+                        #if os(macOS)
+                        // Mac-only safety net: MacPromptGroupsView (retired)
+                        // offered a confirmation dialog before deleting a
+                        // group; the shared list's swipe/edit-mode delete
+                        // (below) has no confirmation, so this stays
+                        // desktop-only.
+                        .contextMenu {
+                            Button("Delete", role: .destructive) { pendingDelete = group }
+                        }
+                        #endif
                 }
                 .onMove(perform: move)
                 .onDelete(perform: delete)
@@ -63,15 +80,16 @@ struct PromptGroupsView: View {
             .scrollContentBackground(.hidden)
             // Plan 27: readable column on iPad; no-op at iPhone widths.
             .readableColumn()
-            .accessibilityIdentifier("prompt-groups")
+            #if os(macOS)
+            // MacCatalogUITests proves a List-level identifier DOES survive
+            // AppKit's AXOutline translation — CatalogListView's
+            // `mac-catalog-list` sits directly on its List. Mirror that
+            // proven placement here instead of the unproven bare-ZStack id.
+            .accessibilityIdentifier("mac-groups-list")
+            #endif
         }
         .navigationTitle("Prompt Groups")
-        #if os(macOS)
-        // AppKit's AXOutline can drop an identifier set on the inner List, so
-        // the Mac screenshot rig's list id lives on this wrapping container
-        // (the ZStack), where it survives the accessibility tree (Task 2.4).
-        .accessibilityIdentifier("mac-groups-list")
-        #endif
+        .accessibilityIdentifier("prompt-groups")
         .inlineNavTitleOnPhone()
         .darkNavBarOnPhone()
         .toolbar {
@@ -86,6 +104,25 @@ struct PromptGroupsView: View {
             }
             #endif
         }
+        #if os(macOS)
+        // Mac-only safety net: mirrors QuestionSettingsView's confirmation
+        // dialog before deleting a group — the shared list's swipe/edit-mode
+        // delete (`delete(at:)` below, via `EditButton`/swipe on iOS) has no
+        // confirmation, so this stays desktop-only.
+        .confirmationDialog(
+            "Delete this group?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { group in
+            Button("Delete", role: .destructive) {
+                deleteGroup(group)
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { _ in
+            Text("This prompt group will be removed. Its questions are kept.")
+        }
+        #endif
     }
 
     private func move(fromOffsets: IndexSet, toOffset: Int) {
@@ -98,12 +135,18 @@ struct PromptGroupsView: View {
         replan()
     }
 
-    private func delete(at offsets: IndexSet) {
-        for offset in offsets {
-            context.delete(groups[offset])
-        }
+    /// Deletes a single group — shared by the swipe/edit-mode delete
+    /// (`delete(at:)`) and the Mac confirmation dialog's confirm action.
+    private func deleteGroup(_ group: PromptGroup) {
+        context.delete(group)
         try? context.save()
         replan()
+    }
+
+    private func delete(at offsets: IndexSet) {
+        for offset in offsets {
+            deleteGroup(groups[offset])
+        }
     }
 
     private func replan() {
@@ -522,28 +565,39 @@ struct PromptGroupEditorView: View {
     /// Multi-select membership over enabled questions. Selection order IS
     /// the survey order: toggling on appends, toggling off removes.
     private var questionsSection: some View {
-        Section {
-            ForEach(questions.filter(\.isEnabled), id: \.uniqueIdentifier) { question in
-                Button {
-                    toggleMembership(of: question.uniqueIdentifier)
-                } label: {
-                    HStack {
-                        Text(question.prompt)
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                        Spacer()
-                        if let position = questionIDs.firstIndex(of: question.uniqueIdentifier) {
-                            Text("\(position + 1)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.7))
-                            Image(systemName: "checkmark")
+        let enabledQuestions = questions.filter(\.isEnabled)
+        return Section {
+            if enabledQuestions.isEmpty {
+                // A user with every question disabled can't add any here (and
+                // Save stays disabled while `questionIDs` is empty) — say so
+                // instead of showing a silently-empty section.
+                Text("No enabled questions to add.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .accessibilityIdentifier("group-questions-empty")
+            } else {
+                ForEach(enabledQuestions, id: \.uniqueIdentifier) { question in
+                    Button {
+                        toggleMembership(of: question.uniqueIdentifier)
+                    } label: {
+                        HStack {
+                            Text(question.prompt)
                                 .foregroundStyle(.white)
+                                .lineLimit(2)
+                            Spacer()
+                            if let position = questionIDs.firstIndex(of: question.uniqueIdentifier) {
+                                Text("\(position + 1)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.white)
+                            }
                         }
                     }
+                    .accessibilityAddTraits(questionIDs.contains(question.uniqueIdentifier) ? [.isSelected] : [])
                 }
-                .accessibilityAddTraits(questionIDs.contains(question.uniqueIdentifier) ? [.isSelected] : [])
+                .accessibilityIdentifier("group-questions")
             }
-            .accessibilityIdentifier("group-questions")
         } header: {
             sectionHeader("QUESTIONS")
         } footer: {
@@ -763,8 +817,13 @@ struct PromptGroupEditorView: View {
         // Editor-contextual permission asks (plans 16 + 31): the ONLY places
         // the app ever asks — picking the visit/calendar schedule is the
         // moment the section text above has just explained why. Never part
-        // of onboarding. iOS-only: the Mac has no sensor permissions to ask for
-        // (plan 36) — the paired iPhone requests them when the group syncs over.
+        // of onboarding. iOS-only: the Mac has no sensor permissions to ask
+        // for (plan 36). On sync, the iPhone's observers only RECONCILE
+        // against an already-granted permission — they never prompt. So a
+        // Mac-created sensor group schedules once the iPhone already has the
+        // permission; otherwise the iPhone shows its existing "won't fire"
+        // hint (`PromptGroupRowView`, same as an iPhone-created group missing
+        // permission) rather than asking for it.
         #if os(iOS)
         .onChange(of: scheduleKind) { _, newKind in
             if newKind == .visitArrival, !visitObserver.hasAlwaysAuthorization {
