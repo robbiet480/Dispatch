@@ -269,9 +269,10 @@ targets:
       # `.sheet` references CatalogSubmitView, which pulls that in too (its
       # remaining iOS-only modifiers are now `#if os(iOS)`-guarded); readable
       # column support pulls in ReadableColumn.swift, the no-op-below-cap
-      # width constrainer both views use. Mac still gets its own catalog UI
-      # (MacCatalogView/MacCatalogSubmitView) via MacRootView — Task 1.5 wires
-      # the shared views in and retires the Mac-only twins.
+      # width constrainer both views use. Task 1.5 wired MacRootView's
+      # `.catalog` case (and the question editor's catalog-submit sheet) to
+      # these shared views and retired the Mac-only twins
+      # (MacCatalogView/MacCatalogSubmitView).
       - path: App/Sources/Catalog/CatalogListView.swift
       - path: App/Sources/Catalog/CatalogView.swift
       - path: App/Sources/Catalog/CatalogSubmitView.swift
