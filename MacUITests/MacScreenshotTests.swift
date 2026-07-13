@@ -102,6 +102,17 @@ final class MacScreenshotTests: XCTestCase {
         return window
     }
 
+    /// Switches panes via the Manage menu's ⌘-shortcut (plan 47's shared
+    /// navigation model: ⌘3 Questions, ⌘4 Prompt Groups, ⌘5 Question Catalog).
+    /// The key event drives the same navigation as clicking the menu bar but
+    /// avoids macOS XCUITest's flaky menu-open detection ("timed out waiting
+    /// for menu open notification"), and the overflow-prone `detail-pane-picker`
+    /// which only carries Dashboard/Insights.
+    @MainActor
+    private func showPane(_ app: XCUIApplication, shortcut: String) {
+        app.typeKey(shortcut, modifierFlags: .command)
+    }
+
     @MainActor
     func testCaptureMacScreenshots() throws {
         // 01 — dashboard (sidebar stats + proportion-band grid).
@@ -123,13 +134,10 @@ final class MacScreenshotTests: XCTestCase {
         snap("02-report-detail", window: window)
         app.terminate()
 
-        // 03 — insights pane.
+        // 03 — insights pane (⌘2, same navigation as the pane picker).
         app = launchApp(shotIndex: 3)
         window = mainWindow(app)
-        let panePicker = app.descendants(matching: .any)
-            .matching(identifier: "detail-pane-picker").firstMatch
-        XCTAssertTrue(panePicker.waitForExistence(timeout: 15))
-        panePicker.radioButtons["Insights"].click()
+        showPane(app, shortcut: "2")
         XCTAssertTrue(
             app.descendants(matching: .any).matching(identifier: "insight-card")
                 .firstMatch.waitForExistence(timeout: 15)
@@ -147,6 +155,40 @@ final class MacScreenshotTests: XCTestCase {
         app.typeText("coffee")
         Thread.sleep(forTimeInterval: 1.5) // let the filter + stats settle
         snap("04-search", window: window)
+        app.terminate()
+
+        // 05 — Questions management pane (write/edit your own questions).
+        app = launchApp(shotIndex: 5)
+        window = mainWindow(app)
+        showPane(app, shortcut: "3")
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "mac-questions-list")
+                .firstMatch.waitForExistence(timeout: 15)
+        )
+        snap("05-questions", window: window)
+        app.terminate()
+
+        // 06 — Prompt Groups pane (organize the schedules that drive prompts).
+        app = launchApp(shotIndex: 6)
+        window = mainWindow(app)
+        showPane(app, shortcut: "4")
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "mac-groups-list")
+                .firstMatch.waitForExistence(timeout: 15)
+        )
+        snap("06-prompt-groups", window: window)
+        app.terminate()
+
+        // 07 — Question Catalog pane (browse/contribute shared question sets;
+        // the --ui-testing stub provider yields entries so it isn't empty).
+        app = launchApp(shotIndex: 7)
+        window = mainWindow(app)
+        showPane(app, shortcut: "5")
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "mac-catalog-list")
+                .firstMatch.waitForExistence(timeout: 20)
+        )
+        snap("07-catalog", window: window)
         app.terminate()
     }
 }
