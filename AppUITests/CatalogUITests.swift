@@ -1,6 +1,49 @@
 import XCTest
 
 final class CatalogUITests: XCTestCase {
+    /// Shared nav path used by `testCatalogDetailShowsInputPreview`: Settings →
+    /// Questions → Question Catalog. Mirrors the button taps every other test
+    /// in this file already performs inline (see
+    /// `testCatalogBrowsesStubbedEntriesAndAddCreatesLocalQuestion` below) —
+    /// same identifiers, confirmed against `HomeView.swift`
+    /// (`settings-button`), `SettingsView.swift` (`questions-settings-link`),
+    /// and `QuestionSettingsView.swift` (`question-catalog-link`).
+    @MainActor
+    private func openCatalog(_ app: XCUIApplication) {
+        app.buttons["settings-button"].firstMatch.tap()
+        let questionsLink = app.buttons["questions-settings-link"]
+        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
+        questionsLink.tap()
+        let catalogLink = app.buttons["question-catalog-link"]
+        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
+        catalogLink.tap()
+    }
+
+    /// Task 1.3 (iPad/Mac UI convergence): tapping a catalog entry pushes a
+    /// detail view that renders the non-interactive
+    /// `QuestionInputPreviewView` (`question-input-preview`) for that entry.
+    @MainActor
+    func testCatalogDetailShowsInputPreview() throws {
+        let app = XCUIApplication()
+        // --skip-onboarding (not the brief's placeholder --demo-data) is what
+        // actually makes settings-button reachable without navigating an
+        // onboarding flow first — every other test in this file uses it for
+        // the same reason (see DispatchApp.swift: only --skip-onboarding
+        // sets OnboardingFlag; --demo-data seeds unrelated fixture data).
+        app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
+        app.launch()
+
+        openCatalog(app)
+
+        let list = app.descendants(matching: .any)
+            .matching(identifier: "question-catalog-list").firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 10))
+        list.cells.firstMatch.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)
+            .matching(identifier: "question-input-preview").firstMatch.waitForExistence(timeout: 5))
+    }
+
     /// Catalog opens from Settings → Questions, renders the STUBBED provider's
     /// entries (never real CloudKit under --ui-testing), and "Add to my
     /// questions" creates an ordinary local Question that appears in the
