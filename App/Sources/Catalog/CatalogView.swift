@@ -155,37 +155,36 @@ struct CatalogDetailView: View {
             List {
                 Section {
                     Text(entry.prompt)
-                        .font(.headline)
+                        .font(.title3).fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .listRowBackground(Color.white.opacity(0.12))
 
-                    HStack {
-                        Text("Type")
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Text(entry.type?.displayName ?? "Unknown")
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .listRowBackground(Color.white.opacity(0.12))
-
-                    if !entry.choices.isEmpty {
-                        ForEach(entry.choices, id: \.self) { choice in
-                            Text(choice)
-                                .foregroundStyle(.white.opacity(0.8))
-                                .listRowBackground(Color.white.opacity(0.12))
-                        }
-                    }
-
-                    if let credit = entry.credit, !credit.isEmpty {
-                        HStack {
-                            Text("Submitted by")
-                                .foregroundStyle(.white)
-                            Spacer()
-                            Text(credit)
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
+                    Text(metadataLine)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
                         .listRowBackground(Color.white.opacity(0.12))
+
+                    if !entry.tags.isEmpty {
+                        tagChips
+                            .listRowBackground(Color.white.opacity(0.12))
                     }
+
+                    if let summary = configSummary {
+                        Text(summary)
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .listRowBackground(Color.white.opacity(0.12))
+                    }
+                }
+
+                Section {
+                    QuestionInputPreviewView(control: QuestionInputPreview.control(for: entry))
+                        .padding(.vertical, 4)
+                        .listRowBackground(Color.white.opacity(0.12))
+                } header: {
+                    Text("PREVIEW")
+                        .font(.caption).fontWeight(.semibold)
+                        .foregroundStyle(.white.opacity(0.8))
                 }
 
                 Section {
@@ -230,8 +229,10 @@ struct CatalogDetailView: View {
             .readableColumn()
         }
         .navigationTitle("Catalog Question")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        #endif
         .alert("Flag this question?", isPresented: $showingFlagForm) {
             TextField("Reason (optional)", text: $flagReason)
             Button("Flag", role: .destructive) { submitFlag() }
@@ -266,5 +267,44 @@ struct CatalogDetailView: View {
                 statusMessage = error.localizedDescription
             }
         }
+    }
+
+    private var metadataLine: String {
+        var parts = [entry.type?.displayName ?? "Unknown type"]
+        if let credit = entry.credit, !credit.isEmpty { parts.append("by \(credit)") }
+        parts.append(entry.approvedAt.formatted(.dateTime.month().year()))
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder private var tagChips: some View {
+        HStack(spacing: 6) {
+            ForEach(entry.tags, id: \.self) { tag in
+                Text(tag).font(.caption2)
+                    .padding(.horizontal, 9).padding(.vertical, 3)
+                    .background(Color.white.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.white)
+            }
+        }
+    }
+
+    /// One-line "what you'll get" summary; nil when the preview already says it all.
+    private var configSummary: String? {
+        switch entry.type {
+        case .multipleChoice:
+            return entry.choices.isEmpty ? nil : "\(entry.choices.count) options"
+        case .number:
+            let style = entry.inputStyle.flatMap(NumberInputStyle.init(rawValue:)) ?? .textField
+            let cfg = NumberInputStyle.resolvedConfig(for: style, min: entry.inputMin, max: entry.inputMax, step: entry.inputStep)
+            if style == .textField { return "Number entry" }
+            return "\(style.displayName) · \(trimmed(cfg.min))–\(trimmed(cfg.max)) step \(trimmed(cfg.step))"
+        case .note:
+            return entry.placeholder.map { "Free text · \u{201C}\($0)\u{201D}" }
+        default:
+            return nil
+        }
+    }
+
+    private func trimmed(_ v: Double) -> String {
+        v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)
     }
 }
