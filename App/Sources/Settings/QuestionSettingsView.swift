@@ -172,7 +172,7 @@ struct QuestionRowView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .lineLimit(2)
-                    Text("\(question.type.displayName) – \(responseCount) responses")
+                    Text("\(question.type.displayName) – \(responseCount) response\(responseCount == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.7))
                 }

@@ -318,6 +318,9 @@ struct QuestionEditorView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button("Save") { save() }
                     .disabled(!canSave)
+                    #if os(macOS)
+                    .keyboardShortcut(.defaultAction)
+                    #endif
             }
         }
         .sheet(isPresented: $showingCatalogSubmit) {
