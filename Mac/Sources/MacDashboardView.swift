@@ -2,79 +2,25 @@ import DispatchKit
 import SwiftData
 import SwiftUI
 
-/// The Mac dashboard — the iPad grid (plan 27/29) as the detail pane's
-/// default content: every visible question's visualization at once in an
-/// adaptive card grid, fed by the kit's `VisualizationData` through the same
-/// memoized rebuild pattern (`visualizationTaskID`) as HomeView. Window
-/// resizes reflow the adaptive grid for free.
+/// The Mac dashboard — the Mac-native chrome (window background, "Dashboard"
+/// nav title, and the Mac-specific "no reports yet, sync from iPhone" empty
+/// state) wrapped around the shared `DashboardContentView` (Task 2.5). The
+/// populated body — the memoized visualization rebuild, the filter bar
+/// (`report-count`), and the card grid — now lives in that dual-target view
+/// and is identical to the iPad's; only the surrounding chrome differs, so it
+/// stays here. The Mac passes the adaptive grid columns (window resizes reflow
+/// it for free) and its sidebar `searchQuery`; the filter surface stays the
+/// Mac `MacFilterPopover` (see `DashboardContentView.filterButton`).
 struct MacDashboardView: View {
     @Query private var reports: [Report]
-    @Query(sort: \Question.sortOrder) private var questions: [Question]
-    @Query private var people: [PersonEntity]
     @Environment(ThemeStore.self) private var themeStore
-    @Environment(VisualizationFilterStore.self) private var filterStore
 
     /// The sidebar's search query (owned by MacRootView): the dashboard's
     /// charts must aggregate the same search-filtered report set the sidebar
     /// list and stat tiles show, not all-reports totals.
     var searchQuery: String = ""
 
-    @State private var visualizations: [String: QuestionVisualization] = [:]
-    @State private var isShowingFilter = false
-
     private var theme: Theme { themeStore.theme }
-
-    private var searchedReports: [Report] {
-        ReportSearch.filter(reports, query: searchQuery)
-    }
-
-    private var visibleQuestions: [Question] {
-        questions.filter { $0.isEnabled && filterStore.isVisible($0.uniqueIdentifier) }
-    }
-
-    /// HomeView's rebuild key, verbatim: report count + newest date +
-    /// identity fingerprint + visible questions + filter criteria + person
-    /// registry fingerprint. See HomeView.visualizationTaskID for the full
-    /// rationale (XOR identity fingerprint catches same-count delete+backfill).
-    private var visualizationTaskID: String {
-        let newestDate = reports.map(\.date).max()?.timeIntervalSinceReferenceDate ?? 0
-        let identityFingerprint = reports.reduce(into: 0) { partial, report in
-            partial ^= report.uniqueIdentifier.hashValue
-        }
-        let visibleIDs = visibleQuestions.map(\.uniqueIdentifier).sorted().joined(separator: ",")
-        let criteria = filterStore.criteria.map(\.canonicalKey).joined(separator: ",")
-        let peopleFingerprint = people.reduce(into: 0) { partial, person in
-            var hasher = Hasher()
-            hasher.combine(person.uniqueIdentifier)
-            hasher.combine(person.text)
-            hasher.combine(person.alternateNames)
-            partial ^= hasher.finalize()
-        }
-        return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)|\(peopleFingerprint)|\(searchQuery)"
-    }
-
-    private func filteredReports() -> [Report] {
-        let searched = searchedReports
-        let criteria = filterStore.criteria
-        guard !criteria.isEmpty else { return searched }
-        let peopleQuestionIDs = Set(questions.filter { $0.type == .people }.map(\.uniqueIdentifier))
-        return searched.filter {
-            ReportFilter.matches(report: $0, criteria: criteria,
-                                 peopleQuestionIDs: peopleQuestionIDs, people: people)
-        }
-    }
-
-    private func rebuildVisualizations() {
-        let matching = filteredReports()
-        var next: [String: QuestionVisualization] = [:]
-        for question in visibleQuestions {
-            next[question.uniqueIdentifier] = VisualizationData.build(for: question, reports: matching,
-                                                                      people: people)
-        }
-        if next != visualizations {
-            visualizations = next
-        }
-    }
 
     var body: some View {
         ZStack {
@@ -84,10 +30,13 @@ struct MacDashboardView: View {
             if reports.isEmpty {
                 emptyState
             } else {
-                VStack(spacing: 8) {
-                    filterBar
-                    visualizationGrid
-                }
+                // Grid only on the Mac (no pager, no bottom-strip dots), so the
+                // selection binding is inert.
+                DashboardContentView(
+                    searchQuery: searchQuery,
+                    columns: [GridItem(.adaptive(minimum: 340), spacing: 16)],
+                    selectedQuestionID: .constant(nil)
+                )
             }
         }
         .navigationTitle("Dashboard")
@@ -106,84 +55,6 @@ struct MacDashboardView: View {
                 .foregroundStyle(.white.opacity(0.7))
         }
         .accessibilityIdentifier("home-hexagon")
-    }
-
-    private var filterBar: some View {
-        let activeCount = filterStore.criteria.count
-        return VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Button {
-                    isShowingFilter = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus.square")
-                            .font(.subheadline)
-                        Text(activeCount == 0
-                             ? "Filter Visualizations…"
-                             : (activeCount == 1 ? "1 filter active" : "\(activeCount) filters active"))
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(.white.opacity(0.7))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("viz-filter-button")
-                .popover(isPresented: $isShowingFilter, arrowEdge: .bottom) {
-                    MacFilterPopover(
-                        questions: questions.filter(\.isEnabled),
-                        reports: reports,
-                        filterStore: filterStore
-                    )
-                }
-
-                Spacer()
-
-                Text("\(searchedReports.count) reports")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
-                    .accessibilityIdentifier("report-count")
-            }
-            .padding(.horizontal, 20)
-            Rectangle()
-                .fill(Color.white.opacity(0.25))
-                .frame(height: 0.5)
-        }
-        .padding(.top, 8)
-    }
-
-    @ViewBuilder
-    private var visualizationGrid: some View {
-        if visibleQuestions.isEmpty {
-            Spacer()
-            Text("No visualizations to show")
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.7))
-            Spacer()
-        } else {
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 16)],
-                          spacing: 16) {
-                    ForEach(visibleQuestions, id: \.uniqueIdentifier) { question in
-                        QuestionVisualizationView(
-                            question: question,
-                            visualization: visualizations[question.uniqueIdentifier] ?? .empty,
-                            theme: theme
-                        )
-                        .frame(height: 340)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom)
-            }
-            .accessibilityIdentifier("viz-grid")
-            .task(id: visualizationTaskID) {
-                rebuildVisualizations()
-            }
-        }
     }
 }
 
