@@ -99,8 +99,12 @@ extension XCUIApplication {
     func revealReports(timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
         if isPadShell {
             selectPane("Dashboard")
-            let row = buttons["report-row"].firstMatch
-            let list = collectionViews["reports-list"]
+            // Type-agnostic discovery: the row surfaces as a button (or cell)
+            // and the list as a collectionView (or table); querying strict types
+            // races the render and can miss the element (the same TOCTOU class
+            // hardened in openFirstReportRow).
+            let row = descendants(matching: .any).matching(identifier: "report-row").firstMatch
+            let list = descendants(matching: .any).matching(identifier: "reports-list").firstMatch
             if row.waitForExistence(timeout: 2) || list.exists { return }
             let toggle = navigationBars.buttons["Show Sidebar"]
             if toggle.waitForExistence(timeout: 5) { toggle.tap() }
