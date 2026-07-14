@@ -16,13 +16,8 @@ final class BackupSettingsUITests: XCTestCase {
         // section (Task 3.6) pushed the lower sections down; SwiftUI's List
         // lazily materializes off-screen rows, so scroll it in before asserting
         // (same idiom as testICloudScreenBackUpNowButtonAndCaption below).
-        XCTAssertTrue(app.buttons["questions-settings-link"].waitForExistence(timeout: 10))
         let dataLink = app.buttons["data-settings-link"]
-        var dataScrolls = 0
-        while !dataLink.isHittable, dataScrolls < 8 {
-            app.swipeUp()
-            dataScrolls += 1
-        }
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
 

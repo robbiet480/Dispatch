@@ -34,13 +34,8 @@ final class DeleteAllDataUITests: XCTestCase {
         // SwiftUI's List lazily materializes off-screen rows, so scroll it in
         // before tapping.
         app.buttons["settings-button"].tap()
-        XCTAssertTrue(app.buttons["questions-settings-link"].waitForExistence(timeout: 10))
         let dataLink = app.buttons["data-settings-link"]
-        var dataScrolls = 0
-        while !dataLink.isHittable, dataScrolls < 8 {
-            app.swipeUp()
-            dataScrolls += 1
-        }
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
 
@@ -109,13 +104,8 @@ final class DeleteAllDataUITests: XCTestCase {
         app.buttons["settings-button"].tap()
         // Data section is below the fold after the Manage section (Task 3.6);
         // scroll the lazily-rendered row in before tapping.
-        XCTAssertTrue(app.buttons["questions-settings-link"].waitForExistence(timeout: 10))
         let dataLink = app.buttons["data-settings-link"]
-        var dataScrolls = 0
-        while !dataLink.isHittable, dataScrolls < 8 {
-            app.swipeUp()
-            dataScrolls += 1
-        }
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
 
