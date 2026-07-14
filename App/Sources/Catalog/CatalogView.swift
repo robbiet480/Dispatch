@@ -11,18 +11,25 @@ struct CatalogView: View {
     @State private var showingSubmit = false
 
     var body: some View {
-        NavigationStack {
-            CatalogListView(store: store, selection: $selection) { showingSubmit = true }
-                .navigationTitle("Question Catalog")
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarColorScheme(.dark, for: .navigationBar)
-                #endif
-                .navigationDestination(item: detailBinding) { entry in
-                    CatalogDetailView(entry: entry, store: store)
-                }
-        }
-        .sheet(isPresented: $showingSubmit) { CatalogSubmitView(store: store) }
+        // No NavigationStack of its own. On iPhone this view is ALWAYS pushed
+        // into an ambient stack — from Settings' "Manage" section, or from
+        // `QuestionSettingsView`'s "QUESTION CATALOG…" row — so wrapping it in a
+        // second, nested stack made the detail push land in the inner stack
+        // while the list's back button popped the outer one. A double-back-tap
+        // (detail → list → questions) then hit two different navigation bars and
+        // could momentarily find none (Task 3.9). Relying on the ambient stack
+        // keeps list → detail → back one consistent hierarchy. The iPad/Mac
+        // shell hosts `CatalogListView` directly and never uses `CatalogView`.
+        CatalogListView(store: store, selection: $selection) { showingSubmit = true }
+            .navigationTitle("Question Catalog")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            #endif
+            .navigationDestination(item: detailBinding) { entry in
+                CatalogDetailView(entry: entry, store: store)
+            }
+            .sheet(isPresented: $showingSubmit) { CatalogSubmitView(store: store) }
     }
 
     /// Maps the id selection to the entry so `navigationDestination(item:)`
