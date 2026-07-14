@@ -21,7 +21,7 @@ Every task's requirements implicitly include these.
 - **Preserve Mac screenshot identifiers** used by `scripts/mac-shots.sh` / `MacScreenshotTests`: `report-count`, `report-row`, `detail-back-button`, `insight-card`, `mac-questions-list`, `mac-groups-list`, `mac-catalog-list`. When a pane's view is replaced, its `*-list` identifier must survive.
 - **After adding/removing files or editing `project.yml`:** run `xcodegen generate` before building the Xcode project.
 - **Commit message footer (every commit):**
-  ```
+  ```text
   Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
   ```
 
@@ -62,7 +62,7 @@ Every task's requirements implicitly include these.
 
 ---
 
-# Sprint 1 — Shared adaptive catalog
+## Sprint 1 — Shared adaptive catalog
 
 Delivers: `QuestionInputPreview` (logic + view), `CatalogListView`, upgraded shared `CatalogDetailView`, shared `CatalogSubmitView`, `plus` submit icon; iPhone reaches final form; Mac catalog pane uses the shared pieces (single-column push-within-pane until Sprint 3). Ends buildable on both platforms with green catalog UI tests.
 
@@ -899,7 +899,7 @@ Expected: both `BUILD SUCCEEDED`.
 
 ---
 
-# Sprint 2 — Cross-platform pane views
+## Sprint 2 — Cross-platform pane views
 
 Delivers: `InsightsView`, the Questions list+editor, the Groups list+detail, and the Dashboard content compile on macOS and are used by the Mac panes; the Mac duplicates are deleted. Theming comes for free (iOS views are already themed). Ends with the existing Mac shell rendering shared views, both platforms building, Mac screenshot suite green.
 
@@ -1124,7 +1124,7 @@ Expected: `swift test` passes; both builds succeed; all 7 Mac shots capture. Con
 
 ---
 
-# Sprint 3 — Shared shell + iPad adoption
+## Sprint 3 — Shared shell + iPad adoption
 
 Delivers: `PaneNavigation` (shared logic), `LargeScreenShell` adopted by both iPad and Mac, the iPad pane picker + trailing Settings gear, the Settings restructure (slim on iPad/Mac; iPhone Manage section), and the two remaining Mac fixes (hide reports sidebar off Dashboard, drop the duplicate pane title). Ends with iPad and Mac on one shell; full suite green.
 

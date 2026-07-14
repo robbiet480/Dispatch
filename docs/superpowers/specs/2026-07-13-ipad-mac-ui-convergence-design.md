@@ -190,7 +190,7 @@ the survey will actually show. Unknown/missing `inputStyle` → `.textField`.
 
 A single `LargeScreenShell` view used by **both** iPad and Mac:
 
-```
+```swift
 NavigationSplitView(columnVisibility) {
     sidebar(for: pane)          // reports | questions | groups | catalog | none
 } detail: {
