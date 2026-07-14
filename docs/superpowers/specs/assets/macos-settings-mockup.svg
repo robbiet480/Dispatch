@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="660" viewBox="0 0 1000 660" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Proposed macOS Settings — toolbar-tabbed preference panes</title>
+
+  <!-- page background (keeps the light window readable in GitHub dark mode) -->
+  <rect x="0" y="0" width="1000" height="660" rx="0" fill="#B9C0CC"/>
+  <text x="500" y="34" text-anchor="middle" font-size="17" font-weight="600" fill="#1D1D1F">Dispatch — macOS Settings (⌘,) · recommended: toolbar-tabbed panes</text>
+
+  <!-- ================= WINDOW 1 : GENERAL ================= -->
+  <g>
+    <!-- window shadow + body -->
+    <rect x="40" y="62" width="440" height="470" rx="12" fill="#000000" opacity="0.12"/>
+    <rect x="38" y="58" width="440" height="470" rx="12" fill="#ECECEC" stroke="#C7C7C7" stroke-width="1"/>
+
+    <!-- title bar -->
+    <path d="M38 70 a12 12 0 0 1 12 -12 h416 a12 12 0 0 1 12 12 v20 h-440 z" fill="#E4E4E4"/>
+    <circle cx="60" cy="72" r="6" fill="#FF5F57" stroke="#E0443E" stroke-width="0.5"/>
+    <circle cx="80" cy="72" r="6" fill="#FEBC2E" stroke="#DEA123" stroke-width="0.5"/>
+    <circle cx="100" cy="72" r="6" fill="#28C840" stroke="#1DAD2B" stroke-width="0.5"/>
+    <text x="258" y="76" text-anchor="middle" font-size="12.5" font-weight="600" fill="#4B4B4B">General</text>
+
+    <!-- toolbar with 4 tabs -->
+    <rect x="39" y="90" width="438" height="66" fill="#F2F2F2"/>
+    <line x1="39" y1="156" x2="477" y2="156" stroke="#D6D6D6" stroke-width="1"/>
+
+    <!-- General tab (selected) -->
+    <rect x="52" y="100" width="92" height="50" rx="7" fill="#D6E4FB"/>
+    <!-- gear -->
+    <g transform="translate(98,116)" stroke="#2A6DF4" stroke-width="2.4" fill="none">
+      <circle cx="0" cy="0" r="6.5"/>
+      <g stroke-linecap="round">
+        <line x1="0" y1="-11" x2="0" y2="-8.5"/><line x1="0" y1="8.5" x2="0" y2="11"/>
+        <line x1="-11" y1="0" x2="-8.5" y2="0"/><line x1="8.5" y1="0" x2="11" y2="0"/>
+        <line x1="-7.8" y1="-7.8" x2="-6" y2="-6"/><line x1="6" y1="6" x2="7.8" y2="7.8"/>
+        <line x1="7.8" y1="-7.8" x2="6" y2="-6"/><line x1="-6" y1="6" x2="-7.8" y2="7.8"/>
+      </g>
+    </g>
+    <text x="98" y="143" text-anchor="middle" font-size="11" font-weight="600" fill="#2A6DF4">General</text>
+
+    <!-- Sync tab -->
+    <g transform="translate(196,116)" stroke="#8A8A8E" stroke-width="2.2" fill="none" stroke-linecap="round">
+      <path d="M -7 -2 a 7.5 7.5 0 0 1 13 -3.5"/>
+      <path d="M 7 2 a 7.5 7.5 0 0 1 -13 3.5"/>
+      <path d="M 6 -8 l 0.5 4 l -4 0"/>
+      <path d="M -6 8 l -0.5 -4 l 4 0"/>
+    </g>
+    <text x="196" y="143" text-anchor="middle" font-size="11" fill="#6E6E73">Sync</text>
+
+    <!-- Data tab -->
+    <g transform="translate(294,116)">
+      <rect x="-11" y="-6" width="22" height="12" rx="3" fill="none" stroke="#8A8A8E" stroke-width="2.2"/>
+      <circle cx="5.5" cy="0" r="1.6" fill="#8A8A8E"/>
+    </g>
+    <text x="294" y="143" text-anchor="middle" font-size="11" fill="#6E6E73">Data</text>
+
+    <!-- About tab -->
+    <g transform="translate(392,116)">
+      <circle cx="0" cy="0" r="9" fill="none" stroke="#8A8A8E" stroke-width="2.2"/>
+      <circle cx="0" cy="-4" r="1.4" fill="#8A8A8E"/>
+      <line x1="0" y1="-1" x2="0" y2="5" stroke="#8A8A8E" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+    <text x="392" y="143" text-anchor="middle" font-size="11" fill="#6E6E73">About</text>
+
+    <!-- ===== General pane content (grouped Form) ===== -->
+    <!-- Appearance group -->
+    <text x="60" y="188" font-size="11.5" font-weight="600" fill="#8A8A8E">APPEARANCE</text>
+    <rect x="56" y="198" width="404" height="112" rx="9" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+
+    <text x="72" y="228" font-size="13.5" fill="#1D1D1F">Theme Color</text>
+    <!-- theme swatches -->
+    <g>
+      <rect x="196" y="216" width="40" height="20" rx="10" fill="#E8564E"/>
+      <path d="M212 226 l3 3 l5 -6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="244" y="216" width="40" height="20" rx="10" fill="#F0A02E"/>
+      <rect x="292" y="216" width="40" height="20" rx="10" fill="#37B24D"/>
+      <rect x="340" y="216" width="40" height="20" rx="10" fill="#2A6DF4"/>
+      <rect x="388" y="216" width="40" height="20" rx="10" fill="#8A54D6"/>
+    </g>
+    <line x1="72" y1="252" x2="444" y2="252" stroke="#EDEDED" stroke-width="1"/>
+    <text x="72" y="278" font-size="13.5" fill="#1D1D1F">Appearance</text>
+    <rect x="360" y="266" width="84" height="22" rx="6" fill="#F0F0F0" stroke="#DADADA" stroke-width="1"/>
+    <text x="402" y="281" text-anchor="middle" font-size="12" fill="#4B4B4B">System ⌄</text>
+
+    <text x="60" y="332" font-size="11" fill="#8A8A8E">Reports filed on your iPhone or Apple Watch sync here through</text>
+    <text x="60" y="348" font-size="11" fill="#8A8A8E">your private iCloud database.</text>
+
+    <!-- footnote of pane -->
+    <text x="60" y="392" font-size="11.5" font-weight="600" fill="#8A8A8E">ABOUT (optional fold-in)</text>
+    <rect x="56" y="402" width="404" height="66" rx="9" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+    <text x="72" y="430" font-size="13.5" fill="#1D1D1F">Version</text>
+    <text x="444" y="430" text-anchor="end" font-size="13" fill="#8A8A8E">1.0 (33)</text>
+    <line x1="72" y1="444" x2="444" y2="444" stroke="#EDEDED" stroke-width="1"/>
+    <text x="72" y="462" font-size="13" fill="#2A6DF4">View on GitHub ↗</text>
+
+    <text x="258" y="512" text-anchor="middle" font-size="11.5" fill="#5A6270" font-style="italic">Native Form · system appearance · window auto-sizes per pane</text>
+  </g>
+
+  <!-- ================= WINDOW 2 : DATA ================= -->
+  <g>
+    <rect x="522" y="62" width="440" height="470" rx="12" fill="#000000" opacity="0.12"/>
+    <rect x="520" y="58" width="440" height="470" rx="12" fill="#ECECEC" stroke="#C7C7C7" stroke-width="1"/>
+
+    <!-- title bar -->
+    <path d="M520 70 a12 12 0 0 1 12 -12 h416 a12 12 0 0 1 12 12 v20 h-440 z" fill="#E4E4E4"/>
+    <circle cx="542" cy="72" r="6" fill="#FF5F57" stroke="#E0443E" stroke-width="0.5"/>
+    <circle cx="562" cy="72" r="6" fill="#FEBC2E" stroke="#DEA123" stroke-width="0.5"/>
+    <circle cx="582" cy="72" r="6" fill="#28C840" stroke="#1DAD2B" stroke-width="0.5"/>
+    <text x="740" y="76" text-anchor="middle" font-size="12.5" font-weight="600" fill="#4B4B4B">Data</text>
+
+    <!-- toolbar -->
+    <rect x="521" y="90" width="438" height="66" fill="#F2F2F2"/>
+    <line x1="521" y1="156" x2="959" y2="156" stroke="#D6D6D6" stroke-width="1"/>
+
+    <!-- General tab -->
+    <g transform="translate(580,116)" stroke="#8A8A8E" stroke-width="2.2" fill="none">
+      <circle cx="0" cy="0" r="6.5"/>
+      <g stroke-linecap="round">
+        <line x1="0" y1="-11" x2="0" y2="-8.5"/><line x1="0" y1="8.5" x2="0" y2="11"/>
+        <line x1="-11" y1="0" x2="-8.5" y2="0"/><line x1="8.5" y1="0" x2="11" y2="0"/>
+        <line x1="-7.8" y1="-7.8" x2="-6" y2="-6"/><line x1="6" y1="6" x2="7.8" y2="7.8"/>
+        <line x1="7.8" y1="-7.8" x2="6" y2="-6"/><line x1="-6" y1="6" x2="-7.8" y2="7.8"/>
+      </g>
+    </g>
+    <text x="580" y="143" text-anchor="middle" font-size="11" fill="#6E6E73">General</text>
+
+    <!-- Sync tab -->
+    <g transform="translate(678,116)" stroke="#8A8A8E" stroke-width="2.2" fill="none" stroke-linecap="round">
+      <path d="M -7 -2 a 7.5 7.5 0 0 1 13 -3.5"/>
+      <path d="M 7 2 a 7.5 7.5 0 0 1 -13 3.5"/>
+      <path d="M 6 -8 l 0.5 4 l -4 0"/>
+      <path d="M -6 8 l -0.5 -4 l 4 0"/>
+    </g>
+    <text x="678" y="143" text-anchor="middle" font-size="11" fill="#6E6E73">Sync</text>
+
+    <!-- Data tab (selected) -->
+    <rect x="730" y="100" width="92" height="50" rx="7" fill="#D6E4FB"/>
+    <g transform="translate(776,116)">
+      <rect x="-11" y="-6" width="22" height="12" rx="3" fill="none" stroke="#2A6DF4" stroke-width="2.4"/>
+      <circle cx="5.5" cy="0" r="1.7" fill="#2A6DF4"/>
+    </g>
+    <text x="776" y="143" text-anchor="middle" font-size="11" font-weight="600" fill="#2A6DF4">Data</text>
+
+    <!-- About tab -->
+    <g transform="translate(874,116)">
+      <circle cx="0" cy="0" r="9" fill="none" stroke="#8A8A8E" stroke-width="2.2"/>
+      <circle cx="0" cy="-4" r="1.4" fill="#8A8A8E"/>
+      <line x1="0" y1="-1" x2="0" y2="5" stroke="#8A8A8E" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+    <text x="874" y="143" text-anchor="middle" font-size="11" fill="#6E6E73">About</text>
+
+    <!-- ===== Data pane content ===== -->
+    <text x="542" y="188" font-size="11.5" font-weight="600" fill="#8A8A8E">EXPORT &amp; IMPORT</text>
+    <rect x="538" y="198" width="404" height="150" rx="9" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+
+    <text x="554" y="226" font-size="13.5" fill="#1D1D1F">Import Reporter / Dispatch JSON</text>
+    <rect x="852" y="214" width="74" height="22" rx="6" fill="#F0F0F0" stroke="#DADADA" stroke-width="1"/>
+    <text x="889" y="229" text-anchor="middle" font-size="12" fill="#2A6DF4">Import…</text>
+    <line x1="554" y1="248" x2="926" y2="248" stroke="#EDEDED" stroke-width="1"/>
+
+    <text x="554" y="274" font-size="13.5" fill="#1D1D1F">Export</text>
+    <!-- clean labeled export rows instead of a cramped button jam -->
+    <g font-size="12" fill="#2A6DF4">
+      <rect x="620" y="262" width="92" height="21" rx="6" fill="#F0F0F0" stroke="#DADADA" stroke-width="1"/>
+      <text x="666" y="277" text-anchor="middle">Day One JSON…</text>
+      <rect x="722" y="262" width="96" height="21" rx="6" fill="#F0F0F0" stroke="#DADADA" stroke-width="1"/>
+      <text x="770" y="277" text-anchor="middle">Markdown…</text>
+      <rect x="828" y="262" width="98" height="21" rx="6" fill="#F0F0F0" stroke="#DADADA" stroke-width="1"/>
+      <text x="877" y="277" text-anchor="middle">Dispatch JSON…</text>
+    </g>
+    <line x1="554" y1="296" x2="926" y2="296" stroke="#EDEDED" stroke-width="1"/>
+    <g font-size="12" fill="#2A6DF4">
+      <rect x="554" y="310" width="66" height="21" rx="6" fill="#F0F0F0" stroke="#DADADA" stroke-width="1"/>
+      <text x="587" y="325" text-anchor="middle">CSV…</text>
+      <rect x="630" y="310" width="128" height="21" rx="6" fill="#F0F0F0" stroke="#DADADA" stroke-width="1"/>
+      <text x="694" y="325" text-anchor="middle">Questions (JSON/CSV)…</text>
+    </g>
+
+    <!-- Danger zone -->
+    <text x="542" y="382" font-size="11.5" font-weight="600" fill="#8A8A8E">DANGER ZONE</text>
+    <rect x="538" y="392" width="404" height="52" rx="9" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+    <text x="554" y="423" font-size="13.5" fill="#E0443E">Delete All Data…</text>
+
+    <text x="740" y="490" text-anchor="middle" font-size="11.5" fill="#5A6270" font-style="italic">Export unstacked into a labeled list · same actions as File ▸ Export</text>
+  </g>
+
+  <text x="500" y="560" text-anchor="middle" font-size="12.5" fill="#2C3340">iOS-only concerns (Notifications · Sensors · Beacons · App Lock · Webhooks) stay off Mac — capture lives on iPhone / Watch.</text>
+  <text x="500" y="586" text-anchor="middle" font-size="12.5" fill="#2C3340">Questions · Prompt Groups · Catalog · Insights are top-level panes (⌘3–5), not Settings.</text>
+  <text x="500" y="628" text-anchor="middle" font-size="11" fill="#4A5160">Mockup of the recommended design (Approach A). Illustrative — not final layout.</text>
+</svg>
