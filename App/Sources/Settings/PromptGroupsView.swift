@@ -1376,8 +1376,12 @@ struct PromptGroupEditorView: View {
         target.questionIDs = questionIDs
         target.schedule = draftSchedule
         target.isEnabled = isEnabled
-        try? context.save()
-        onSaved?(target.uniqueIdentifier)
+        do {
+            try context.save()
+            onSaved?(target.uniqueIdentifier)
+        } catch {
+            // Save failed — don't drive shell selection off unpersisted state.
+        }
         // On macOS the save is enough — CloudKit syncs it and the iPhone's
         // RemoteChangeObserver replans (plan 47). iOS replans/refreshes locally.
         #if os(iOS)

@@ -53,9 +53,10 @@ struct LargeScreenShell: View {
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
-    /// The reports sidebar's search query (macOS only — the Mac reports list
-    /// owns the search field). iOS's `ReportsListView` carries its own internal
-    /// search, so this stays "" there.
+    /// The reports sidebar's search query, owned by the shell and shared with
+    /// the dashboard grid. Both reports lists bind their search field to it —
+    /// the Mac's `MacReportsListView` and (via `searchText:`) iOS's
+    /// `ReportsListView` — so the grid filters off the same query on both.
     @State private var reportsSearch = ""
     @State private var catalogStore = CatalogStore()
     @State private var showingCatalogSubmit = false
@@ -106,24 +107,21 @@ struct LargeScreenShell: View {
             resetComposing()
             syncColumnVisibility()
         }
-        // Auto-select the first catalog entry once the list loads so the detail
-        // column isn't blank at regular width (optional nicety) — only when on
-        // the catalog pane with nothing chosen.
-        .onChange(of: firstCatalogID) { _, newValue in
-            if nav.pane == .catalog, nav.selectedCatalogID == nil, let newValue {
-                nav.selectedCatalogID = newValue
-            }
-        }
-        // Fix wave 1: a search/filter change can drop the selected entry out
-        // of `filteredEntries` entirely (not just change which is first),
-        // leaving the detail column stuck on an empty state while the list is
-        // populated — auto-select-first above only fires when the selection
-        // is nil. Reconcile here: if the current selection is no longer in
-        // the filtered list, clear it so the auto-select-first path re-fires.
-        .onChange(of: catalogStore.filteredEntries) { _, entries in
+        // Keep the catalog selection consistent with the filtered list in ONE
+        // place. Fix wave 1: a search/filter change can drop the selected entry
+        // out of `filteredEntries` entirely, so clear a now-stale selection;
+        // then (only on the catalog pane) auto-select the first entry when
+        // nothing remains chosen, so the detail column isn't blank at regular
+        // width. `initial: true` seeds the selection on first appearance. Folded
+        // from the two former handlers — a filter drop and the re-select had to
+        // reconcile in the same update or the detail could stay blank.
+        .onChange(of: catalogStore.filteredEntries, initial: true) { _, entries in
             if let selected = nav.selectedCatalogID,
                !entries.contains(where: { $0.id == selected }) {
                 nav.selectedCatalogID = nil
+            }
+            if nav.pane == .catalog, nav.selectedCatalogID == nil {
+                nav.selectedCatalogID = entries.first?.id
             }
         }
         .sheet(isPresented: $showingCatalogSubmit) {
@@ -197,7 +195,10 @@ struct LargeScreenShell: View {
             MacReportsListView(selection: reportSelection, searchQuery: $reportsSearch)
                 .navigationSplitViewColumnWidth(min: 300, ideal: 360)
             #else
-            ReportsListView(selection: reportSelection)
+            // Thread the shell's shared search into the reports list so the
+            // iPad dashboard grid (`DashboardContentView(searchQuery:)`) filters
+            // off the same query the sidebar owns — parity with the Mac.
+            ReportsListView(selection: reportSelection, searchText: $reportsSearch)
             #endif
         case .insights:
             // No list — Insights is full-width (columnVisibility → .detailOnly).
@@ -413,10 +414,6 @@ struct LargeScreenShell: View {
 
     private var catalogSelection: Binding<CatalogQuestion.ID?> {
         Binding(get: { nav.selectedCatalogID }, set: { nav.selectedCatalogID = $0 })
-    }
-
-    private var firstCatalogID: CatalogQuestion.ID? {
-        catalogStore.filteredEntries.first?.id
     }
 
     // MARK: - State transitions

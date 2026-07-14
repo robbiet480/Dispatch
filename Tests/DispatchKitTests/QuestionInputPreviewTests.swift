@@ -40,6 +40,33 @@ final class QuestionInputPreviewTests: XCTestCase {
         XCTAssertEqual(control, .choices(options: ["A", "B", "C"], multiSelect: true, selected: 0))
     }
 
+    // A "poison pill" catalog entry with an extreme numeric bound must not
+    // trap the `Double`→`Int` cast in the tapCounter preview. A huge positive
+    // min forces `sampleCount` past `Int.max`; `Int(hugeDouble)` would crash,
+    // so the resolver clamps into range and yields an in-range Int instead.
+    func testTapCounterWithExtremeBoundClampsInsteadOfTrapping() {
+        let control = QuestionInputPreview.control(
+            forType: .number, inputStyle: .tapCounter, choices: [], allowsMultipleSelection: false,
+            inputMin: 1e20, inputMax: nil, inputStep: nil, placeholder: nil, defaultAnswer: nil)
+        guard case .number(.tapCounter(let value)) = control else {
+            return XCTFail("expected a tapCounter preview, got \(control)")
+        }
+        // In-range (didn't trap) and clamped to the ceiling for the poison bound.
+        XCTAssertEqual(value, Int.max)
+    }
+
+    // The mirror poison bound (huge negative min) must likewise resolve without
+    // trapping — here `sampleCount` clamps the friendly sample of 3 in-range.
+    func testTapCounterWithExtremeNegativeBoundDoesNotTrap() {
+        let control = QuestionInputPreview.control(
+            forType: .number, inputStyle: .tapCounter, choices: [], allowsMultipleSelection: false,
+            inputMin: -1e20, inputMax: nil, inputStep: nil, placeholder: nil, defaultAnswer: nil)
+        guard case .number(.tapCounter(let value)) = control else {
+            return XCTFail("expected a tapCounter preview, got \(control)")
+        }
+        XCTAssertEqual(value, 3)
+    }
+
     func testYesNoNoteTokensPeopleLocationTime() {
         func c(_ t: QuestionType) -> QuestionPreviewControl {
             QuestionInputPreview.control(forType: t, inputStyle: .textField, choices: [],

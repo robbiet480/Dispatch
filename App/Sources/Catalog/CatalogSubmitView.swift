@@ -3,11 +3,14 @@ import SwiftData
 import SwiftUI
 
 private extension View {
-    /// `.keyboardType(.decimalPad)` is iOS/UIKit-only; a no-op on macOS,
-    /// which has no software keyboard type to request.
+    /// Numeric entry keyboard. `.numbersAndPunctuation` (not `.decimalPad`) so
+    /// the minus key is available — number configs legitimately allow negative
+    /// bounds (`resolvedConfig` accepts any finite min < max; nothing forces
+    /// min ≥ 0). iOS/UIKit-only; a no-op on macOS, which has no software
+    /// keyboard type to request.
     @ViewBuilder func decimalKeyboard() -> some View {
         #if os(iOS)
-        self.keyboardType(.decimalPad)
+        self.keyboardType(.numbersAndPunctuation)
         #else
         self
         #endif

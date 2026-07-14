@@ -161,6 +161,8 @@ struct QuestionInputPreviewView: View {
     }
 
     private func trimmed(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+        // Format directly — `Int(value)` traps for an extreme bound (e.g. the
+        // `.greatestFiniteMagnitude` "no max" of a stepper/tapCounter config).
+        value == value.rounded() ? String(format: "%.0f", value) : String(format: "%.1f", value)
     }
 }
