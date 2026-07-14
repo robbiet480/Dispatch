@@ -10,13 +10,9 @@ final class CatalogUITests: XCTestCase {
     /// and `QuestionSettingsView.swift` (`question-catalog-link`).
     @MainActor
     private func openCatalog(_ app: XCUIApplication) {
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        // iPhone: Settings → Questions → Question Catalog. iPad shell: the
+        // Catalog pane (see XCUIApplication.openCatalog()).
+        app.openCatalog()
     }
 
     /// Task 1.3 (iPad/Mac UI convergence): tapping a catalog entry pushes a
@@ -62,8 +58,15 @@ final class CatalogUITests: XCTestCase {
         XCTAssertTrue(stubEntry.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["HOW IS YOUR ENERGY LEVEL?"].exists)
 
-        // Open the entry and add it to my questions.
-        stubEntry.tap()
+        // Open the entry and add it to my questions. On the iPad Catalog pane
+        // the first entry auto-selects, so its prompt also renders in the detail
+        // preview — scope the tap to the sidebar list row to stay unambiguous.
+        if app.isPadShell {
+            app.descendants(matching: .any).matching(identifier: "question-catalog-list")
+                .firstMatch.staticTexts["DID YOU DRINK WATER TODAY?"].firstMatch.tap()
+        } else {
+            stubEntry.tap()
+        }
         let addButton = app.buttons["catalog-add-button"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 10))
         addButton.tap()
@@ -72,9 +75,14 @@ final class CatalogUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 10))
         XCTAssertEqual(status.label, "Added to your questions.")
 
-        // Back to catalog, back to Questions: the new local question exists.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // The new local question exists in the Questions list. iPhone pops
+        // catalog → Questions; the iPad shell switches to the Questions pane.
+        if app.isPadShell {
+            app.openQuestions()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
 
         let newQuestionRow = app.staticTexts["DID YOU DRINK WATER TODAY?"]
         XCTAssertTrue(newQuestionRow.waitForExistence(timeout: 10),
@@ -107,9 +115,14 @@ final class CatalogUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 10))
         XCTAssertEqual(status.label, "Added to your questions.")
 
-        // Back to catalog, back to Questions, open the new question's editor.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Open the new question's editor from the Questions list. iPhone pops
+        // catalog → Questions; the iPad shell switches to the Questions pane.
+        if app.isPadShell {
+            app.openQuestions()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
         let newRow = app.staticTexts["HOW STRESSED ARE YOU?"]
         XCTAssertTrue(newRow.waitForExistence(timeout: 10))
         newRow.tap()
@@ -268,7 +281,12 @@ final class CatalogUITests: XCTestCase {
 
         // Dismiss the sheet, leave the catalog: the local question exists.
         app.buttons["Cancel"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // iPhone pops catalog → Questions; the iPad shell switches to the pane.
+        if app.isPadShell {
+            app.openQuestions()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
         let newRow = app.staticTexts["DID YOU DRINK WATER TODAY?"]
         XCTAssertTrue(newRow.waitForExistence(timeout: 10),
                       "expected the added duplicate to appear in the local Questions list")
@@ -322,10 +340,7 @@ final class CatalogUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
+        app.openQuestions()
 
         let addButton = app.buttons["add-question-button"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 10))

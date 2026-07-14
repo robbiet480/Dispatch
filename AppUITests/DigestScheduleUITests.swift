@@ -10,9 +10,7 @@ final class DigestScheduleUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
+        app.openSettings()
 
         let notificationsLink = app.buttons["notifications-settings-link"]
         XCTAssertTrue(notificationsLink.waitForExistence(timeout: 10))

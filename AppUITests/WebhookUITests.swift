@@ -16,12 +16,17 @@ final class WebhookUITests: XCTestCase {
         // fold after the Settings "Manage" section (Task 3.6) pushed the lower
         // sections down; SwiftUI's List lazily materializes off-screen rows, so
         // scroll it in before tapping.
-        app.buttons["settings-button"].tap()
+        app.openSettings()
         let dataLink = app.buttons["data-settings-link"]
-        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons[app.isPadShell ? "notifications-settings-link" : "questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
+        // The Advanced → Webhook row sits near the bottom of the Data screen;
+        // on the shorter iPad Settings sheet it starts below the fold, and the
+        // lazy List doesn't realize off-screen rows — scroll it in first.
         let webhookLink = app.buttons["webhook-settings-link"]
+        var webhookScrolls = 0
+        while !webhookLink.isHittable, webhookScrolls < 8 { app.swipeUp(); webhookScrolls += 1 }
         XCTAssertTrue(webhookLink.waitForExistence(timeout: 10))
         webhookLink.tap()
 
@@ -52,10 +57,17 @@ final class WebhookUITests: XCTestCase {
         XCTAssertTrue(testResult.label.contains("Test delivered"),
                       "expected the stubbed test send to succeed, got: \(testResult.label)")
 
-        // Back out to Home and file a report through the survey.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Back out to Home and file a report through the survey. iPhone pops
+        // Webhook → Data → Settings → Home. On the iPad shell, Webhook/Data are
+        // pushes INSIDE the Settings sheet, so dismissing the sheet lands back
+        // on the Dashboard.
+        if app.isPadShell {
+            app.closeSettings()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
         let reportButton = app.buttons["report-button"]
         XCTAssertTrue(reportButton.waitForExistence(timeout: 10))
         reportButton.tap()
@@ -71,10 +83,12 @@ final class WebhookUITests: XCTestCase {
         // The post-save enqueue+drain hits the stub → status row shows the
         // delivery. Data is below the fold (Manage section, Task 3.6) — scroll
         // the lazily-rendered row in again before tapping.
-        app.buttons["settings-button"].tap()
-        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
+        app.openSettings()
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons[app.isPadShell ? "notifications-settings-link" : "questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
+        webhookScrolls = 0
+        while !webhookLink.isHittable, webhookScrolls < 8 { app.swipeUp(); webhookScrolls += 1 }
         XCTAssertTrue(webhookLink.waitForExistence(timeout: 10))
         webhookLink.tap()
         XCTAssertTrue(status.waitForExistence(timeout: 10))

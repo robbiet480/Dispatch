@@ -105,11 +105,10 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["report-count"].waitForExistence(timeout: 15))
     }
 
-    /// Navigates home → Settings root.
+    /// Navigates home → Settings root (idiom-aware: iPhone push / iPad sheet).
     @MainActor
     private func openSettings(_ app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["settings-button"].waitForExistence(timeout: 15))
-        app.buttons["settings-button"].tap()
+        app.openSettings(timeout: 15)
     }
 
     /// One deterministic pass over the money shots. A single ordered method
@@ -128,7 +127,7 @@ final class ScreenshotTests: XCTestCase {
         // 02 — report detail.
         app = launchApp(shotIndex: 2)
         awaitHome(app)
-        app.buttons["reports-list-button"].tap()
+        app.revealReports()
         let firstRow = app.descendants(matching: .any).matching(identifier: "report-row").firstMatch
         XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
         firstRow.tap()
@@ -149,10 +148,7 @@ final class ScreenshotTests: XCTestCase {
 
         // 04 — prompt groups list.
         app = launchApp(shotIndex: 4)
-        openSettings(app)
-        let groupsLink = app.buttons["prompt-groups-link"]
-        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
-        groupsLink.tap()
+        app.openGroups()
         // Rows render group names uppercased.
         var workdayRow = app.staticTexts["WORKDAY CHECK-IN"]
         XCTAssertTrue(workdayRow.waitForExistence(timeout: 10))
@@ -161,9 +157,7 @@ final class ScreenshotTests: XCTestCase {
 
         // 05 — prompt group editor.
         app = launchApp(shotIndex: 5)
-        openSettings(app)
-        XCTAssertTrue(app.buttons["prompt-groups-link"].waitForExistence(timeout: 10))
-        app.buttons["prompt-groups-link"].tap()
+        app.openGroups()
         workdayRow = app.staticTexts["WORKDAY CHECK-IN"]
         XCTAssertTrue(workdayRow.waitForExistence(timeout: 10))
         workdayRow.tap()
@@ -185,10 +179,7 @@ final class ScreenshotTests: XCTestCase {
 
         // 07 — insights over the demo data (bonus).
         app = launchApp(shotIndex: 7)
-        openSettings(app)
-        let insightsLink = app.buttons["insights-link"]
-        XCTAssertTrue(insightsLink.waitForExistence(timeout: 10))
-        insightsLink.tap()
+        app.openInsights()
         XCTAssertTrue(app.otherElements["insights-view"].waitForExistence(timeout: 15)
                       || app.collectionViews["insights-view"].waitForExistence(timeout: 15)
                       || app.scrollViews["insights-view"].waitForExistence(timeout: 15))

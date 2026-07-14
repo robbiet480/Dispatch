@@ -15,9 +15,7 @@ final class PeopleUITests: XCTestCase {
         app.launch()
 
         // Settings → Sensors → toggle contacts suggestions ON.
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
+        app.openSettings()
         let sensorsLink = app.buttons["Sensors"].firstMatch.exists
             ? app.buttons["Sensors"].firstMatch
             : app.staticTexts["Sensors"].firstMatch
@@ -45,12 +43,17 @@ final class PeopleUITests: XCTestCase {
         }
         XCTAssertEqual(toggle.value as? String, "1",
                        "contacts suggestions toggle did not switch on")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Back to the dashboard. iPhone pops Sensors → Settings → Home; the iPad
+        // shell dismisses the Settings sheet (Sensors is pushed inside it).
+        if app.isPadShell {
+            app.closeSettings()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
 
         // Start a report and navigate to the people question.
-        let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["report-button"].waitForExistence(timeout: 10))
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
                       || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
@@ -93,7 +96,7 @@ final class PeopleUITests: XCTestCase {
 
         // Seed a person by filing a report with a people answer.
         let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["report-button"].waitForExistence(timeout: 10))
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
                       || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
@@ -116,7 +119,7 @@ final class PeopleUITests: XCTestCase {
         XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
 
         // Settings → People: the seeded person renders.
-        app.buttons["settings-button"].tap()
+        app.openSettings()
         let peopleLink = app.buttons["people-settings-link"]
         XCTAssertTrue(peopleLink.waitForExistence(timeout: 10))
         peopleLink.tap()
@@ -142,7 +145,14 @@ final class PeopleUITests: XCTestCase {
         renameButton.tap()
 
         // Back to the list: new display name shown, old name in the caption.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Both People and its detail are pushes; on the iPad shell they're inside
+        // the Settings sheet (whose back control carries the `BackButton` id),
+        // where a bare boundBy:0 would hit the background shell nav bar instead.
+        if app.isPadShell {
+            app.buttons["BackButton"].firstMatch.tap()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
         XCTAssertTrue(app.staticTexts["Renamedprobe"].waitForExistence(timeout: 10),
                       "renamed person did not appear in the People list")
         XCTAssertTrue(app.staticTexts["Also: Personprobe"].waitForExistence(timeout: 10),

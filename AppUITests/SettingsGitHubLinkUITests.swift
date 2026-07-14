@@ -10,7 +10,7 @@ final class SettingsGitHubLinkUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].tap()
+        app.openSettings()
 
         // The link is the final row, below the fold on compact iPhone widths.
         // SwiftUI's List lazily materializes off-screen rows, so scroll it into

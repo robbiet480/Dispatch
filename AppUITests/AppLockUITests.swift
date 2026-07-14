@@ -114,16 +114,14 @@ final class AppLockUITests: XCTestCase {
         XCTAssertTrue(unlockButton.waitForExistence(timeout: 10))
         unlockButton.tap()
 
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
+        app.openSettings()
 
         // Row present while lock is on, and defaults to OFF. The Privacy
         // section sits below the fold after the Settings "Manage" section
         // (Task 3.6) pushed the lower sections down; SwiftUI's List lazily
         // materializes off-screen rows, so scroll it in before asserting.
         let spotlightToggle = app.switches["spotlight-while-locked-toggle"]
-        app.scrollUntilHittable(spotlightToggle, anchoredOn: app.buttons["questions-settings-link"])
+        app.scrollUntilHittable(spotlightToggle, anchoredOn: app.buttons[app.isPadShell ? "notifications-settings-link" : "questions-settings-link"])
         XCTAssertTrue(spotlightToggle.waitForExistence(timeout: 10))
         XCTAssertEqual(spotlightToggle.value as? String, "0")
 

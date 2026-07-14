@@ -11,13 +11,7 @@ final class InsightsUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let insightsLink = app.buttons["insights-link"]
-        XCTAssertTrue(insightsLink.waitForExistence(timeout: 10))
-        insightsLink.tap()
+        app.openInsights()
 
         // Combined accessibility elements surface with a backend-dependent
         // element type — match by identifier across any type.
@@ -50,13 +44,7 @@ final class InsightsUITests: XCTestCase {
                                "--demo-data"]
         app.launch()
 
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let insightsLink = app.buttons["insights-link"]
-        XCTAssertTrue(insightsLink.waitForExistence(timeout: 10))
-        insightsLink.tap()
+        app.openInsights()
 
         let questionRow = app.descendants(matching: .any)["correlation-question-row"].firstMatch
         XCTAssertTrue(questionRow.waitForExistence(timeout: 10),

@@ -10,7 +10,7 @@ final class SyncDiagnosticsUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].tap()
+        app.openSettings()
         let iCloudLink = app.buttons["icloud-settings-link"]
         // The Data section renders below the fold on compact iPhone widths, and
         // SwiftUI's List lazily materializes off-screen rows — so the row isn't
