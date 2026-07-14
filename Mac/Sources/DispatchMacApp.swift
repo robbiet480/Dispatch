@@ -180,13 +180,25 @@ struct DispatchMacApp: App {
             }
         }
 
+        // Native macOS preferences: a toolbar-tabbed `TabView` inside the
+        // `Settings` scene (⌘,), one pane per concern. Deliberately
+        // system-native chrome — the app theme stops at the main window.
         Settings {
-            MacSettingsView()
-                .environment(themeStore)
-                .environment(remoteChangeObserver)
-                .environment(exportController)
-                .environment(backupManager)
-                .environment(\.appDefaults, appDefaults)
+            TabView {
+                GeneralSettingsPane()
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                SyncSettingsPane()
+                    .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+                DataSettingsPane()
+                    .tabItem { Label("Data", systemImage: "externaldrive") }
+                AboutSettingsPane()
+                    .tabItem { Label("About", systemImage: "info.circle") }
+            }
+            .environment(themeStore)
+            .environment(remoteChangeObserver)
+            .environment(exportController)
+            .environment(backupManager)
+            .environment(\.appDefaults, appDefaults)
         }
         .modelContainer(container)
     }
