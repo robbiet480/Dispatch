@@ -13,12 +13,21 @@ struct SettingsView: View {
 
     private var theme: Theme { themeStore.theme }
 
+    /// The five panes (Dashboard/Insights/Questions/Groups/Catalog) are
+    /// top-level shell tabs on iPad (Task 3.6) and Mac (Task 3.5), so their
+    /// Settings rows must not double up here. On iPhone, which has no tab
+    /// bar, Settings remains the only way to reach them.
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
     var body: some View {
         ZStack {
             Color.themeBackground(theme)
                 .ignoresSafeArea()
 
             List {
+                if !isPad {
+                    manageSection
+                }
                 scheduleSection
                 surveySection
                 privacySection
@@ -58,6 +67,35 @@ struct SettingsView: View {
 
     // MARK: - Sections
 
+    /// iPhone only: Questions/Prompt Groups/Catalog are shell tabs on iPad
+    /// (Task 3.6) and Mac (Task 3.5), so this section only exists where
+    /// there's no tab bar to reach them from. IDs are carried over from
+    /// their old homes in `surveySection`/`scheduleSection` so existing
+    /// iPhone UI tests keep resolving.
+    private var manageSection: some View {
+        Section {
+            NavigationLink(destination: QuestionSettingsView()) {
+                settingsLabel("Questions")
+            }
+            .listRowBackground(Color.white.opacity(0.12))
+            .accessibilityIdentifier("questions-settings-link")
+
+            NavigationLink(destination: PromptGroupsView()) {
+                settingsLabel("Prompt Groups")
+            }
+            .accessibilityIdentifier("prompt-groups-link")
+            .listRowBackground(Color.white.opacity(0.12))
+
+            NavigationLink(destination: CatalogView()) {
+                settingsLabel("Catalog")
+            }
+            .accessibilityIdentifier("catalog-settings-link")
+            .listRowBackground(Color.white.opacity(0.12))
+        } header: {
+            sectionHeader("MANAGE")
+        }
+    }
+
     private var scheduleSection: some View {
         Section {
             NavigationLink(destination: NotificationSettingsView(prefs: notificationPrefs)) {
@@ -74,12 +112,6 @@ struct SettingsView: View {
             .accessibilityIdentifier("notifications-settings-link")
             .listRowBackground(Color.white.opacity(0.12))
 
-            NavigationLink(destination: PromptGroupsView()) {
-                settingsLabel("Prompt Groups")
-            }
-            .accessibilityIdentifier("prompt-groups-link")
-            .listRowBackground(Color.white.opacity(0.12))
-
             NavigationLink(destination: BeaconsSettingsView()) {
                 settingsLabel("Beacons")
             }
@@ -92,11 +124,15 @@ struct SettingsView: View {
             .accessibilityIdentifier("weekly-digest-link")
             .listRowBackground(Color.white.opacity(0.12))
 
-            NavigationLink(destination: InsightsView()) {
-                settingsLabel("Insights")
+            // Insights is a shell tab on iPad (Task 3.6); stays a Settings
+            // row on iPhone, which has no tab bar to reach it from.
+            if !isPad {
+                NavigationLink(destination: InsightsView()) {
+                    settingsLabel("Insights")
+                }
+                .accessibilityIdentifier("insights-link")
+                .listRowBackground(Color.white.opacity(0.12))
             }
-            .accessibilityIdentifier("insights-link")
-            .listRowBackground(Color.white.opacity(0.12))
         } header: {
             sectionHeader("SCHEDULE")
         }
@@ -104,12 +140,6 @@ struct SettingsView: View {
 
     private var surveySection: some View {
         Section {
-            NavigationLink(destination: QuestionSettingsView()) {
-                settingsLabel("Questions")
-            }
-            .listRowBackground(Color.white.opacity(0.12))
-            .accessibilityIdentifier("questions-settings-link")
-
             NavigationLink(destination: CustomTokensView()) {
                 settingsLabel("Custom Tokens")
             }
