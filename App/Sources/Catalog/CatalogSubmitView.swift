@@ -86,8 +86,11 @@ struct CatalogSubmitView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
+                    // Esc/Return match the Mac-window shortcuts the deleted
+                    // MacCatalogSubmitView carried; harmless on iOS (no-ops).
                     Button(submitted ? "Done" : "Cancel") { dismiss() }
                         .tint(.white)
+                        .keyboardShortcut(.cancelAction)
                 }
                 if !submitted {
                     ToolbarItem(placement: .confirmationAction) {
@@ -95,11 +98,18 @@ struct CatalogSubmitView: View {
                             .tint(.white)
                             .fontWeight(.semibold)
                             .disabled(isSubmitting || store.submissionsRemaining == 0)
+                            .keyboardShortcut(.defaultAction)
                             .accessibilityIdentifier("catalog-submit-send")
                     }
                 }
             }
         }
+        // The submit sheet is a floating window on Mac; restore the deleted
+        // MacCatalogSubmitView's minimum size so it can't collapse too small.
+        // Gated so iOS sheet sizing is unaffected.
+        #if os(macOS)
+        .frame(minWidth: 460, minHeight: 520)
+        #endif
     }
 
     private var form: some View {

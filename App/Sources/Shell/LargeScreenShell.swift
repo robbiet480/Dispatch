@@ -153,6 +153,22 @@ struct LargeScreenShell: View {
             .accessibilityIdentifier("shell-pane-picker")
         }
         #if os(iOS)
+        // iPad Dashboard report detail is otherwise a dead end: the sidebar row
+        // swaps the detail to `ReportDetailView` (no nav-bar back — it's the
+        // detail column's root here, not a push), and re-tapping "Dashboard" in
+        // the pane picker PRESERVES `selectedReportID`. This leading back button
+        // (shown ONLY while a report is open on the Dashboard) clears the
+        // selection so `dashboardDetail` falls back to the grid — the exact
+        // mechanism MacReportDetailView's onBack uses on the Mac twin (which has
+        // its own back button, so this is iOS-only to avoid doubling up).
+        if nav.pane == .dashboard, nav.selectedReportID != nil {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { nav.selectedReportID = nil } label: {
+                    Label("Dashboard", systemImage: "chevron.backward")
+                }
+                .accessibilityIdentifier("report-back-button")
+            }
+        }
         // Settings has no split-view home on iOS/iPad — it stays a modal sheet
         // reached from a trailing gear (the Mac keeps it in the app menu).
         ToolbarItem(placement: .topBarTrailing) {
