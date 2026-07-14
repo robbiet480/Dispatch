@@ -324,18 +324,15 @@ struct DataSettingsView: View {
         Task.detached(priority: .userInitiated) {
             do {
                 let backgroundContext = ModelContext(container)
-                let counts = try DeleteAllData.deleteAllModels(in: backgroundContext)
-                // Reseed the frozen default-question catalog into the
-                // now-empty store; deterministic UUIDv5 IDs keep the reseed
-                // sync-safe (a second device merges, never duplicates).
-                try DefaultQuestions.seedIfEmpty(into: backgroundContext)
+                // Wipe AND reseed in one save. Two saves meant a throw in the
+                // reseed committed the wipe and then reported failure — data
+                // gone, no questions, and an alert saying nothing happened.
+                let counts = try DeleteAllData.resetToDefaults(in: backgroundContext)
                 let summary = "\(counts.reports) reports, \(counts.responses) responses, "
                     + "\(counts.questions) questions, \(counts.promptGroups) prompt groups, "
                     + "\(counts.tokens) tokens, \(counts.people) people"
                 deleteAllLog.info("deleted all data: \(summary, privacy: .public)")
-                await MainActor.run {
-                    finishDeleteAllData(includeBackups: includeBackups)
-                }
+                await finishDeleteAllData(includeBackups: includeBackups)
             } catch {
                 deleteAllLog.error("delete all data failed: \(error, privacy: .public)")
                 await MainActor.run {
@@ -346,7 +343,8 @@ struct DataSettingsView: View {
         }
     }
 
-    private func finishDeleteAllData(includeBackups: Bool) {
+    @MainActor
+    private func finishDeleteAllData(includeBackups: Bool) async {
         // Spotlight: wipe the whole index (test-gated inside the indexer).
         SpotlightIndexer.deleteAll()
         // Notifications: remove EVERY identifier family (prompt-/gprompt-/
@@ -372,8 +370,18 @@ struct DataSettingsView: View {
         } else if let groupDefaults = UserDefaults(suiteName: StoreLocation.appGroupID) {
             DeleteAllData.clearAppGroupDefaults(groupDefaults)
         }
+        // WAIT for the backup deletion. Fire-and-forget showed the success
+        // alert while the backups were still being removed — or had failed to
+        // be — which is exactly what someone who ticked "also delete backups"
+        // needs to know. The data itself IS gone by now, so a backup failure is
+        // not "Delete Failed": say what actually happened.
+        var backupFailure: String?
         if includeBackups {
-            backupManager.deleteAllBackups()
+            do {
+                try await backupManager.deleteAllBackups()
+            } catch {
+                backupFailure = error.localizedDescription
+            }
         }
         // Fresh schedule for the reseeded questions; the replan republishes
         // the widget's next-prompt date. Reload timelines so widgets drop to
@@ -383,7 +391,11 @@ struct DataSettingsView: View {
             WidgetRefresher.reload()
         }
         isDeleting = false
-        showDeleteSuccess = true
+        if let backupFailure {
+            presentAlert("Your data was deleted, but the backups could not be removed: \(backupFailure)")
+        } else {
+            showDeleteSuccess = true
+        }
     }
 
     // MARK: - Export

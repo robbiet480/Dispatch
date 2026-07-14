@@ -10,11 +10,11 @@ private let deleteAllLog = Logger(subsystem: "io.robbie.Dispatch", category: "de
 ///
 /// The delete flow mirrors the iOS `DataSettingsView` gates exactly (scope
 /// choice, then a typed-DELETE confirmation), but the erase itself calls ONLY
-/// the kit-side core — `DeleteAllData.deleteAllModels` → `DefaultQuestions
-/// .seedIfEmpty` → `DeleteAllData.clearRuntimeDefaults` → (opt-in)
-/// `BackupManager.deleteAllBackups`. The iOS cleanup (Spotlight, notifications,
-/// widgets, webhooks, Spotify) is dropped on purpose: none of those surfaces
-/// exist on the Mac.
+/// the kit-side core — `DeleteAllData.resetToDefaults` (the wipe and the
+/// default-question reseed in ONE save) → `DeleteAllData.clearRuntimeDefaults`
+/// → (opt-in) an awaited `BackupManager.deleteAllBackups`. The iOS cleanup
+/// (Spotlight, notifications, widgets, webhooks, Spotify) is dropped on
+/// purpose: none of those surfaces exist on the Mac.
 struct DataSettingsPane: View {
     @Environment(\.modelContext) private var context
     @Environment(MacExportController.self) private var exportController
@@ -63,7 +63,7 @@ struct DataSettingsPane: View {
             } header: {
                 Text("Export")
             } footer: {
-                Text("Dispatch JSON is the only format that imports back. Questions exports the question definitions, not your reports. Everything here also lives in the File menu.")
+                Text("Only Dispatch JSON imports back. Questions exports definitions, not reports.")
             }
 
             Section {
@@ -212,18 +212,15 @@ struct DataSettingsPane: View {
         Task.detached(priority: .userInitiated) {
             do {
                 let backgroundContext = ModelContext(container)
-                let counts = try DeleteAllData.deleteAllModels(in: backgroundContext)
-                // Reseed the frozen default-question catalog into the
-                // now-empty store; deterministic UUIDv5 IDs keep the reseed
-                // sync-safe (a second device merges, never duplicates).
-                try DefaultQuestions.seedIfEmpty(into: backgroundContext)
+                // Wipe AND reseed in one save. Two saves meant a throw in the
+                // reseed committed the wipe and then reported failure — data
+                // gone, no questions, and a dialog saying nothing happened.
+                let counts = try DeleteAllData.resetToDefaults(in: backgroundContext)
                 let summary = "\(counts.reports) reports, \(counts.responses) responses, "
                     + "\(counts.questions) questions, \(counts.promptGroups) prompt groups, "
                     + "\(counts.tokens) tokens, \(counts.people) people"
                 deleteAllLog.info("deleted all data: \(summary, privacy: .public)")
-                await MainActor.run {
-                    finishDeleteAllData(includeBackups: includeBackups)
-                }
+                await finishDeleteAllData(includeBackups: includeBackups)
             } catch {
                 deleteAllLog.error("delete all data failed: \(error, privacy: .public)")
                 await MainActor.run {
@@ -249,18 +246,36 @@ struct DataSettingsPane: View {
         deleteBackupsToo = false
     }
 
-    private func finishDeleteAllData(includeBackups: Bool) {
+    @MainActor
+    private func finishDeleteAllData(includeBackups: Bool) async {
         // Runtime defaults keyed to the deleted data — the kit-side lists
         // document every cleared AND retained key. No App Group suite on the
         // Mac (no widgets/intents read this store), no Spotlight index, no
         // notification schedule, no webhook/Spotify credentials: the iOS
         // cleanup those needed has no counterpart here.
         DeleteAllData.clearRuntimeDefaults(appDefaults)
+
+        // WAIT for the backup deletion. Fire-and-forget put "All Data Deleted"
+        // on screen while the backups were still being removed — or had failed
+        // to be — which is precisely the thing someone who ticked "also delete
+        // backups" needs to be told. The data itself IS gone at this point, so
+        // a backup failure is not "Delete Failed": say what actually happened.
+        var backupFailure: String?
         if includeBackups {
-            backupManager.deleteAllBackups()
+            do {
+                try await backupManager.deleteAllBackups()
+            } catch {
+                backupFailure = error.localizedDescription
+            }
         }
+
         isDeleting = false
         resetDeleteGates()
-        showSuccess = true
+        if let backupFailure {
+            errorMessage = "Your data was deleted, but the backups could not be removed: \(backupFailure)"
+            showError = true
+        } else {
+            showSuccess = true
+        }
     }
 }

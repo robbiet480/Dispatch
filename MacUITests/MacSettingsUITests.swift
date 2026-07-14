@@ -57,6 +57,10 @@ final class MacSettingsUITests: XCTestCase {
         let deleteAll = app.buttons["delete-all-data"]
         XCTAssertTrue(deleteAll.waitForExistence(timeout: 15),
                       "Data pane should offer Delete All Data…")
+        // Danger Zone is the last section, so on a short display it sits below
+        // the fold — and macOS XCUI does not scroll a click target into view,
+        // it just fails "Not hittable". Scroll first (no-op when it's visible).
+        scrollIntoView(deleteAll, in: settingsWindow(app))
         deleteAll.click()
 
         // Gate 1 — scope: keeping backups is a distinct button from wiping them,
@@ -85,7 +89,15 @@ final class MacSettingsUITests: XCTestCase {
         XCTAssertFalse(deleteEverything.isEnabled,
                        "Delete Everything must be DISABLED while the confirmation field is empty")
 
+        // A NEAR MISS must not open the gate: "delete" is not "DELETE", and a
+        // regression that merely checked for non-empty text would pass without
+        // this. (Lowercase also pins the comparison as case-SENSITIVE.)
         field.click()
+        field.typeText("delete")
+        XCTAssertFalse(deleteEverything.isEnabled,
+                       "Delete Everything must stay DISABLED for a near-miss ('delete')")
+
+        field.typeKey("a", modifierFlags: .command)
         field.typeText("DELETE")
 
         let enabled = expectation(for: NSPredicate(format: "isEnabled == true"),
@@ -98,6 +110,27 @@ final class MacSettingsUITests: XCTestCase {
         XCTAssertTrue(deleteAll.waitForExistence(timeout: 10),
                       "cancelling should return to the Data pane")
         XCTAssertEqual(app.state, .runningForeground, "the app should still be running")
+
+        // REOPENING must not find the gate pre-authorized. A spent "DELETE" left
+        // in the field would mean the next trip through this flow arrives with
+        // the destructive button already enabled — one tap from a wipe.
+        scrollIntoView(deleteAll, in: settingsWindow(app))
+        deleteAll.click()
+        let scopeAgain = modal(app, containing: "Delete Data Only")
+        XCTAssertTrue(scopeAgain.waitForExistence(timeout: 15),
+                      "the scope alert should appear again")
+        scopeAgain.buttons["Delete Data Only"].click()
+
+        let confirmAgain = modal(app, containing: "Delete Everything")
+        XCTAssertTrue(confirmAgain.waitForExistence(timeout: 15),
+                      "the type-to-confirm alert should appear again")
+        let fieldAgain = confirmField(in: confirmAgain)
+        XCTAssertTrue(fieldAgain.waitForExistence(timeout: 15))
+        XCTAssertEqual(fieldAgain.value as? String ?? "", "",
+                       "the confirmation field must be EMPTY on re-entry, not still reading DELETE")
+        XCTAssertFalse(confirmAgain.buttons["Delete Everything"].isEnabled,
+                       "Delete Everything must be DISABLED again on re-entry")
+        confirmAgain.buttons["Cancel"].click()
 
         // Prove the cancel actually held: close Settings and re-read the count.
         settingsWindow(app).typeKey("w", modifierFlags: .command)
@@ -158,6 +191,25 @@ final class MacSettingsUITests: XCTestCase {
             usleep(100_000)
         } while Date() < deadline
         return app.descendants(matching: .any).matching(identifier: label).firstMatch
+    }
+
+    /// Scrolls `element` into view if it exists but isn't hittable. macOS XCUI
+    /// won't do this for you — `.click()` on an off-screen element fails outright
+    /// ("Not hittable"), which is how the Danger Zone button failed on CI's
+    /// shorter display while passing on a tall one. Tries downward first (the
+    /// common case: the target is below the fold), then upward.
+    @MainActor
+    private func scrollIntoView(_ element: XCUIElement, in window: XCUIElement,
+                                steps: Int = 10) {
+        guard element.exists, !element.isHittable else { return }
+        let scroller = window.scrollViews.firstMatch.exists
+            ? window.scrollViews.firstMatch : window
+        for delta in [-120.0, 120.0] {
+            for _ in 0..<steps {
+                guard !element.isHittable else { return }
+                scroller.scroll(byDeltaX: 0, deltaY: CGFloat(delta))
+            }
+        }
     }
 
     /// On macOS a SwiftUI `Text` exposes its content as the accessibility *value*

@@ -54,13 +54,25 @@ public enum DefaultQuestions {
     ]
 
     /// Seeds the catalog into an EMPTY store (no-op when any Question row
-    /// exists) and saves. The launch seeder and delete-all both route through
-    /// here; deterministic UUIDv5 identifiers make the reseed sync-safe — a
-    /// second device reseeding the same catalog merges instead of duplicating.
+    /// exists) and saves. This is the LAUNCH seeder; the delete-all flow uses
+    /// `DeleteAllData.resetToDefaults`, which seeds unconditionally inside its
+    /// own transaction (its deletes are still pending, so an emptiness check
+    /// would be asking about rows it is in the middle of removing).
     /// Returns the number of questions inserted (0 when skipped).
     @discardableResult
     public static func seedIfEmpty(into context: ModelContext) throws -> Int {
         guard try context.fetchCount(FetchDescriptor<Question>()) == 0 else { return 0 }
+        return try seedDefaults(into: context)
+    }
+
+    /// Inserts the frozen default catalog UNCONDITIONALLY, saving unless the
+    /// caller is composing a larger transaction (`save: false`).
+    ///
+    /// Deterministic UUIDv5 identifiers make a reseed sync-safe — a second
+    /// device reseeding the same catalog merges instead of duplicating.
+    @discardableResult
+    public static func seedDefaults(into context: ModelContext,
+                                    save: Bool = true) throws -> Int {
         for (index, seed) in all.enumerated() {
             let question = Question()
             question.uniqueIdentifier = seed.identifier
@@ -71,7 +83,9 @@ public enum DefaultQuestions {
             question.choices = seed.choices
             context.insert(question)
         }
-        try context.save()
+        if save {
+            try context.save()
+        }
         return all.count
     }
 
