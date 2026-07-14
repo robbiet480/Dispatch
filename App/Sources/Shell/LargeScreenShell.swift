@@ -420,6 +420,11 @@ struct LargeScreenShell: View {
                 .ignoresSafeArea()
             emptyStateLabel(title: title, message: message)
         }
+        // Without an explicit (empty) title, the detail NavigationStack has no
+        // navigationTitle and macOS falls back to the app name ("Dispatch") as
+        // the window title. The pane picker is the sole title, so blank it —
+        // matching the hosted editors, which suppress their titles in the shell.
+        .navigationTitle("")
     }
 
     private func emptyStateLabel(title: String, message: String) -> some View {
