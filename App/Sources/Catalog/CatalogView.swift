@@ -43,6 +43,10 @@ struct CatalogDetailView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    /// Task 3.8: suppresses this view's own title when hosted in
+    /// `LargeScreenShell`, where the pane picker is the sole title. Default
+    /// false preserves the title when pushed from iPhone's `CatalogView`.
+    @Environment(\.isInLargeScreenShell) private var inShell
 
     @State private var showingFlagForm = false
     @State private var flagReason = ""
@@ -132,7 +136,7 @@ struct CatalogDetailView: View {
             // Plan 27: readable column on iPad; no-op at iPhone widths.
             .readableColumn()
         }
-        .navigationTitle("Catalog Question")
+        .navigationTitle(inShell ? "" : "Catalog Question")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)

@@ -12,6 +12,9 @@ import SwiftUI
 struct InsightsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Task 3.8: suppresses this view's own title when hosted in
+    /// `LargeScreenShell`, where the pane picker is the sole title.
+    @Environment(\.isInLargeScreenShell) private var inShell
     @Query private var reports: [Report]
     @Query private var questions: [Question]
     /// Person registry (plan 22): person signals resolve alternate names.
@@ -83,7 +86,7 @@ struct InsightsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .navigationTitle("Insights")
+        .navigationTitle(inShell ? "" : "Insights")
         .inlineNavTitleOnPhone()
         .darkNavBarOnPhone()
         .accessibilityIdentifier("insights-view")

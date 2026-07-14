@@ -11,6 +11,9 @@ struct MacReportDetailView: View {
     var onBack: () -> Void = {}
     @Environment(ThemeStore.self) private var themeStore
     @Environment(\.openURL) private var openURL
+    /// Task 3.8: suppresses this view's own title when hosted in
+    /// `LargeScreenShell`, where the pane picker is the sole title.
+    @Environment(\.isInLargeScreenShell) private var inShell
 
     private var theme: Theme { themeStore.theme }
 
@@ -26,7 +29,7 @@ struct MacReportDetailView: View {
             }
             .scrollContentBackground(.hidden)
         }
-        .navigationTitle(timeTitle)
+        .navigationTitle(inShell ? "" : timeTitle)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button {

@@ -14,6 +14,9 @@ import SwiftUI
 struct MacDashboardView: View {
     @Query private var reports: [Report]
     @Environment(ThemeStore.self) private var themeStore
+    /// Task 3.8: suppresses this view's own title when hosted in
+    /// `LargeScreenShell`, where the pane picker is the sole title.
+    @Environment(\.isInLargeScreenShell) private var inShell
 
     /// The sidebar's search query (owned by MacRootView): the dashboard's
     /// charts must aggregate the same search-filtered report set the sidebar
@@ -39,7 +42,7 @@ struct MacDashboardView: View {
                 )
             }
         }
-        .navigationTitle("Dashboard")
+        .navigationTitle(inShell ? "" : "Dashboard")
     }
 
     private var emptyState: some View {

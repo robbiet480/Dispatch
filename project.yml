@@ -282,6 +282,13 @@ targets:
       # (@ViewBuilder returning self) since navigationBarTitleDisplayMode and
       # toolbarColorScheme(for: .navigationBar) don't exist there.
       - path: App/Sources/Shell/PlatformModifiers.swift
+      # Task 3.8 (iPad/Mac UI convergence): the isInLargeScreenShell
+      # environment flag the shell sets on its detail column so the six
+      # hosted detail views can suppress their own navigationTitle only when
+      # shown inside the shell (avoids duplicating the pane picker's title),
+      # while iPhone Settings pushes of the same views (default false) keep
+      # their title unchanged.
+      - path: App/Sources/Shell/ShellContext.swift
       # Task 3.4 (iPad/Mac UI convergence): the shared side-by-side split shell
       # BOTH iPad and Mac adopt (in 3.5/3.6). One NavigationSplitView whose
       # sidebar swaps by pane and whose detail renders the pane's selection.

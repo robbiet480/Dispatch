@@ -26,9 +26,11 @@ import SwiftUI
 ///   panes — the selected item's editor keyed with `.id(...)` so switching the
 ///   selection makes a FRESH editor bound to the new item.
 /// - The principal-toolbar pane `Picker` is the SOLE window title: the shell
-///   sets no `navigationTitle` of its own (the duplicate-title cleanup is
-///   finalized in 3.8), and the picker's setter routes through `nav.show(_:)`
-///   so selection-clearing happens in one place.
+///   sets no `navigationTitle` of its own, and its hosted detail views
+///   suppress theirs via `.environment(\.isInLargeScreenShell, true)` (Task
+///   3.8, `ShellContext.swift`) — set here on the detail column only, never
+///   the sidebar. The picker's setter routes through `nav.show(_:)` so
+///   selection-clearing happens in one place.
 ///
 /// Platform seams: the reports list/detail are `#if os` (the Mac twins live in
 /// `Mac/Sources`, the iOS originals lean on UIKit/nav-bar chrome); the iOS-only
@@ -75,6 +77,13 @@ struct LargeScreenShell: View {
         } detail: {
             detail
                 .toolbar { paneToolbar }
+                // Task 3.8: tells the hosted detail views (Dashboard/Catalog/
+                // Insights/Question editor/Group editor/Report detail) to
+                // suppress their own `navigationTitle` — the pane picker
+                // above is the sole title here. Sidebar gets none: it sets no
+                // titles of its own (the reports column's "Reports" title is
+                // legitimate sidebar chrome, not a duplicate).
+                .environment(\.isInLargeScreenShell, true)
         }
         // Pane change: a "new" editor never survives leaving its pane, and
         // Insights collapses the sidebar to go full-width. `initial: true`
