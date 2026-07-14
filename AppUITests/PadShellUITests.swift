@@ -163,10 +163,11 @@ final class PadShellUITests: XCTestCase {
         picker.buttons["Dashboard"].tap()
 
         // Open the first report from the sidebar. Button and cell variants both
-        // surface as `report-row` (see ReportsListView.row(for:)).
-        let firstRow = app.buttons["report-row"].firstMatch.exists
-            ? app.buttons["report-row"].firstMatch
-            : app.cells["report-row"].firstMatch
+        // surface as `report-row` (see ReportsListView.row(for:)) — discover it
+        // type-agnostically so a slightly-late render can't bind `.exists` to
+        // the wrong element type (a TOCTOU trap that would then time out).
+        let firstRow = app.descendants(matching: .any)
+            .matching(identifier: "report-row").firstMatch
         XCTAssertTrue(firstRow.waitForExistence(timeout: 15),
                       "the demo-data reports sidebar should show at least one report-row")
         firstRow.tap()

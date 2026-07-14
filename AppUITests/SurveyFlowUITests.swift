@@ -216,15 +216,7 @@ final class SurveyFlowUITests: XCTestCase {
         // Open the freshly saved report and assert the exact typed text
         // persisted — a real assertion on content, not just the count.
         app.revealReports()
-        let reportsList = app.collectionViews["reports-list"].exists
-            ? app.collectionViews["reports-list"]
-            : app.tables["reports-list"]
-        XCTAssertTrue(reportsList.waitForExistence(timeout: 10))
-        let firstRow = app.buttons["report-row"].firstMatch.exists
-            ? app.buttons["report-row"].firstMatch
-            : app.cells["report-row"].firstMatch
-        XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
-        firstRow.tap()
+        app.openFirstReportRow()
 
         let savedText = app.staticTexts[flushProbeText]
         _ = savedText.waitForExistence(timeout: 10)
@@ -278,15 +270,7 @@ final class SurveyFlowUITests: XCTestCase {
 
         // Open the freshly saved report and assert the token persisted.
         app.revealReports()
-        let reportsList = app.collectionViews["reports-list"].exists
-            ? app.collectionViews["reports-list"]
-            : app.tables["reports-list"]
-        XCTAssertTrue(reportsList.waitForExistence(timeout: 10))
-        let firstRow = app.buttons["report-row"].firstMatch.exists
-            ? app.buttons["report-row"].firstMatch
-            : app.cells["report-row"].firstMatch
-        XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
-        firstRow.tap()
+        app.openFirstReportRow()
 
         let savedToken = app.staticTexts[tokenText]
         _ = savedToken.waitForExistence(timeout: 10)
@@ -422,15 +406,7 @@ final class SurveyFlowUITests: XCTestCase {
         XCTAssertNotEqual(countLabel.label, before, "report count did not increment")
 
         app.revealReports()
-        let reportsList = app.collectionViews["reports-list"].exists
-            ? app.collectionViews["reports-list"]
-            : app.tables["reports-list"]
-        XCTAssertTrue(reportsList.waitForExistence(timeout: 10))
-        let firstRow = app.buttons["report-row"].firstMatch.exists
-            ? app.buttons["report-row"].firstMatch
-            : app.cells["report-row"].firstMatch
-        XCTAssertTrue(firstRow.waitForExistence(timeout: 10))
-        firstRow.tap()
+        app.openFirstReportRow()
 
         // Touched path: a time answer tagged "(yesterday)" is present.
         // The detail screen is a lazy List with the SENSORS section (which now
