@@ -2,10 +2,20 @@ import DispatchKit
 import SwiftData
 import SwiftUI
 
-/// Settings → Prompt Groups (plan 12): named question groups, each with its
-/// own Timed or Event notification schedule. Every mutation triggers a
-/// replan so the pending-notification schedule always reflects the models.
-struct PromptGroupsView: View {
+/// The reusable, themed list of prompt groups. Selection-based (like
+/// `QuestionsList` / `CatalogListView`) so the same view is BOTH a push-list —
+/// iPhone/Settings, wrapped by `PromptGroupsView` in an ambient
+/// `NavigationStack` with a `.navigationDestination(item:)` that pushes the
+/// editor — AND, once the Sprint-3 shell lands, a split-view sidebar whose
+/// selection drives a `PromptGroupEditorView` in the adjacent detail column.
+///
+/// Rows are tagged by `group.uniqueIdentifier` and participate in
+/// `List(selection:)`; the enclosing host owns what a selection means (push vs
+/// detail column). Carries the Task 2.4 Mac delete-confirmation behind
+/// `#if os(macOS)`. The scheduler/sensor observers (iOS-app-target only, plan
+/// 36) drive the post-mutation `replan()`; on macOS `replan()` is a no-op and
+/// CloudKit + the iPhone's RemoteChangeObserver do the replanning (plan 47).
+struct GroupsList: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeStore.self) private var themeStore
     // The notification scheduler and the sensor observers live in the iOS app
@@ -23,12 +33,30 @@ struct PromptGroupsView: View {
     #endif
     @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
     #if os(macOS)
-    // Mac-only safety net: mirrors QuestionSettingsView's confirmation
-    // dialog before deleting a group — the shared list's swipe/edit-mode
-    // delete (`delete(at:)` below) has no confirmation, so this stays
-    // desktop-only.
+    // Mac-only safety net: mirrors QuestionsList's confirmation dialog before
+    // deleting a group — the shared list's swipe/edit-mode delete
+    // (`delete(at:)` below) has no confirmation, so this stays desktop-only.
     @State private var pendingDelete: PromptGroup?
     #endif
+
+    /// The selected group's `uniqueIdentifier`, owned by the host. The host
+    /// decides what a selection means: `PromptGroupsView` pushes the editor via
+    /// `.navigationDestination(item:)`; the future shell shows it in a detail
+    /// column.
+    @Binding var selection: String?
+
+    /// Fix wave 1 (shell-readiness): the "ADD A GROUP…" row used to carry its
+    /// own `NavigationLink` push, which assumed an ambient `NavigationStack`.
+    /// That's fine for the iPhone push host but inert inside a
+    /// `NavigationSplitView` sidebar column, so — like `QuestionsList`'s
+    /// `onAddQuestion` — the action is hoisted to a closure the host wires up
+    /// however navigation works for it.
+    var onAddGroup: () -> Void
+
+    init(selection: Binding<String?>, onAddGroup: @escaping () -> Void) {
+        _selection = selection
+        self.onAddGroup = onAddGroup
+    }
 
     private var theme: Theme { themeStore.theme }
 
@@ -37,7 +65,7 @@ struct PromptGroupsView: View {
             Color.themeBackground(theme)
                 .ignoresSafeArea()
 
-            List {
+            List(selection: $selection) {
                 if groups.isEmpty {
                     Text("Group questions together and give each group its own schedule — "
                         + "every few hours, a few times a day, at set times, when a workout ends, "
@@ -52,6 +80,7 @@ struct PromptGroupsView: View {
 
                 ForEach(groups, id: \.uniqueIdentifier) { group in
                     PromptGroupRowView(group: group, onChange: replan)
+                        .tag(group.uniqueIdentifier)
                         .listRowBackground(Color.white.opacity(0.12))
                         #if os(macOS)
                         // Mac-only safety net: MacPromptGroupsView (retired)
@@ -65,9 +94,23 @@ struct PromptGroupsView: View {
                         #endif
                 }
                 .onMove(perform: move)
+                // Fix wave 1 (shell-readiness): a focused-selection + Delete key
+                // in a macOS sidebar could otherwise fire an UNCONFIRMED delete
+                // via this same List's edit-mode/swipe action. macOS deletion
+                // stays routed exclusively through the confirmationDialog/
+                // contextMenu below (`#if os(macOS)`), so this list-level delete
+                // is iOS-only.
+                #if os(iOS)
                 .onDelete(perform: delete)
+                #endif
 
-                NavigationLink(destination: PromptGroupEditorView(group: nil)) {
+                // Fix wave 1 (shell-readiness): a plain `Button` routed to a
+                // host-owned closure — mirrors `QuestionsList`'s `onAddQuestion`
+                // — instead of a `NavigationLink`, so this list stays a pure
+                // list+selection with no ambient `NavigationStack` assumption.
+                Button {
+                    onAddGroup()
+                } label: {
                     Text("ADD A GROUP…")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -105,9 +148,9 @@ struct PromptGroupsView: View {
             #endif
         }
         #if os(macOS)
-        // Mac-only safety net: mirrors QuestionSettingsView's confirmation
-        // dialog before deleting a group — the shared list's swipe/edit-mode
-        // delete (`delete(at:)` below, via `EditButton`/swipe on iOS) has no
+        // Mac-only safety net: mirrors QuestionsList's confirmation dialog
+        // before deleting a group — the shared list's swipe/edit-mode delete
+        // (`delete(at:)` below, via `EditButton`/swipe on iOS) has no
         // confirmation, so this stays desktop-only.
         .confirmationDialog(
             "Delete this group?",
@@ -162,6 +205,45 @@ struct PromptGroupsView: View {
     }
 }
 
+/// iPhone / Settings push-host over `GroupsList` (plan 12). Reached via a
+/// `NavigationLink` from `SettingsView` (iPhone) and wrapped in
+/// `NavigationStack { PromptGroupsView() }` by `MacRootView` (Mac), so it
+/// deliberately does NOT create its own `NavigationStack` — it relies on that
+/// ambient stack and registers a `.navigationDestination(item:)` that pushes
+/// the editor for the selected group. Same entry point and same user-visible
+/// behavior as before Task 3.3.
+struct PromptGroupsView: View {
+    @Query(sort: \PromptGroup.sortOrder) private var groups: [PromptGroup]
+    @State private var selection: String?
+
+    /// Fix wave 1 (shell-readiness): "ADD A GROUP…" used to be its own
+    /// `NavigationLink(destination: PromptGroupEditorView(group: nil))` inside
+    /// the list. Now that the row is a `Button` routed through `onAddGroup`,
+    /// this state-driven flag plus a second `.navigationDestination(isPresented:)`
+    /// reproduces the identical push — kept separate from `selection`/
+    /// `.navigationDestination(item:)` so a new group never collides with an
+    /// existing one's identifier.
+    @State private var isAddingGroup = false
+
+    var body: some View {
+        GroupsList(
+            selection: $selection,
+            onAddGroup: { isAddingGroup = true }
+        )
+        .navigationDestination(item: $selection) { identifier in
+            // A selection can outlive its group (deleted while selected); guard
+            // the lookup so a stale id never opens the new-group editor
+            // (`PromptGroupEditorView(group: nil)`).
+            if let group = groups.first(where: { $0.uniqueIdentifier == identifier }) {
+                PromptGroupEditorView(group: group)
+            }
+        }
+        .navigationDestination(isPresented: $isAddingGroup) {
+            PromptGroupEditorView(group: nil)
+        }
+    }
+}
+
 struct PromptGroupRowView: View {
     // The "won't fire" hints below read the iOS sensor observers, which don't
     // exist on macOS (plan 36). The Mac never owns firing or sensor permissions
@@ -175,62 +257,65 @@ struct PromptGroupRowView: View {
     let onChange: () -> Void
 
     var body: some View {
-        NavigationLink(destination: PromptGroupEditorView(group: group)) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(displayName.uppercased())
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Text("\(group.schedule.summary) – \(questionCountText)")
+        // Plain, selectable row content — no `NavigationLink`. Navigation is
+        // driven by the enclosing `List(selection:)` + the host's
+        // `.navigationDestination(item:)` (Task 3.3), which lets the same row
+        // act as a push on iPhone and a detail-column selection in the shell
+        // (the QuestionRowView precedent from Task 3.2).
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName.uppercased())
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Text("\(group.schedule.summary) – \(questionCountText)")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+                // These "won't fire" hints reflect iOS sensor-permission
+                // state, which the Mac neither owns nor can read (plan 36) —
+                // iOS-only.
+                #if os(iOS)
+                // A visit group without Always location simply doesn't
+                // fire (plan 16) — say so where the user will look.
+                if group.schedule == .visitArrival, !visitObserver.hasAlwaysAuthorization {
+                    Text("Needs “Always” location — won't fire")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
-                    // These "won't fire" hints reflect iOS sensor-permission
-                    // state, which the Mac neither owns nor can read (plan 36) —
-                    // iOS-only.
-                    #if os(iOS)
-                    // A visit group without Always location simply doesn't
-                    // fire (plan 16) — say so where the user will look.
-                    if group.schedule == .visitArrival, !visitObserver.hasAlwaysAuthorization {
-                        Text("Needs “Always” location — won't fire")
-                            .font(.caption)
-                            .foregroundStyle(.yellow)
-                            .accessibilityIdentifier("group-row-needs-always")
-                    }
-                    // A calendar group without full calendar access likewise
-                    // simply doesn't fire (plan 31) — say so in place.
-                    if isCalendarGroup, !calendarEventObserver.hasFullAccess {
-                        Text("Needs calendar access — won't fire")
-                            .font(.caption)
-                            .foregroundStyle(.yellow)
-                            .accessibilityIdentifier("group-row-needs-calendar")
-                    }
-                    // Place/beacon groups need Always location; without it they
-                    // don't fire (plan 45), same as visit groups.
-                    if isMonitorGroup, !monitorObserver.hasAlwaysAuthorization {
-                        Text("Needs “Always” location — won't fire")
-                            .font(.caption)
-                            .foregroundStyle(.yellow)
-                            .accessibilityIdentifier("group-row-needs-always")
-                    }
-                    // Dropped past the ~20-condition CLMonitor budget.
-                    if isMonitorGroup,
-                       monitorObserver.droppedGroupIDs.contains(group.uniqueIdentifier) {
-                        Text("Not monitored — too many location/beacon groups")
-                            .font(.caption)
-                            .foregroundStyle(.yellow)
-                            .accessibilityIdentifier("group-row-over-budget")
-                    }
-                    #endif
+                        .foregroundStyle(.yellow)
+                        .accessibilityIdentifier("group-row-needs-always")
                 }
-
-                Spacer()
-
-                Toggle("", isOn: enabledBinding)
-                    .labelsHidden()
-                    .tint(.white.opacity(0.4))
+                // A calendar group without full calendar access likewise
+                // simply doesn't fire (plan 31) — say so in place.
+                if isCalendarGroup, !calendarEventObserver.hasFullAccess {
+                    Text("Needs calendar access — won't fire")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                        .accessibilityIdentifier("group-row-needs-calendar")
+                }
+                // Place/beacon groups need Always location; without it they
+                // don't fire (plan 45), same as visit groups.
+                if isMonitorGroup, !monitorObserver.hasAlwaysAuthorization {
+                    Text("Needs “Always” location — won't fire")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                        .accessibilityIdentifier("group-row-needs-always")
+                }
+                // Dropped past the ~20-condition CLMonitor budget.
+                if isMonitorGroup,
+                   monitorObserver.droppedGroupIDs.contains(group.uniqueIdentifier) {
+                    Text("Not monitored — too many location/beacon groups")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                        .accessibilityIdentifier("group-row-over-budget")
+                }
+                #endif
             }
+
+            Spacer()
+
+            Toggle("", isOn: enabledBinding)
+                .labelsHidden()
+                .tint(.white.opacity(0.4))
         }
     }
 
