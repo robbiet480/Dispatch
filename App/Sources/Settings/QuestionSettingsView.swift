@@ -33,8 +33,23 @@ struct QuestionsList: View {
     /// detail column.
     @Binding var selection: String?
 
-    init(selection: Binding<String?>) {
+    /// Fix wave 1 (shell-readiness): the "ADD A QUESTION…" and "QUESTION
+    /// CATALOG…" rows used to carry their own `NavigationLink` pushes, which
+    /// assumed an ambient `NavigationStack`. That's fine for the iPhone push
+    /// host but inert inside a `NavigationSplitView` sidebar column, so — like
+    /// `CatalogListView`'s `onSubmit` — those actions are hoisted to closures
+    /// the host wires up however navigation works for it.
+    var onAddQuestion: () -> Void
+    var onOpenCatalog: () -> Void
+
+    init(
+        selection: Binding<String?>,
+        onAddQuestion: @escaping () -> Void,
+        onOpenCatalog: @escaping () -> Void
+    ) {
         _selection = selection
+        self.onAddQuestion = onAddQuestion
+        self.onOpenCatalog = onOpenCatalog
     }
 
     private var theme: Theme { themeStore.theme }
@@ -68,9 +83,24 @@ struct QuestionsList: View {
                             #endif
                     }
                     .onMove(perform: move)
+                    // Fix wave 1 (shell-readiness): a focused-selection + Delete
+                    // key in a macOS sidebar could otherwise fire an
+                    // UNCONFIRMED delete via this same List's edit-mode/swipe
+                    // action. macOS deletion stays routed exclusively through
+                    // the confirmationDialog/contextMenu below (`#if
+                    // os(macOS)`), so this list-level delete is iOS-only.
+                    #if os(iOS)
                     .onDelete(perform: delete)
+                    #endif
 
-                    NavigationLink(destination: QuestionEditorView(question: nil)) {
+                    // Fix wave 1 (shell-readiness): plain `Button`s routed to
+                    // host-owned closures — mirrors `CatalogListView`'s
+                    // `onSubmit` — instead of `NavigationLink`s, so this list
+                    // stays a pure list+selection with no ambient
+                    // `NavigationStack` assumption.
+                    Button {
+                        onAddQuestion()
+                    } label: {
                         Text("ADD A QUESTION…")
                             .font(.subheadline)
                             .fontWeight(.semibold)
@@ -79,7 +109,9 @@ struct QuestionsList: View {
                     .listRowBackground(Color.white.opacity(0.12))
                     .accessibilityIdentifier("add-question-button")
 
-                    NavigationLink(destination: CatalogView()) {
+                    Button {
+                        onOpenCatalog()
+                    } label: {
                         Text("QUESTION CATALOG…")
                             .font(.subheadline)
                             .fontWeight(.semibold)
@@ -196,16 +228,40 @@ struct QuestionSettingsView: View {
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @State private var selection: String?
 
+    /// Fix wave 1 (shell-readiness): "ADD A QUESTION…" used to be its own
+    /// `NavigationLink(destination: QuestionEditorView(question: nil))` inside
+    /// `QuestionsList`. Now that the row is a `Button` routed through
+    /// `onAddQuestion`, this state-driven flag plus a second
+    /// `.navigationDestination(isPresented:)` reproduces the identical push —
+    /// kept separate from `selection`/`.navigationDestination(item:)` so a new
+    /// question never collides with an existing one's identifier.
+    @State private var isAddingQuestion = false
+
+    /// Fix wave 1 (shell-readiness): "QUESTION CATALOG…" used to be its own
+    /// `NavigationLink(destination: CatalogView())`. Now routed through
+    /// `onOpenCatalog` and this flag.
+    @State private var isShowingCatalog = false
+
     var body: some View {
-        QuestionsList(selection: $selection)
-            .navigationDestination(item: $selection) { identifier in
-                // A selection can outlive its question (deleted while selected);
-                // guard the lookup so a stale id never opens the new-question
-                // editor (`QuestionEditorView(question: nil)`).
-                if let question = questions.first(where: { $0.uniqueIdentifier == identifier }) {
-                    QuestionEditorView(question: question)
-                }
+        QuestionsList(
+            selection: $selection,
+            onAddQuestion: { isAddingQuestion = true },
+            onOpenCatalog: { isShowingCatalog = true }
+        )
+        .navigationDestination(item: $selection) { identifier in
+            // A selection can outlive its question (deleted while selected);
+            // guard the lookup so a stale id never opens the new-question
+            // editor (`QuestionEditorView(question: nil)`).
+            if let question = questions.first(where: { $0.uniqueIdentifier == identifier }) {
+                QuestionEditorView(question: question)
             }
+        }
+        .navigationDestination(isPresented: $isAddingQuestion) {
+            QuestionEditorView(question: nil)
+        }
+        .navigationDestination(isPresented: $isShowingCatalog) {
+            CatalogView()
+        }
     }
 }
 
