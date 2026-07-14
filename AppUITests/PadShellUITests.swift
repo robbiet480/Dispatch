@@ -27,6 +27,14 @@ final class PadShellUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    override func tearDown() {
+        // These tests force landscape; restore portrait so later portrait-only
+        // classes in the same run aren't left rotated (device orientation is a
+        // global simulator setting that persists across tests).
+        XCUIDevice.shared.orientation = .portrait
+        super.tearDown()
+    }
+
     @MainActor
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
