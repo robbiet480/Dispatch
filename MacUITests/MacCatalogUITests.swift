@@ -68,15 +68,26 @@ final class MacCatalogUITests: XCTestCase {
                       "Manage → Question Catalog menu item should exist")
         catalogItem.click()
 
-        // The catalog rendered — the stubbed provider yields four entries, so
-        // the populated list appears. (Loading/empty are accepted too so the
-        // assertion proves "did not crash", not a particular data shape.)
+        // The catalog LIST lives in the split-view SIDEBAR (CatalogListView).
+        // On the default (narrow) window the NavigationSplitView collapses the
+        // sidebar behind a "Show Sidebar" toolbar toggle — the reports sidebar
+        // survives via its column-width floor, but the catalog sidebar sets
+        // none — so mac-catalog-list/empty/loading aren't on screen until it's
+        // revealed. Reveal it only if the catalog view isn't already up (a
+        // no-op when the sidebar shows). This reveals a present-but-collapsed
+        // list; a genuinely missing catalog still fails the assertion below.
+        // (Loading/empty are accepted too so the assertion proves "did not
+        // crash", not a particular data shape.)
         let list = app.descendants(matching: .any)
             .matching(identifier: "mac-catalog-list").firstMatch
         let empty = app.descendants(matching: .any)
             .matching(identifier: "mac-catalog-empty").firstMatch
         let loading = app.descendants(matching: .any)
             .matching(identifier: "mac-catalog-loading").firstMatch
+        if !list.waitForExistence(timeout: 8), !empty.exists, !loading.exists {
+            let showSidebar = app.buttons["Show Sidebar"].firstMatch
+            if showSidebar.waitForExistence(timeout: 5) { showSidebar.click() }
+        }
         let catalogAppeared = list.waitForExistence(timeout: 20)
             || empty.waitForExistence(timeout: 2)
             || loading.waitForExistence(timeout: 2)
