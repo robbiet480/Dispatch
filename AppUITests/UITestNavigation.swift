@@ -133,6 +133,25 @@ extension XCUIApplication {
         return count.label
     }
 
+    // MARK: - Reports list
+
+    /// Waits for the reports list and taps its first `report-row`. Discovers
+    /// both the list (`reports-list`: collectionView for the iOS List, table
+    /// elsewhere) and the row (`report-row`: button or cell) by identifier with
+    /// TYPE-AGNOSTIC queries — a slightly-late render can't bind `.exists` to
+    /// the wrong element type (the TOCTOU flake). Call after `revealReports()`.
+    @MainActor
+    func openFirstReportRow(timeout: TimeInterval = 10,
+                            file: StaticString = #filePath, line: UInt = #line) {
+        let list = descendants(matching: .any).matching(identifier: "reports-list").firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: timeout),
+                      "reports-list should exist", file: file, line: line)
+        let firstRow = descendants(matching: .any).matching(identifier: "report-row").firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: timeout),
+                      "at least one report-row should exist", file: file, line: line)
+        firstRow.tap()
+    }
+
     // MARK: - Shell panes (iPad) ⇄ Settings links (iPhone)
 
     /// Selects a shell pane by its `shell-pane-picker` segment label
