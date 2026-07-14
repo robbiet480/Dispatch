@@ -14,9 +14,9 @@ import XCTest
 /// the only detail pane with a `.searchable`, which is why only it crashed.
 ///
 /// This drives the real navigation the owner used to reproduce it: launch,
-/// click the `detail-pane-picker`'s "Catalog" segment, and assert the catalog
-/// actually renders. Before the fix the app is gone by the time we look for
-/// the list; after the fix the stubbed catalog entries render.
+/// open Manage → Question Catalog, and assert the catalog actually renders.
+/// Before the fix the app is gone by the time we look for the list; after the
+/// fix the stubbed catalog entries render.
 final class MacCatalogUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -79,9 +79,9 @@ final class MacCatalogUITests: XCTestCase {
         let list = app.descendants(matching: .any)
             .matching(identifier: "question-catalog-list").firstMatch
         let empty = app.descendants(matching: .any)
-            .matching(identifier: "mac-catalog-empty").firstMatch
+            .matching(identifier: "catalog-empty").firstMatch
         let loading = app.descendants(matching: .any)
-            .matching(identifier: "mac-catalog-loading").firstMatch
+            .matching(identifier: "catalog-loading").firstMatch
         let catalogAppeared = list.waitForExistence(timeout: 20)
             || empty.waitForExistence(timeout: 2)
             || loading.waitForExistence(timeout: 2)

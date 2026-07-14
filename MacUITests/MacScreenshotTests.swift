@@ -123,15 +123,20 @@ final class MacScreenshotTests: XCTestCase {
         snap("02-report-detail", window: window)
         app.terminate()
 
-        // 03 — insights pane.
+        // 03 — insights pane. Navigate via the Manage menu (⌘2) rather than the
+        // shell's principal `shell-pane-picker`: it's a segmented control whose
+        // segments aren't reliably clickable by label, and it overflows on
+        // narrower windows — the menu bar is always present. Assert the pane
+        // container `insights-view` (always rendered), not the data-dependent
+        // `insight-card` (only real correlations) / `insight-card-example`.
         app = launchApp(shotIndex: 3)
         window = mainWindow(app)
-        let panePicker = app.descendants(matching: .any)
-            .matching(identifier: "detail-pane-picker").firstMatch
-        XCTAssertTrue(panePicker.waitForExistence(timeout: 15))
-        panePicker.radioButtons["Insights"].click()
+        let manageMenu = app.menuBars.menuBarItems["Manage"]
+        XCTAssertTrue(manageMenu.waitForExistence(timeout: 15))
+        manageMenu.click()
+        app.menuBars.menuItems["Insights"].click()
         XCTAssertTrue(
-            app.descendants(matching: .any).matching(identifier: "insight-card")
+            app.descendants(matching: .any).matching(identifier: "insights-view")
                 .firstMatch.waitForExistence(timeout: 15)
         )
         snap("03-insights", window: window)
