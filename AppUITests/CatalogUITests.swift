@@ -54,19 +54,8 @@ final class CatalogUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        // Home → Settings → Questions.
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-
-        // Questions → Question Catalog.
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        // Home → Settings → Questions → Question Catalog.
+        openCatalog(app)
 
         // Stubbed entries render.
         let stubEntry = app.staticTexts["DID YOU DRINK WATER TODAY?"]
@@ -102,14 +91,7 @@ final class CatalogUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        openCatalog(app)
 
         // Open the configured stub entry (may need a scroll on small screens).
         let configured = app.staticTexts["HOW STRESSED ARE YOU?"]
@@ -155,13 +137,7 @@ final class CatalogUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        openCatalog(app)
 
         let submitButton = app.buttons["catalog-submit-button"]
         XCTAssertTrue(submitButton.waitForExistence(timeout: 10))
@@ -233,13 +209,7 @@ final class CatalogUITests: XCTestCase {
         app.launchEnvironment["CATALOG_SEEDED_SUBMISSIONS"] = "5"
         app.launch()
 
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        openCatalog(app)
 
         let submitButton = app.buttons["catalog-submit-button"]
         XCTAssertTrue(submitButton.waitForExistence(timeout: 10))
@@ -268,13 +238,7 @@ final class CatalogUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        openCatalog(app)
 
         let submitButton = app.buttons["catalog-submit-button"]
         XCTAssertTrue(submitButton.waitForExistence(timeout: 10))
@@ -318,13 +282,7 @@ final class CatalogUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        openCatalog(app)
 
         // Unique prompt per run: the fingerprint memory persists in
         // UserDefaults across launches on the same simulator.

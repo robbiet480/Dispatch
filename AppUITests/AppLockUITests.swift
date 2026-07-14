@@ -122,13 +122,8 @@ final class AppLockUITests: XCTestCase {
         // section sits below the fold after the Settings "Manage" section
         // (Task 3.6) pushed the lower sections down; SwiftUI's List lazily
         // materializes off-screen rows, so scroll it in before asserting.
-        XCTAssertTrue(app.buttons["questions-settings-link"].waitForExistence(timeout: 10))
         let spotlightToggle = app.switches["spotlight-while-locked-toggle"]
-        var spotlightScrolls = 0
-        while !spotlightToggle.isHittable, spotlightScrolls < 8 {
-            app.swipeUp()
-            spotlightScrolls += 1
-        }
+        app.scrollUntilHittable(spotlightToggle, anchoredOn: app.buttons["questions-settings-link"])
         XCTAssertTrue(spotlightToggle.waitForExistence(timeout: 10))
         XCTAssertEqual(spotlightToggle.value as? String, "0")
 
