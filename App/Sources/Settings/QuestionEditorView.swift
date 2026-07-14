@@ -9,6 +9,11 @@ struct QuestionEditorView: View {
     @Query private var responses: [Response]
     @Environment(ThemeStore.self) private var themeStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Task 3.8: suppresses this view's own title when hosted in
+    /// `LargeScreenShell`, where the pane picker is the sole title. Default
+    /// false preserves the title when pushed from iPhone's
+    /// `QuestionSettingsView`.
+    @Environment(\.isInLargeScreenShell) private var inShell
 
     /// nil ⇒ creating a new question.
     let question: Question?
@@ -321,7 +326,7 @@ struct QuestionEditorView: View {
             // Plan 27: readable column on iPad; no-op at iPhone widths.
             .readableColumn()
         }
-        .navigationTitle(question == nil ? "Add Question" : "Edit Question")
+        .navigationTitle(inShell ? "" : (question == nil ? "Add Question" : "Edit Question"))
         .inlineNavTitleOnPhone()
         .darkNavBarOnPhone()
         .toolbar {

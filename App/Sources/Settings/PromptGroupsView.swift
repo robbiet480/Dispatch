@@ -417,6 +417,11 @@ struct PromptGroupEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeStore.self) private var themeStore
+    /// Task 3.8: suppresses this view's own title when hosted in
+    /// `LargeScreenShell`, where the pane picker is the sole title. Default
+    /// false preserves the title when pushed from iPhone's
+    /// `PromptGroupsView`.
+    @Environment(\.isInLargeScreenShell) private var inShell
     // Scheduler + sensor observers are iOS-only (plan 36). On macOS this editor
     // just writes the PromptGroup fields; the paired iPhone replans on the
     // synced change, and the sensor-permission asks / auth hints below are
@@ -637,7 +642,7 @@ struct PromptGroupEditorView: View {
             // Plan 27: readable column on iPad; no-op at iPhone widths.
             .readableColumn()
         }
-        .navigationTitle(group == nil ? "Add Group" : "Edit Group")
+        .navigationTitle(inShell ? "" : (group == nil ? "Add Group" : "Edit Group"))
         .inlineNavTitleOnPhone()
         .darkNavBarOnPhone()
         .toolbar {
