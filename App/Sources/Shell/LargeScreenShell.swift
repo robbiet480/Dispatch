@@ -220,7 +220,17 @@ struct LargeScreenShell: View {
         }
     }
 
+    @ViewBuilder
     private var dashboardContent: some View {
+        #if os(macOS)
+        // MacDashboardView wraps DashboardContentView with the Mac chrome the
+        // shell must NOT drop: the `#if os(macOS)` filter bar / `MacFilterPopover`
+        // (via DashboardContentView), the Mac-native `home-hexagon` empty state,
+        // and the "N reports" count — all keyed to the same `reportsSearch` the
+        // reports sidebar owns. It handles its own empty state, so don't gate on
+        // `reports.isEmpty` here (that would double up the empty view).
+        MacDashboardView(searchQuery: reportsSearch)
+        #else
         ZStack {
             Color.themeBackground(theme)
                 .ignoresSafeArea()
@@ -243,6 +253,7 @@ struct LargeScreenShell: View {
                 )
             }
         }
+        #endif
     }
 
     @ViewBuilder

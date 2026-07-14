@@ -17,7 +17,7 @@ struct DispatchMacApp: App {
     let visualizationFilterStore: VisualizationFilterStore
     let remoteChangeObserver: RemoteChangeObserver
     let exportController: MacExportController
-    @State private var navigation = MacNavigation()
+    @State private var navigation = PaneNavigation()
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
 
