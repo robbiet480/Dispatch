@@ -69,7 +69,7 @@ struct CatalogDetailView: View {
 
             List {
                 Section {
-                    Text(entry.prompt)
+                    Text(entry.prompt.uppercased())
                         .font(.title3).fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .listRowBackground(Color.white.opacity(0.12))
