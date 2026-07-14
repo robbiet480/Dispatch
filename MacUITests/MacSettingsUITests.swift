@@ -27,6 +27,18 @@ final class MacSettingsUITests: XCTestCase {
                       "main window should appear")
         app.activate()
 
+        // Witness for "nothing was deleted": the dashboard's report count. A wipe
+        // drives this to 0 (the reseed restores default QUESTIONS, never reports),
+        // so re-reading it after the flow is what actually proves the cancel held.
+        // Asserting the Delete button still exists would pass even after a wipe.
+        let countLabel = app.staticTexts["report-count"]
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 15),
+                      "report-count label should exist")
+        guard let reportsBefore = reportCount(countText(countLabel)), reportsBefore > 0 else {
+            XCTFail("demo data should seed reports; got '\(countText(countLabel))'")
+            return
+        }
+
         // Open Settings by KEYBOARD. Clicking the app menu flakes in this repo
         // ("timed out while waiting for menu open notification" — MacScreenshotTests
         // hit exactly that); ⌘, is system-provided by the Settings scene.
@@ -84,8 +96,15 @@ final class MacSettingsUITests: XCTestCase {
         // Never actually delete: back out at the last gate.
         confirm.buttons["Cancel"].click()
         XCTAssertTrue(deleteAll.waitForExistence(timeout: 10),
-                      "cancelling should return to the Data pane with nothing deleted")
+                      "cancelling should return to the Data pane")
         XCTAssertEqual(app.state, .runningForeground, "the app should still be running")
+
+        // Prove the cancel actually held: close Settings and re-read the count.
+        settingsWindow(app).typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(countLabel.waitForExistence(timeout: 15),
+                      "the dashboard should be back after closing Settings")
+        XCTAssertEqual(reportCount(countText(countLabel)), reportsBefore,
+                       "cancelling at the typed-DELETE gate must leave every report intact")
     }
 
     // MARK: - Element lookup
@@ -117,19 +136,42 @@ final class MacSettingsUITests: XCTestCase {
         ).firstMatch
     }
 
-    /// The alert surface hosting `label` — a SwiftUI `.alert` lands as a sheet on
-    /// macOS, but has also come through as a dialog/alert.
+    /// The alert surface hosting a button named `label` — a SwiftUI `.alert` lands
+    /// as a sheet on macOS, but has also come through as a dialog/alert.
+    ///
+    /// POLLS to a deadline instead of probing once. Callers reach here immediately
+    /// after the click that raises the alert, so a single pass would evaluate every
+    /// surface before any of them exist and then pick one by coin-flip — the same
+    /// TOCTOU shape this repo removed from the iOS helpers. Return only a surface
+    /// we have SEEN hosting the button; if none ever appears, hand back a query for
+    /// the button itself so the caller's `waitForExistence` fails on the thing it
+    /// actually cares about rather than on an arbitrary empty surface.
     @MainActor
-    private func modal(_ app: XCUIApplication, containing label: String) -> XCUIElement {
-        let predicate = NSPredicate(format: "label == %@ OR title == %@", label, label)
-        for surface in [app.sheets, app.dialogs, app.alerts] {
-            let match = surface.containing(.button, identifier: label).firstMatch
-            if match.exists { return match }
-            let byPredicate = surface.containing(predicate).firstMatch
-            if byPredicate.exists { return byPredicate }
-        }
-        // Fall back to whichever surface eventually materializes.
-        return app.sheets.firstMatch.exists ? app.sheets.firstMatch : app.dialogs.firstMatch
+    private func modal(_ app: XCUIApplication, containing label: String,
+                       timeout: TimeInterval = 15) -> XCUIElement {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            for surface in [app.sheets, app.dialogs, app.alerts] {
+                let match = surface.containing(.button, identifier: label).firstMatch
+                if match.exists { return match }
+            }
+            usleep(100_000)
+        } while Date() < deadline
+        return app.descendants(matching: .any).matching(identifier: label).firstMatch
+    }
+
+    /// On macOS a SwiftUI `Text` exposes its content as the accessibility *value*
+    /// (AppKit), where iOS exposes it as the label — read value first, fall back.
+    @MainActor
+    private func countText(_ element: XCUIElement) -> String {
+        if let value = element.value as? String, !value.isEmpty { return value }
+        return element.label
+    }
+
+    /// Parses the leading integer out of a "N reports" string.
+    private func reportCount(_ text: String) -> Int? {
+        let digits = text.prefix { $0.isNumber }
+        return digits.isEmpty ? nil : Int(digits)
     }
 
     @MainActor

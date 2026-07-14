@@ -128,7 +128,7 @@ struct DataSettingsPane: View {
                 deleteAllData(includeBackups: deleteBackupsToo)
             }
             .disabled(confirmText != "DELETE")
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { resetDeleteGates() }
         } message: {
             Text("This cannot be undone. Type DELETE to confirm.")
         }
@@ -179,6 +179,7 @@ struct DataSettingsPane: View {
     /// `DeleteAllData` in DispatchKit for the rationale), then the reseed, then
     /// the main-actor cleanup.
     private func deleteAllData(includeBackups: Bool) {
+        guard !isDeleting else { return }
         let container = context.container
         isDeleting = true
         Task.detached(priority: .userInitiated) {
@@ -200,11 +201,25 @@ struct DataSettingsPane: View {
                 deleteAllLog.error("delete all data failed: \(error, privacy: .public)")
                 await MainActor.run {
                     isDeleting = false
+                    resetDeleteGates()
                     errorMessage = "Delete failed: \(error.localizedDescription)"
                     showError = true
                 }
             }
         }
+    }
+
+    /// Disarms both gates. Gate 1 already scrubs this state on the way IN, so
+    /// nothing today can reach gate 2 pre-authorized — but leaving a spent
+    /// `confirmText == "DELETE"` and an armed `deleteBackupsToo` lying around
+    /// means any future path that raises `showTypeConfirm` without going
+    /// through gate 1 (a retry affordance, a deep link, state restoration)
+    /// would present gate 2 already filled in, its button already enabled and
+    /// its runtime guard already satisfied: one tap from a full wipe with both
+    /// gates skipped. Scrub on the way OUT too, so that trap never gets armed.
+    private func resetDeleteGates() {
+        confirmText = ""
+        deleteBackupsToo = false
     }
 
     private func finishDeleteAllData(includeBackups: Bool) {
@@ -218,6 +233,7 @@ struct DataSettingsPane: View {
             backupManager.deleteAllBackups()
         }
         isDeleting = false
+        resetDeleteGates()
         showSuccess = true
     }
 }
