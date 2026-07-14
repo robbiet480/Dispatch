@@ -44,6 +44,12 @@ final class CatalogStore {
             let count = Int(ProcessInfo.processInfo.environment["CATALOG_SEEDED_SUBMISSIONS"] ?? "") ?? 0
             let seeded = (0..<count).map { Date.now.addingTimeInterval(-Double($0) * 60) }
             UserDefaults.standard.set(seeded, forKey: Self.submissionTimestampsKey)
+            // The own-submission fingerprint memory (plan 42) also lives in
+            // UserDefaults.standard, which the app's `--ui-testing` suite wipe
+            // does NOT reach — so a fixed-prompt submission would stick across
+            // launches and every later run would hit `.alreadySubmitted`. Reset
+            // it here alongside the throttle so submission tests start clean.
+            UserDefaults.standard.removeObject(forKey: Self.submittedFingerprintsKey)
         }
         submissionTimestamps =
             (UserDefaults.standard.array(forKey: Self.submissionTimestampsKey) as? [Date]) ?? []

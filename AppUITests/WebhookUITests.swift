@@ -12,9 +12,18 @@ final class WebhookUITests: XCTestCase {
                                "--stub-webhook"]
         app.launch()
 
-        // Settings → Data → Advanced → Webhook.
+        // Settings → Data → Advanced → Webhook. The Data section is below the
+        // fold after the Settings "Manage" section (Task 3.6) pushed the lower
+        // sections down; SwiftUI's List lazily materializes off-screen rows, so
+        // scroll it in before tapping.
         app.buttons["settings-button"].tap()
+        XCTAssertTrue(app.buttons["questions-settings-link"].waitForExistence(timeout: 10))
         let dataLink = app.buttons["data-settings-link"]
+        var dataScrolls = 0
+        while !dataLink.isHittable, dataScrolls < 8 {
+            app.swipeUp()
+            dataScrolls += 1
+        }
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
         let webhookLink = app.buttons["webhook-settings-link"]
@@ -65,8 +74,15 @@ final class WebhookUITests: XCTestCase {
         next.tap()
 
         // The post-save enqueue+drain hits the stub → status row shows the
-        // delivery.
+        // delivery. Data is below the fold (Manage section, Task 3.6) — scroll
+        // the lazily-rendered row in again before tapping.
         app.buttons["settings-button"].tap()
+        XCTAssertTrue(app.buttons["questions-settings-link"].waitForExistence(timeout: 10))
+        var dataScrolls2 = 0
+        while !dataLink.isHittable, dataScrolls2 < 8 {
+            app.swipeUp()
+            dataScrolls2 += 1
+        }
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
         XCTAssertTrue(webhookLink.waitForExistence(timeout: 10))

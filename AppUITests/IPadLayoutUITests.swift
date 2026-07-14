@@ -1,7 +1,8 @@
 import UIKit
 import XCTest
 
-/// iPad regular-width layout coverage (ipad-ui-suite triage, 2026-07).
+/// iPad regular-width layout coverage (ipad-ui-suite triage, 2026-07;
+/// retargeted to the shared shell in Task 3.9).
 ///
 /// The UI suite historically only ran on iPhone, so a few tests baked in
 /// compact-width assumptions. On iPad a `.sheet` presents as a centered
@@ -12,9 +13,18 @@ import XCTest
 /// rows aren't realized in the accessibility tree at all — so a test that taps
 /// them without scrolling passes on a tall iPhone and fails on iPad.
 ///
-/// These tests assert the iPad-adaptive behavior directly (readable column;
-/// every submit-form field reachable via scrolling) and skip on compact-width
-/// runners where there is nothing iPad-specific to check.
+/// Task 3.6 made `LargeScreenShell` the iPad root, so the catalog is no longer
+/// reached through Settings → Questions → Question Catalog (that path is
+/// iPhone-only now). On iPad the catalog is the shell's Catalog pane, selected
+/// from the `shell-pane-picker`; its list lives in the split-view sidebar and
+/// "Submit a Question" (`catalog-submit-button`) is a sidebar toolbar item.
+/// Landscape is forced so the two-column split reliably shows the sidebar
+/// (same reason as `PadShellUITests`).
+///
+/// These tests assert the iPad-adaptive behavior directly (the catalog list
+/// stays a constrained column — now the shell sidebar — rather than stretching
+/// edge-to-edge; every submit-form field reachable via scrolling) and skip on
+/// compact-width runners where there is nothing iPad-specific to check.
 final class IPadLayoutUITests: XCTestCase {
     @MainActor
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
@@ -27,16 +37,21 @@ final class IPadLayoutUITests: XCTestCase {
         return app
     }
 
-    /// Navigate Home → Settings → Questions → Question Catalog → Submit.
+    /// Switch the shell to its Catalog pane and return the pane picker. The
+    /// catalog list then renders in the sidebar column.
+    @MainActor
+    private func showCatalogPane(_ app: XCUIApplication) -> XCUIElement {
+        let picker = app.segmentedControls["shell-pane-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10),
+                      "the shell pane picker should exist on the iPad shell root")
+        picker.buttons["Catalog"].tap()
+        return picker
+    }
+
+    /// Shell Catalog pane → Submit a Question sheet.
     @MainActor
     private func openSubmitForm(_ app: XCUIApplication) {
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        _ = showCatalogPane(app)
         let submitButton = app.buttons["catalog-submit-button"]
         XCTAssertTrue(submitButton.waitForExistence(timeout: 10))
         submitButton.tap()
@@ -51,6 +66,10 @@ final class IPadLayoutUITests: XCTestCase {
     @MainActor
     func testSubmitFormTrailingFieldsReachableOnIPad() throws {
         try XCTSkipUnless(isPad, "iPad-only: on a tall iPhone sheet these rows are already realized")
+
+        // Landscape so the shell's two-column split reliably exposes the
+        // sidebar (Catalog list + its toolbar), same as PadShellUITests.
+        XCUIDevice.shared.orientation = .landscapeLeft
 
         let app = launchApp()
         openSubmitForm(app)
@@ -79,31 +98,31 @@ final class IPadLayoutUITests: XCTestCase {
                       "PLACEHOLDER field should be reachable on iPad after the number sections appear")
     }
 
-    /// Plan 27's readable column keeps the catalog list from stretching
-    /// edge-to-edge on wide iPad layouts: a row's content should not span the
-    /// full window width.
+    /// On the iPad shell the catalog list is the split-view sidebar, so it
+    /// stays a constrained column rather than stretching edge-to-edge: a row's
+    /// content must not span the full window width. (Pre-3.6 this guarded
+    /// Plan 27's 640pt readable-column cap on a full-width catalog; the shell
+    /// now enforces the columnar layout structurally, which this still asserts.)
     @MainActor
     func testCatalogListHonorsReadableColumnOnIPad() throws {
-        try XCTSkipUnless(isPad, "iPad-only: readableColumn is a no-op at compact width")
+        try XCTSkipUnless(isPad, "iPad-only: the shell sidebar is a no-op concept at compact width")
+
+        // Landscape so the two-column split shows the sidebar (the catalog
+        // list) beside the detail, rather than collapsing it behind a toggle.
+        XCUIDevice.shared.orientation = .landscapeLeft
 
         let app = launchApp()
-        app.buttons["settings-button"].firstMatch.tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
-        let catalogLink = app.buttons["question-catalog-link"]
-        XCTAssertTrue(catalogLink.waitForExistence(timeout: 10))
-        catalogLink.tap()
+        _ = showCatalogPane(app)
 
         let firstEntry = app.staticTexts["DID YOU DRINK WATER TODAY?"]
         XCTAssertTrue(firstEntry.waitForExistence(timeout: 15))
 
-        // Only meaningful when the window is wide enough for the 640pt
-        // readable-column cap to bite (full-screen 13" iPad). In split view /
-        // slide over the list may legitimately span the window.
+        // Only meaningful when the window is wide enough that a full-width
+        // stretch would be visibly wrong (full-screen 13"/11" iPad). In split
+        // view / slide over the layout may legitimately narrow.
         let windowWidth = app.windows.firstMatch.frame.width
         try XCTSkipUnless(windowWidth > 800,
-                          "window too narrow for the readable-column cap to matter")
+                          "window too narrow for the sidebar-vs-full-width distinction to matter")
 
         // Measure the row CELL, not the staticText: the label's frame is
         // intrinsic (it stays narrow regardless of the row width), so only the

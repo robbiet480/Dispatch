@@ -90,7 +90,12 @@ struct CatalogListView: View {
             List(selection: $selection) {
                 ForEach(store.filteredEntries) { entry in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.prompt).font(.subheadline).fontWeight(.semibold)
+                        // Uppercased for visual parity with the original iOS
+                        // catalog list (and `QuestionRowView`) — the shared
+                        // list dropped it in the Sprint 1 refactor. The
+                        // transform also flows into the accessibility label, so
+                        // UI tests match the row by its uppercased prompt.
+                        Text(entry.prompt.uppercased()).font(.subheadline).fontWeight(.semibold)
                             .foregroundStyle(.white).lineLimit(2)
                         Text(subtitle(entry)).font(.caption).foregroundStyle(.white.opacity(0.7))
                     }
