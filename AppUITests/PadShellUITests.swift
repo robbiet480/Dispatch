@@ -122,4 +122,62 @@ final class PadShellUITests: XCTestCase {
         XCTAssertTrue(awakeToggle.waitForExistence(timeout: 10),
                       "the Dashboard pane should show the AWAKE/ASLEEP toggle")
     }
+
+    /// Whole-branch-review fix (iPad Dashboard report detail was a dead end):
+    /// tapping a report row swaps the detail column to `ReportDetailView` with
+    /// no nav-bar back (it's the column root, not a push) and re-tapping the
+    /// pane picker preserves the selection. The shell now shows an iOS-only
+    /// `report-back-button` while a report is open on the Dashboard; tapping it
+    /// clears the selection and returns to the dashboard grid. The Mac twin has
+    /// its own back button, so this affordance is iOS-only.
+    ///
+    /// Demo data (`--demo-data`) is required here — the shared `launchApp()`
+    /// uses an empty in-memory store, so there'd be no `report-row` to open.
+    @MainActor
+    func testDashboardReportDetailHasBackButton() throws {
+        try XCTSkipUnless(isPad, "iPad-only: the shell is the iPad root; iPhone keeps HomeView")
+
+        // Landscape guarantees the two-column split renders the dashboard detail
+        // column (which hosts the report detail + its back button).
+        XCUIDevice.shared.orientation = .landscapeLeft
+
+        let app = XCUIApplication()
+        // --demo-data seeds the report rows this test opens (the shared
+        // launchApp() store is empty, so it has no rows to select).
+        app.launchArguments = ["--ui-testing", "--skip-onboarding", "--mock-sensors", "--demo-data"]
+        app.launch()
+
+        // Land on the Dashboard pane (the shell default; select it explicitly
+        // so the test is robust to any launch-state change).
+        let picker = app.segmentedControls["shell-pane-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10),
+                      "the shell's pane picker should exist on the iPad shell root")
+        picker.buttons["Dashboard"].tap()
+
+        // Open the first report from the sidebar. Button and cell variants both
+        // surface as `report-row` (see ReportsListView.row(for:)).
+        let firstRow = app.buttons["report-row"].firstMatch.exists
+            ? app.buttons["report-row"].firstMatch
+            : app.cells["report-row"].firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 15),
+                      "the demo-data reports sidebar should show at least one report-row")
+        firstRow.tap()
+
+        // The back affordance must appear once a report is open on the Dashboard.
+        let backButton = app.buttons["report-back-button"]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 10),
+                      "the shell should show a back button while a report is open on the Dashboard")
+
+        // Tapping it clears the selection → the dashboard grid returns.
+        backButton.tap()
+
+        let reportCount = app.staticTexts["report-count"]
+        let vizGrid = app.otherElements["viz-grid"]
+        XCTAssertTrue(reportCount.waitForExistence(timeout: 10) || vizGrid.waitForExistence(timeout: 10),
+                      "tapping back should return to the dashboard grid (report-count or viz-grid visible)")
+
+        // And the back button is gone (no report is open anymore).
+        XCTAssertTrue(backButton.waitForNonExistence(timeout: 10),
+                      "the back button should disappear once the report selection is cleared")
+    }
 }
