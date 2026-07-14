@@ -125,6 +125,11 @@ struct InsightsView: View {
                 Text("Per-question correlations unlock at \(CorrelationEngine.minimumEligibleAnswers) answers to a question.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.6))
+                    // Polish batch: centered so the hint sits under the
+                    // (centered) empty state rather than hugging the left edge
+                    // of a full-width pane.
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .accessibilityIdentifier("correlations-unlock-footnote")
             } else {
                 Text("Correlations")
@@ -229,23 +234,89 @@ struct InsightsView: View {
         return "Insights look for steady patterns across your reports — like which answers tend to come with more steps or a better mood. They need around two weeks of regular reports before anything is solid enough to show. Keep filing and check back."
     }
 
+    /// Polish batch: a TEACHING empty state. The honest "No insights yet"
+    /// message is kept as a centered lead-in, then a short header and three
+    /// EXAMPLE cards illustrate what Insights surfaces once there's enough
+    /// data — so a fresh install shows a helpful preview instead of a bare
+    /// sea of themed color. The whole block is centered (`readableColumn`
+    /// caps then re-centers) rather than hugging the left edge of the pane.
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("No insights yet")
+        VStack(spacing: 20) {
+            // Honest lead-in (keeps the real `insights-empty-state` id).
+            VStack(spacing: 8) {
+                Text("No insights yet")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(emptyStateMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("insights-empty-state")
+
+            // Teaching preview: clearly-labeled example cards.
+            VStack(spacing: 12) {
+                Text("Here's what you'll see once you have more data")
+                    .font(.caption.weight(.semibold))
+                    .kerning(0.5)
+                    .textCase(.uppercase)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                ForEach(Self.exampleInsights, id: \.title) { example in
+                    exampleCard(title: example.title, detail: example.detail)
+                }
+            }
+        }
+        // Plan 27: readable column on iPad; no-op at iPhone widths. Also
+        // re-centers the block in the full-width Insights pane.
+        .readableColumn()
+    }
+
+    /// Illustrative examples for the teaching empty state — NOT real results.
+    /// Deliberately plain tuples (never `Insight`s) so they can't leak into
+    /// the real feed, and the cards below carry a distinct id.
+    private static let exampleInsights: [(title: String, detail: String)] = [
+        (title: "Reports mentioning 'gym' average more steps",
+         detail: "Days you wrote about the gym tended to come with a higher step count."),
+        (title: "Your mood peaks on weekends",
+         detail: "Weekend reports leaned toward better moods than weekdays."),
+        (title: "Higher focus on days you logged coffee",
+         detail: "Focus ratings ran a little higher on days a coffee was logged.")
+    ]
+
+    /// An example card: same shape/typography as `insightCard` but visually
+    /// dimmed, dash-bordered, and badged "Example" so it never reads as a real
+    /// insight. Carries `insight-card-example`, NOT the real `insight-card` id,
+    /// so UI tests that count real cards don't pick these up.
+    private func exampleCard(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Example")
+                .font(.caption2.weight(.semibold))
+                .kerning(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(.white.opacity(0.5))
+            Text(title)
                 .font(.headline)
-                .foregroundStyle(.white)
-            Text(emptyStateMessage)
+                .foregroundStyle(.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(detail)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(.white.opacity(0.6))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.white.opacity(0.15),
+                              style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        )
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("insights-empty-state")
-        // Plan 27: readable column on iPad; no-op at iPhone widths.
-        .readableColumn()
+        .accessibilityIdentifier("insight-card-example")
     }
 }

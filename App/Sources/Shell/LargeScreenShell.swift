@@ -28,9 +28,12 @@ import SwiftUI
 /// - The principal-toolbar pane `Picker` is the SOLE window title: the shell
 ///   sets no `navigationTitle` of its own, and its hosted detail views
 ///   suppress theirs via `.environment(\.isInLargeScreenShell, true)` (Task
-///   3.8, `ShellContext.swift`) — set here on the detail column only, never
-///   the sidebar. The picker's setter routes through `nav.show(_:)` so
-///   selection-clearing happens in one place.
+///   3.8, `ShellContext.swift`). The flag is set on BOTH columns: the detail
+///   column uses it for title suppression, and the sidebar carries it too so
+///   `QuestionsList` can hide its redundant "QUESTION CATALOG…" row (the
+///   sidebar's own list titles are unconditional, so they're unaffected). The
+///   picker's setter routes through `nav.show(_:)` so selection-clearing
+///   happens in one place.
 ///
 /// Platform seams: the reports list/detail are `#if os` (the Mac twins live in
 /// `Mac/Sources`, the iOS originals lean on UIKit/nav-bar chrome); the iOS-only
@@ -73,7 +76,13 @@ struct LargeScreenShell: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
+            // The sidebar ALSO carries the shell flag (Task: polish batch) so
+            // `QuestionsList` can hide its redundant "QUESTION CATALOG…" row —
+            // Catalog is a top-level pane here. Sidebar list titles are set
+            // UNCONDITIONALLY (legitimate column chrome), so the flag doesn't
+            // suppress them; it only gates the catalog row.
             sidebar
+                .environment(\.isInLargeScreenShell, true)
         } detail: {
             detail
                 .toolbar { paneToolbar }
@@ -85,17 +94,11 @@ struct LargeScreenShell: View {
                 // legitimate sidebar chrome, not a duplicate).
                 .environment(\.isInLargeScreenShell, true)
         }
-        // Owner feedback: tint the toolbar/pane-bar to the app theme color so
-        // the bar and the themed content read as ONE surface — otherwise the
-        // toolbar renders on the default dark window chrome while the content
-        // is themed, a jarring seam most visible on Insights (all content).
-        #if os(macOS)
-        .toolbarBackground(Color.themeBackground(theme), for: .windowToolbar)
-        .toolbarBackground(.visible, for: .windowToolbar)
-        #else
-        .toolbarBackground(Color.themeBackground(theme), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        #endif
+        // Toolbar tint reverted (owner feedback): the earlier
+        // `.toolbarBackground` tint made same-color surfaces meet at the
+        // sidebar edge, so the macOS split-view elevation shadow read as a
+        // weird floating shadow. The DEFAULT bar keeps color-contrast between
+        // chrome and content, so the shadow reads normally again.
         // Pane change: a "new" editor never survives leaving its pane, and
         // Insights collapses the sidebar to go full-width. `initial: true`
         // seeds the correct column visibility on first appearance.
@@ -181,8 +184,11 @@ struct LargeScreenShell: View {
             ReportsListView(selection: reportSelection)
             #endif
         case .insights:
-            // No sidebar — Insights is full-width (columnVisibility → .detailOnly).
-            EmptyView()
+            // No list — Insights is full-width (columnVisibility → .detailOnly).
+            // Owner feedback: a bare `EmptyView()` here left the collapsed
+            // sidebar rendering as raw BLACK when peeked; a themed background
+            // keeps the (empty) column the app's color instead.
+            Color.themeBackground(theme).ignoresSafeArea()
         case .questions:
             QuestionsList(
                 selection: questionSelection,

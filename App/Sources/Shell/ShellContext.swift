@@ -9,8 +9,11 @@ import SwiftUI
 /// duplicate window title next to it. Those same views are ALSO pushed from
 /// iPhone Settings (`QuestionSettingsView`/`PromptGroupsView`/`CatalogView`),
 /// where the title IS wanted — the default `false` here preserves that path
-/// untouched; `LargeScreenShell` is the only place that flips it to `true`,
-/// and only on the detail column (never the sidebar).
+/// untouched; `LargeScreenShell` is the only place that flips it to `true`. It
+/// sets the flag on BOTH split columns: the detail column reads it for title
+/// suppression (above), and the sidebar carries it too so `QuestionsList` hides
+/// its redundant "QUESTION CATALOG…" row on iPad/Mac (sidebar list titles stay
+/// unconditional, so title suppression there is unaffected).
 private struct IsInLargeScreenShellKey: EnvironmentKey {
     static let defaultValue = false
 }

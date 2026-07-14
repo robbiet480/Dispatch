@@ -51,6 +51,9 @@ struct CatalogListView: View {
         .padding(8)
         .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
         .padding([.horizontal, .top])
+        // Polish batch: gap below the search field so the first list row
+        // doesn't collide with it (the enclosing VStack has spacing 0).
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder private func content(store: CatalogStore) -> some View {
@@ -109,6 +112,17 @@ struct CatalogListView: View {
                     }
                     .listRowBackground(Color.white.opacity(0.12))
                     .accessibilityIdentifier("catalog-load-more")
+                    // Polish batch: auto-load is the primary mechanism — when
+                    // this row scrolls into view at the bottom of the list,
+                    // fetch the next page. The button above stays a manual
+                    // fallback (e.g. if a page fetch failed). `isLoadingMore`
+                    // plus the cursor guard in `loadNextPage()` prevent
+                    // double-triggering.
+                    .onAppear {
+                        if store.hasMore, !store.isLoadingMore, store.searchText.isEmpty {
+                            Task { await store.loadNextPage() }
+                        }
+                    }
                 }
             }
             .listStyle(.plain)
