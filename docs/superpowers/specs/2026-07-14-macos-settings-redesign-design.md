@@ -41,11 +41,12 @@ Why it reads as a mess on macOS specifically:
 - **iOS `Form` idioms in a Mac window.** Grouped-list rows and stacked
   `LabeledContent` are the iPhone Settings vocabulary; a Mac preferences window
   expects labeled left-aligned controls and toolbar tabs.
-- **Fixed 480pt width, free height.** It doesn't adopt the per-pane sizing a
-  tabbed preferences window gives for free; the export button row is cramped.
-- **No native affordances.** No toolbar tabs, no per-pane deep-linking, no
-  search — none of the modern-System-Settings or classic-preference-pane cues a
-  Mac user reaches for.
+- **Fixed 480pt width, free height.** One frame is imposed on four unrelated
+  concerns, so every pane pays for the widest one and the export button row is
+  cramped. (A tabbed window doesn't *auto*-size — see §3 — but it does let each
+  pane declare its own frame instead of sharing one.)
+- **No native affordances.** No toolbar tabs, no search — none of the
+  modern-System-Settings or classic-preference-pane cues a Mac user reaches for.
 
 **One correction to the framing.** The Mac window does *not* reuse the iOS
 pushed-list `SettingsView`. It's a separate, deliberately smaller view (its own
@@ -62,14 +63,21 @@ Source of truth: `App/Sources/Settings/`. The full iOS surface, and where each
 piece belongs on Mac (Mac = review / analyze / export; **no capture, sensors,
 notifications, app-lock, or webhooks**):
 
+**The top-level pane contract (not Settings).** The Mac shell's panes are
+**Dashboard ⌘1, Insights ⌘2, Questions ⌘3, Prompt Groups ⌘4, Question Catalog
+⌘5** (`Mac/Sources/DispatchMacApp.swift`, the Manage menu → `PaneNavigation`).
+All five are top-level panes; **none of them belong in Settings**, and Insights
+is a first-class pane (⌘2) — it must not be omitted from the shell nor
+duplicated as a Settings tab.
+
 | iOS section | Contents | On Mac |
 |---|---|---|
 | **MANAGE** | Questions, Prompt Groups, Catalog | **Already panes** (⌘3/4/5), not Settings |
-| **SCHEDULE** | Notifications (focus filter, sleep, frequency, distribution, scheduled times, persistent reminders, digests), Beacons, Weekly Digest, Insights | Insights is a pane; the rest are **iOS-only** (no scheduling/monitoring on Mac) |
+| **SCHEDULE** | Notifications (focus filter, sleep, frequency, distribution, scheduled times, persistent reminders, digests), Beacons, Weekly Digest, Insights | **Insights is already a pane (⌘2)**, not Settings; the rest are **iOS-only** (no scheduling/monitoring on Mac) |
 | **SURVEY** | Custom Tokens, People, Sensors (focus filter, media/Spotify, contacts, units) | Sensors/Spotify **iOS-only**; Tokens/People are sync-backed vocab — *candidate* for Mac |
 | **PRIVACY** | Require Face ID, Spotlight-while-locked | **iOS-only** (AppLockStore, Spotlight) |
-| **DATA** | Import & Export, Backups, Advanced → Webhook, Delete All Data | Import/Export + Delete → **Mac-relevant**; Webhook **iOS-only**; Backups conditional (needs `BackupManager`) |
-| **iCloud** | Sync toggle, account status, last change, Diagnostics, Back Up Now | **Mac-relevant** (SyncPolicy + RemoteChangeObserver already injected; BackupManager not) |
+| **DATA** | Import & Export, Backups, Advanced → Webhook, Delete All Data | Import/Export + Delete → **Mac-relevant**; Webhook **iOS-only**. **Delete All Data REQUIRES `BackupManager`** (its first gate is the "also delete backups" choice), so the Settings scene must inject it — see below |
+| **iCloud** | Sync toggle, account status, last change, Diagnostics, Back Up Now | **Mac-relevant** (SyncPolicy + RemoteChangeObserver already injected). **`BackupManager` must also be injected** — it's a hard requirement for Delete All Data, and it makes *Back Up Now* free |
 | **INTERFACE** | Theme swatches | **Mac-relevant** |
 | **ABOUT / SOURCE** | Version, blurb, GitHub | **Mac-relevant** |
 
@@ -105,17 +113,24 @@ chrome.
 ## 3. macOS conventions
 
 - **`Settings { TabView }` → classic toolbar-tab preference panes.** Wrapping a
-  `TabView` in the SwiftUI `Settings` scene automatically produces the familiar
-  toolbar-tabbed window (Safari, Mail, Xcode, Notes). Each `.tabItem` is a
-  titled toolbar icon; the window **auto-resizes per pane**; ⌘, opens/refocuses
-  it; it's a separate window from the main one. Near-free, and the idiomatic
-  answer for a **small, stable** set of categories.
+  `TabView` in the SwiftUI `Settings` scene produces the familiar toolbar-tabbed
+  window (Safari, Mail, Xcode, Notes). Each `.tabItem` is a titled toolbar icon;
+  ⌘, opens/refocuses it; it's a separate window from the main one. Near-free, and
+  the idiomatic answer for a **small, stable** set of categories.
 - **System-Settings-style sidebar + detail.** A `NavigationSplitView` of
   categories with a detail pane. This is what modern *System Settings* uses —
   because it has **dozens** of categories and a search field. Right for many
   panes; heavy for four.
-- **Sizing.** Preference windows size to content, not to a hardcoded frame. Give
-  each pane a sensible min width (~500pt) and let height fit.
+- **Sizing is NOT automatic — the panes own it.** The Settings window sizes to
+  its content, but SwiftUI gives you no per-pane auto-sizing: each pane declares
+  its own frame. Give every pane the *same* sensible min width (~500pt) and let
+  height fit its content, so switching tabs doesn't jump the window around. (Do
+  not plan on the window "auto-resizing per pane" — that is not a built-in.)
+- **Tab targeting is NOT built-in.** `SettingsLink` opens/foregrounds the
+  Settings scene; it does **not** select a tab. Deep-linking to a specific pane
+  requires custom selection state (`@State`/`@AppStorage` bound to the
+  `TabView`'s `selection:`) plus something to set it. Treat per-pane
+  deep-linking as opt-in work, not a freebie (see §7 open questions).
 - **Search.** Only System-Settings-scale surfaces ship a search field. A
   four-pane app doesn't need one.
 
@@ -138,12 +153,14 @@ Settings {
 
 Each pane is a native `Form`/`.formStyle(.grouped)` in system appearance.
 
-- **Pros:** most idiomatic for a handful of panes; almost free in SwiftUI;
-  per-pane auto-sizing kills the fixed-480/cramped-export problem; matches user
-  muscle memory; panes are deep-linkable via the standard Settings scene;
-  keeps Settings a system-native surface (correct inverse of the pane theming).
+- **Pros:** most idiomatic for a handful of panes; almost free in SwiftUI; each
+  pane sizes itself instead of everything sharing one fixed 480pt frame (which is
+  what jams the exports today); matches user muscle memory; keeps Settings a
+  system-native surface (correct inverse of the pane theming).
 - **Cons:** doesn't scale to many panes (fine — Mac has ~4 and won't grow, since
-  capture stays on iOS); no built-in search (not needed at this size).
+  capture stays on iOS); no built-in search (not needed at this size); **no
+  built-in tab targeting** — `SettingsLink` only opens/foregrounds the scene, so
+  deep-linking to a pane means carrying explicit `TabView` selection state.
 
 ### B — System-Settings-style sidebar + detail
 
@@ -168,10 +185,11 @@ size, and unstack the export buttons.
   exact thing the owner already called a mess. A stopgap, not a redesign.
 
 **Recommendation: A.** It's the Apple-idiomatic answer for an app with a small,
-fixed set of preference categories, gives per-pane sizing for free, and — unlike
-B — keeps Settings in the system appearance where it belongs. B's shell
-consistency is a red herring: panes and preferences are different surface
-classes on macOS, and users expect preferences to look like preferences.
+fixed set of preference categories, lets each pane own its frame instead of
+cramming four concerns into one, and — unlike B — keeps Settings in the system
+appearance where it belongs. B's shell consistency is a red herring: panes and
+preferences are different surface classes on macOS, and users expect preferences
+to look like preferences.
 
 ## 5. Proposed structure (Approach A)
 
@@ -184,13 +202,28 @@ Four tabs (fold to three if About merges into General):
   - iCloud Sync toggle + "takes effect after reopening" note (`SyncPolicy`).
   - Account status (`CKAccountStatus`, async `.task`) + last store change observed.
   - Diagnostics → opens `SyncDiagnosticsView` (sheet or nested).
-  - *Back Up Now* — **only if** `BackupManager` is injected into the scene (open q).
+  - *Back Up Now* — included. **`BackupManager` MUST be injected into the
+    Settings scene** regardless (Delete All Data depends on it, below), so this
+    control comes along for free. This is a decision, not a conditional: a Data
+    pane without `BackupManager` cannot render the delete flow correctly.
 - **Data** — `externaldrive`
   - Import (`MacExportController.importJSON`).
   - Export as a clean labeled list, not a 4-button jam: Day One JSON, Markdown
     folder, Dispatch JSON, CSV, Questions JSON, Questions CSV — the same actions
     already in the File → Export menu.
-  - Delete All Data (destructive, confirmation).
+  - **Delete All Data — preserve BOTH existing gates verbatim.** The current iOS
+    flow (`App/Sources/Settings/DataSettingsView.swift`) is deliberately
+    two-stage, and the Mac pane must reproduce it, not collapse it into a
+    generic "are you sure?":
+    1. **Scope gate** — an alert explaining the scope that also carries the
+       **backup choice**: *"Also delete backups"* is a **separate, secondary
+       destructive action and defaults to OFF**, because backups are the safety
+       net. (This is why `BackupManager` is required.)
+    2. **Typed confirmation** — a `TextField` requiring the user to type
+       **`DELETE`**; the destructive action stays disabled until it matches.
+
+    Dropping either gate — or silently deleting backups along with the data —
+    is a **data-loss regression**, not a simplification.
 - **About** — `info.circle`
   - Version + build, sync-container id, "carrying the torch of Reporter" blurb,
     GitHub link.
@@ -200,10 +233,16 @@ SwiftData-backed, sync, and compile cleanly on Mac; gives Mac users a place to
 prune vocabulary. Left as an open question (arguably content, not settings).
 
 **Window/behavior**
-- TabView-in-Settings auto-sizes to each pane; set min width ~500pt, height fits.
+- **Each pane sets its own frame** — there is no per-pane auto-sizing (§3). Give
+  every pane the same min width (~500pt) and let height fit, so tab switches
+  don't jump the window.
 - ⌘, opens/refocuses; File-menu Import/Export stays (Settings duplicates the
   common actions, as today).
-- Per-pane deep-linking via the standard Settings scene (future `SettingsLink`).
+- **Deep-linking to a pane is NOT free.** `SettingsLink` opens/foregrounds the
+  Settings scene but does not select a tab. If we want "jump to Data", we must
+  carry explicit `TabView` selection state (e.g. `@AppStorage` bound to
+  `selection:`) and set it from the caller. **Out of scope for v1** — listed as
+  an open question, not a promised affordance.
 - Search: out for v1.
 
 **Coexistence with iOS/iPad** — mirror the convergence philosophy, **inverted for
@@ -240,6 +279,15 @@ os`-riddled View layer to render both the dark themed list *and* the system Form
 4. **Reuse layer:** share the backing stores + small Mac-native pane views
    (my recommendation), or share the SwiftUI View layer across platforms with
    `#if os` guards (more DRY, more friction, appearance mismatch)?
-5. **Sync depth on Mac:** wire `BackupManager` into the Settings scene so *Back
-   Up Now* + full Diagnostics appear, or is import/export + the sync toggle
-   enough for a review-only Mac app?
+5. **Per-pane deep-linking ("jump to Data"):** worth carrying explicit `TabView`
+   selection state for, or leave it out? `SettingsLink` alone does **not** select
+   a tab (§3), so this is real work, not a freebie. Out of scope for v1 unless
+   you want it.
+
+**Decided (no longer open)**
+- **`BackupManager` is injected into the Settings scene — not optional.** The
+  Data pane's Delete All Data flow depends on it: its first gate is the *"Also
+  delete backups"* choice (default OFF). Shipping the Data pane without
+  `BackupManager` would drop a safety gate and silently change delete semantics.
+  Injecting it also brings *Back Up Now* along at no extra cost, which settles
+  the former "sync depth on Mac" question.
