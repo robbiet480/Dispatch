@@ -77,6 +77,15 @@ final class BackupManager {
     /// How many backup files exist on disk (for the settings caption).
     private(set) var backupCount = 0
     private(set) var isBackingUp = false
+
+    /// True while `deleteAllBackups()` is removing the Backups directories.
+    ///
+    /// Deletion releases the main actor for the whole removal, so without this
+    /// a scene-active `backUpIfStale()` (or a "Back Up Now" tap) could land
+    /// mid-deletion and WRITE a fresh backup after the directory was removed —
+    /// silently resurrecting backups the user just asked to destroy, while the
+    /// flow still reported success. Every backup entry point checks it.
+    private(set) var isDeletingBackups = false
     /// Tri-state iCloud Drive availability for the Settings status line:
     /// nil while the off-main ubiquity resolution is still in flight.
     private(set) var iCloudAvailability: Bool?
@@ -154,7 +163,7 @@ final class BackupManager {
     /// Scene-active / report-save hook: backs up only when enabled and the
     /// newest backup is stale (>20h). Cheap when fresh — one Date compare.
     func backUpIfStale(now: Date = Date()) {
-        guard !isSkipped, isEnabled, !isBackingUp,
+        guard !isSkipped, isEnabled, !isBackingUp, !isDeletingBackups,
               BackupRotation.isDue(lastBackupDate: lastBackupDate, now: now) else { return }
         // First-launch race guard (kit-side, tested): a fresh store with
         // sync enabled and no sync activity ever observed is plausibly
@@ -164,7 +173,7 @@ final class BackupManager {
         // purpose: manual intent wins.
         if BackupRotation.shouldDeferAutomaticBackup(
             storeCreatedAt: storeCreatedAt, syncEnabled: isSyncActive,
-            hasSyncedBefore: defaults.object(forKey: RemoteChangeObserver.firstRemoteChangeKey) != nil,
+            hasSyncedBefore: defaults.object(forKey: SyncDefaultsKeys.firstRemoteChange) != nil,
             now: now) {
             backupLog.info("automatic backup deferred: store is fresh and initial sync hasn't been observed yet")
             return
@@ -176,7 +185,7 @@ final class BackupManager {
     /// the button sits under it and reads as part of the same feature, but
     /// a manual request is explicit consent, so honor it regardless).
     func backUpNow(now: Date = Date()) {
-        guard !isSkipped, !isBackingUp else { return }
+        guard !isSkipped, !isBackingUp, !isDeletingBackups else { return }
         performBackup(now: now)
     }
 
@@ -263,8 +272,25 @@ final class BackupManager {
     /// most want to know about. The caller now waits and reports the truth.
     func deleteAllBackups() async throws {
         guard !isSkipped else { return }
-        // Both destinations: local always, plus the cached iCloud directory
-        // when it resolved — "also delete backups" means all of them.
+
+        // Close the door before opening the trapdoor: no new backup may start
+        // while we delete, and an in-flight one must land BEFORE we remove the
+        // directory — otherwise its write recreates what we just deleted.
+        isDeletingBackups = true
+        defer { isDeletingBackups = false }
+        var waited = 0
+        while isBackingUp && waited < 100 {
+            try? await Task.sleep(for: .milliseconds(100))
+            waited += 1
+        }
+
+        // "Also delete backups" means ALL of them. If the user targets iCloud
+        // but the ubiquity container never resolved — signed out, iCloud Drive
+        // off, or the resolve simply hasn't landed — then their iCloud backups
+        // are full exports of the reports we are about to irreversibly wipe,
+        // and we cannot touch them. Delete what we can reach, then SAY SO,
+        // rather than reporting a clean slate we never achieved.
+        let unreachableICloud = destination != .local && iCloudDirectory == nil
         let directories = [directory, iCloudDirectory].compactMap { $0 }
         let failure = await Task.detached(priority: .utility) { () -> String? in
             var firstFailure: String?
@@ -289,9 +315,12 @@ final class BackupManager {
         // These markers describe what is on disk — only clear them when the
         // disk agrees. If something survived, reconcile instead of claiming a
         // clean slate, and let the caller surface the failure.
-        guard failure == nil else {
+        let problem = failure ?? (unreachableICloud
+            ? "iCloud Drive is unavailable, so backups stored there were not removed."
+            : nil)
+        guard problem == nil else {
             refreshCountAsync()
-            throw DeletionFailure(message: failure ?? "Unknown error")
+            throw DeletionFailure(message: problem ?? "Unknown error")
         }
         backupLog.info("deleted all backups (delete-all-data opt-in)")
         lastBackupDate = nil
