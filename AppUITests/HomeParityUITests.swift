@@ -27,6 +27,13 @@ final class HomeParityUITests: XCTestCase {
     /// a left-aligned row (not a centered pill).
     @MainActor
     func testTopBarGlyphAndLeftAlignedFilterRow() throws {
+        // iPhone-only layout: the decorative top-bar `home-glyph` and the
+        // left-aligned filter row are `HomeView` chrome. The iPad root is the
+        // shared `LargeScreenShell` (a pane picker + split view), which has no
+        // top-bar glyph and positions its filter differently — nothing here maps
+        // to the shell, so this asserts the iPhone HomeView only.
+        try XCTSkipIf(isPad, "iPhone HomeView top-bar layout (glyph + left-aligned filter row)")
+
         let app = launchApp()
 
         XCTAssertTrue(app.images["home-glyph"].waitForExistence(timeout: 15),
