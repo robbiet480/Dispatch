@@ -14,7 +14,7 @@ import XCTest
 /// the only detail pane with a `.searchable`, which is why only it crashed.
 ///
 /// This drives the real navigation the owner used to reproduce it: launch,
-/// open Manage → Question Catalog, and assert the catalog actually renders.
+/// invoke Manage → Question Catalog (⌘5), and assert the catalog actually renders.
 /// Before the fix the app is gone by the time we look for the list; after the
 /// fix the stubbed catalog entries render.
 final class MacCatalogUITests: XCTestCase {
@@ -52,21 +52,24 @@ final class MacCatalogUITests: XCTestCase {
         let app = launchApp()
         _ = mainWindow(app)
 
-        // Navigate to the Catalog pane via the Manage menu (plan 47) rather than
-        // the detail toolbar's segmented picker: the menu bar is always present,
-        // whereas the `.principal` toolbar picker overflows on a narrow window
-        // (as on CI, which uses the default window size — the screenshot suite
-        // only sees it because it launches with --screenshot-window). Reaching
-        // the catalog is what triggered the crash — pre-fix it brought a second
-        // `.searchable` into the shared window toolbar and AppKit threw here.
-        let manageMenu = app.menuBars.menuBarItems["Manage"]
-        XCTAssertTrue(manageMenu.waitForExistence(timeout: 15),
-                      "Manage menu should exist in the menu bar")
-        manageMenu.click()
-        let catalogItem = app.menuBars.menuItems["Question Catalog"]
-        XCTAssertTrue(catalogItem.waitForExistence(timeout: 5),
-                      "Manage → Question Catalog menu item should exist")
-        catalogItem.click()
+        // Navigate to the Catalog pane by KEYBOARD (⌘5 — the Manage menu's
+        // "Question Catalog" command, plan 47), not by clicking the menu and not
+        // via the detail toolbar's segmented picker.
+        //
+        // Not the picker: the `.principal` toolbar picker overflows on a narrow
+        // window (as on CI, which uses the default window size — the screenshot
+        // suite only sees it because it launches with --screenshot-window).
+        //
+        // Not the menu CLICK: driving the menu bar flakes ("timed out while
+        // waiting for menu open notification") — MacScreenshotTests hit exactly
+        // that and moved to ⌘2 for the same reason. The shortcut invokes the same
+        // command without opening the menu, so it exercises the identical
+        // navigation path with none of the AppKit menu-tracking timing.
+        //
+        // Reaching the catalog is what triggered the crash — pre-fix it brought a
+        // second `.searchable` into the shared window toolbar and AppKit threw.
+        app.activate()
+        app.typeKey("5", modifierFlags: .command)
 
         // On macOS the catalog list surfaces as `question-catalog-list`: the
         // shared CatalogListView applies `mac-catalog-list` to the inner List,
