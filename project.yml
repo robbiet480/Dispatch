@@ -282,6 +282,14 @@ targets:
       # (@ViewBuilder returning self) since navigationBarTitleDisplayMode and
       # toolbarColorScheme(for: .navigationBar) don't exist there.
       - path: App/Sources/Shell/PlatformModifiers.swift
+      # Task 3.4 (iPad/Mac UI convergence): the shared side-by-side split shell
+      # BOTH iPad and Mac adopt (in 3.5/3.6). One NavigationSplitView whose
+      # sidebar swaps by pane and whose detail renders the pane's selection.
+      # Reads the injectable PaneNavigation from the environment; the reports
+      # list/detail are #if os (the Mac twins here vs the iOS originals globbed
+      # into DispatchApp). Unwired this task — it compiles into both targets but
+      # is unused until adoption.
+      - path: App/Sources/Shell/LargeScreenShell.swift
       # Task 2.2 (iPad/Mac UI convergence): the shared Insights pane + its
       # per-question correlation drill-in. Their only iOS-only chrome
       # (navigationBarTitleDisplayMode/toolbarColorScheme) now goes through
