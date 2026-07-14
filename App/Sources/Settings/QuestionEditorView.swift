@@ -13,6 +13,15 @@ struct QuestionEditorView: View {
     /// nil ⇒ creating a new question.
     let question: Question?
 
+    /// Called after a successful save with the persisted question's
+    /// `uniqueIdentifier`. The push-host (`QuestionSettingsView`) leaves this
+    /// nil — `dismiss()` alone pops the stack, unchanged from before. The
+    /// shell (`LargeScreenShell`, Task 3.4 fix wave 1) passes a callback that
+    /// clears its composing flag and selects the saved row: the shell's "new"
+    /// editor is the detail column's NavigationStack ROOT, so `\.dismiss`
+    /// there is a no-op and composing would otherwise never clear.
+    var onSaved: ((String) -> Void)?
+
     @State private var prompt: String
     @State private var type: QuestionType
     @State private var choices: [String]
@@ -50,8 +59,9 @@ struct QuestionEditorView: View {
         ).isEmpty
     }
 
-    init(question: Question?) {
+    init(question: Question?, onSaved: ((String) -> Void)? = nil) {
         self.question = question
+        self.onSaved = onSaved
         _prompt = State(initialValue: question?.prompt ?? "")
         _type = State(initialValue: question?.type ?? .tokens)
         _choices = State(initialValue: question?.choices ?? [])
@@ -415,6 +425,7 @@ struct QuestionEditorView: View {
 
         let stateOfMindKind = (supportsStateOfMind && logAsStateOfMind) ? "momentaryEmotion" : nil
 
+        let target: Question
         if let question {
             question.prompt = trimmedPrompt
             if !isTypeLocked {
@@ -425,6 +436,7 @@ struct QuestionEditorView: View {
             question.reportKinds = orderedKinds
             question.stateOfMindKind = stateOfMindKind
             applyParityFields(to: question)
+            target = question
         } else {
             let newQuestion = QuestionAdmin.makeQuestion(
                 prompt: trimmedPrompt,
@@ -437,9 +449,11 @@ struct QuestionEditorView: View {
             newQuestion.stateOfMindKind = stateOfMindKind
             applyParityFields(to: newQuestion)
             context.insert(newQuestion)
+            target = newQuestion
         }
 
         try? context.save()
+        onSaved?(target.uniqueIdentifier)
         dismiss()
     }
 

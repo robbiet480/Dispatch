@@ -436,6 +436,15 @@ struct PromptGroupEditorView: View {
     /// nil ⇒ creating a new group.
     let group: PromptGroup?
 
+    /// Called after a successful save with the persisted group's
+    /// `uniqueIdentifier`. The push-host (`PromptGroupsView`) leaves this nil
+    /// — `dismiss()` alone pops the stack, unchanged from before. The shell
+    /// (`LargeScreenShell`, Task 3.4 fix wave 1) passes a callback that
+    /// clears its composing flag and selects the saved row: the shell's "new"
+    /// editor is the detail column's NavigationStack ROOT, so `\.dismiss`
+    /// there is a no-op and composing would otherwise never clear.
+    var onSaved: ((String) -> Void)?
+
     /// Local @State drafts throughout — committed on Save, never written to
     /// an observable per keystroke (see LocalTextEditorField's doc comment).
     @State private var name: String
@@ -482,8 +491,9 @@ struct PromptGroupEditorView: View {
 
     private var theme: Theme { themeStore.theme }
 
-    init(group: PromptGroup?) {
+    init(group: PromptGroup?, onSaved: ((String) -> Void)? = nil) {
         self.group = group
+        self.onSaved = onSaved
         _name = State(initialValue: group?.name ?? "")
         _questionIDs = State(initialValue: group?.questionIDs ?? [])
         _isEnabled = State(initialValue: group?.isEnabled ?? true)
@@ -1361,6 +1371,7 @@ struct PromptGroupEditorView: View {
         target.schedule = draftSchedule
         target.isEnabled = isEnabled
         try? context.save()
+        onSaved?(target.uniqueIdentifier)
         // On macOS the save is enough — CloudKit syncs it and the iPhone's
         // RemoteChangeObserver replans (plan 47). iOS replans/refreshes locally.
         #if os(iOS)

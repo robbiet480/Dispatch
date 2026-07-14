@@ -32,9 +32,10 @@ import SwiftUI
 ///
 /// Platform seams: the reports list/detail are `#if os` (the Mac twins live in
 /// `Mac/Sources`, the iOS originals lean on UIKit/nav-bar chrome); the iOS-only
-/// Settings gear presents `SettingsView` as a sheet. No `.searchable` anywhere
-/// in the shell columns — dual-column `.searchable` crashes AppKit, and the
-/// reports sidebar already owns its own search field.
+/// Settings gear presents `SettingsView` as a sheet. The reports sidebar
+/// (`ReportsListView`/`MacReportsListView`) owns the shell's ONE `.searchable`
+/// — never add a second LIVE `.searchable` to another column while it's
+/// showing; two live `.searchable` in the same split view crashes AppKit.
 struct LargeScreenShell: View {
     // Injected by the adopters (3.5/3.6) — never constructed here.
     @Environment(PaneNavigation.self) private var nav
@@ -88,6 +89,18 @@ struct LargeScreenShell: View {
         .onChange(of: firstCatalogID) { _, newValue in
             if nav.pane == .catalog, nav.selectedCatalogID == nil, let newValue {
                 nav.selectedCatalogID = newValue
+            }
+        }
+        // Fix wave 1: a search/filter change can drop the selected entry out
+        // of `filteredEntries` entirely (not just change which is first),
+        // leaving the detail column stuck on an empty state while the list is
+        // populated — auto-select-first above only fires when the selection
+        // is nil. Reconcile here: if the current selection is no longer in
+        // the filtered list, clear it so the auto-select-first path re-fires.
+        .onChange(of: catalogStore.filteredEntries) { _, entries in
+            if let selected = nav.selectedCatalogID,
+               !entries.contains(where: { $0.id == selected }) {
+                nav.selectedCatalogID = nil
             }
         }
         .sheet(isPresented: $showingCatalogSubmit) {
@@ -236,14 +249,28 @@ struct LargeScreenShell: View {
     private var questionDetail: some View {
         if composingQuestion {
             // `.id("new")` keeps the empty editor distinct from any selected
-            // question's editor.
-            QuestionEditorView(question: nil)
+            // question's editor. This "new" editor is the detail column's
+            // NavigationStack ROOT, so its `\.dismiss` is a no-op — `onSaved`
+            // clears `composingQuestion` and selects the just-created row
+            // instead, which flips `.id` from "new" to the real id and swaps
+            // in a fresh edit-existing editor (fix wave 1: without this, Save
+            // left the stale "new" editor on screen and a second Save
+            // inserted a duplicate question).
+            QuestionEditorView(question: nil, onSaved: { id in
+                composingQuestion = false
+                nav.selectedQuestionID = id
+            })
                 .id("new")
         } else if let id = nav.selectedQuestionID,
                   let question = questions.first(where: { $0.uniqueIdentifier == id }) {
             // `.id(selection)` so switching rows creates a FRESH editor bound to
             // the new question (otherwise SwiftUI reuses the editor's @State).
-            QuestionEditorView(question: question)
+            // `onSaved` re-selects the same id here — a harmless no-op that
+            // keeps one code path for both the new and existing editors.
+            QuestionEditorView(question: question, onSaved: { id in
+                composingQuestion = false
+                nav.selectedQuestionID = id
+            })
                 .id(id)
         } else {
             emptyState(title: "Select a question",
@@ -254,11 +281,21 @@ struct LargeScreenShell: View {
     @ViewBuilder
     private var groupDetail: some View {
         if composingGroup {
-            PromptGroupEditorView(group: nil)
+            // Same "new"-editor-is-the-stack-root fix as `questionDetail`
+            // above: `onSaved` clears `composingGroup` and selects the saved
+            // group so `.id` flips from "new" to the real id.
+            PromptGroupEditorView(group: nil, onSaved: { id in
+                composingGroup = false
+                nav.selectedGroupID = id
+            })
                 .id("new")
         } else if let id = nav.selectedGroupID,
                   let group = groups.first(where: { $0.uniqueIdentifier == id }) {
-            PromptGroupEditorView(group: group)
+            // `onSaved` re-selects the same id here — a harmless no-op.
+            PromptGroupEditorView(group: group, onSaved: { id in
+                composingGroup = false
+                nav.selectedGroupID = id
+            })
                 .id(id)
         } else {
             emptyState(title: "Select a group",
