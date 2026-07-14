@@ -89,4 +89,37 @@ final class PadShellUITests: XCTestCase {
         XCTAssertTrue(questionsList.waitForExistence(timeout: 15),
                       "the Questions pane's list should appear when switching to the Questions pane")
     }
+
+    /// Regression guard (iPad action-bar restoration): the Dashboard pane must
+    /// carry the iOS-only REPORT / AWAKE-ASLEEP survey strip — the iPad is a
+    /// full iOS target and CAN file reports and toggle awake, so the shell's
+    /// dashboard shows the same `DashboardActionBar` HomeView uses. Sprint 3's
+    /// shell adoption accidentally dropped this strip; this pins it back.
+    @MainActor
+    func testDashboardPaneShowsReportAndAwakeControls() throws {
+        try XCTSkipUnless(isPad, "iPad-only: the shell is the iPad root; iPhone keeps HomeView")
+
+        // Landscape guarantees the two-column split renders the dashboard detail
+        // column (which hosts the action strip), matching the sibling test's
+        // proven setup.
+        XCUIDevice.shared.orientation = .landscapeLeft
+
+        let app = launchApp()
+
+        // The shell defaults to the Dashboard pane; select it explicitly so the
+        // test is robust to any launch-state change.
+        let picker = app.segmentedControls["shell-pane-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10),
+                      "the shell's pane picker should exist on the iPad shell root")
+        picker.buttons["Dashboard"].tap()
+
+        // The action strip is always present on the dashboard (empty or not).
+        let reportButton = app.buttons["report-button"]
+        XCTAssertTrue(reportButton.waitForExistence(timeout: 10),
+                      "the Dashboard pane should show the REPORT button (the iPad can file reports)")
+
+        let awakeToggle = app.buttons["awake-toggle"]
+        XCTAssertTrue(awakeToggle.waitForExistence(timeout: 10),
+                      "the Dashboard pane should show the AWAKE/ASLEEP toggle")
+    }
 }

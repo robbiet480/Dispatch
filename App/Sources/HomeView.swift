@@ -6,11 +6,7 @@ struct HomeView: View {
     @Query private var reports: [Report]
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Environment(ThemeStore.self) private var themeStore
-    @Environment(AwakeStore.self) private var awakeStore
     @Environment(VisualizationFilterStore.self) private var filterStore
-    @Environment(SurveyPresenter.self) private var surveyPresenter
-    @Environment(NotificationScheduler.self) private var scheduler
-    @Environment(\.notificationPrefs) private var notificationPrefs
     /// Plan 27: layout (grid vs pager) keys off the size class — NOT the
     /// idiom — so iPad Split View/Slide Over at compact width degrades to
     /// the iPhone pager automatically.
@@ -165,48 +161,18 @@ struct HomeView: View {
     /// pill. Fixed-height sibling of the pager, so content can never overlap
     /// it (the old UIPageControl-overlay bug class is structurally gone).
     private var bottomBar: some View {
-        HStack {
-            Button("REPORT") {
-                // Guarded for the ⌘N path: a hardware-keyboard shortcut can
-                // fire while the survey is already presented (the presenting
-                // view stays in the responder chain under a sheet) — don't
-                // stomp an in-progress survey's request.
-                guard surveyPresenter.request == nil else { return }
-                surveyPresenter.request = SurveyRequest(kind: .regular, trigger: .manual)
-            }
-            .font(.headline)
-            .foregroundStyle(.white)
-            // Sunk strip: keep a >=44pt hit target extending upward, away
-            // from the home indicator (the indicator overlaps background only).
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-            // Plan 27: new report from a hardware keyboard (iPad).
-            .keyboardShortcut("n", modifiers: .command)
-            .accessibilityIdentifier("report-button")
-
-            Spacer()
-
-            // Dots belong to the pager only — the regular-width grid shows
-            // every visualization at once, so there's nothing to page.
+        // The REPORT button + AWAKE/ASLEEP pill now live in the shared
+        // `DashboardActionBar` (also used by the iPad shell dashboard); HomeView
+        // supplies the page dots as its center slot. The pager's dots belong to
+        // the pager only — the regular-width grid shows every visualization at
+        // once, so there's nothing to page.
+        DashboardActionBar {
             if horizontalSizeClass != .regular && !visibleQuestions.isEmpty && !reports.isEmpty {
                 PlainPageDots(
                     count: visibleQuestions.count,
                     currentIndex: visibleQuestions.firstIndex { $0.uniqueIdentifier == selectedQuestionID } ?? 0
                 )
             }
-
-            Spacer()
-
-            AwakePillToggle(isAwake: awakeStore.isAwake) {
-                // Toggling is authoritative even if the survey that follows is
-                // cancelled — the state change reflects reality regardless of
-                // whether the user files the optional report about it.
-                let kind = awakeStore.toggle()
-                scheduler.replan(prefs: notificationPrefs, awakeStore: awakeStore)
-                surveyPresenter.request = SurveyRequest(kind: kind, trigger: .manual)
-            }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
         }
         .padding(.horizontal, 20)
         // The reserved strip: minHeight (not a hard frame) so accessibility
@@ -247,38 +213,5 @@ private struct PlainPageDots: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Page \(currentIndex + 1) of \(count)")
         .accessibilityIdentifier("page-dots")
-    }
-}
-
-/// Plan 29: Reporter-style AWAKE/ASLEEP pill — a capsule whose white knob
-/// slides edge-to-edge as the label swaps. Semantics live in `action`;
-/// this view is presentation only.
-private struct AwakePillToggle: View {
-    let isAwake: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            withAnimation(.snappy) { action() }
-        } label: {
-            HStack(spacing: 8) {
-                if !isAwake { knob }
-                Text(isAwake ? "AWAKE" : "ASLEEP")
-                    .font(.caption.weight(.bold))
-                    .kerning(0.5)
-                    .foregroundStyle(.white)
-                if isAwake { knob }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Color.white.opacity(0.18)))
-        }
-        .accessibilityIdentifier("awake-toggle")
-        // NavigationUITests reads .label and asserts AWAKE/ASLEEP + the flip.
-        .accessibilityLabel(isAwake ? "AWAKE" : "ASLEEP")
-    }
-
-    private var knob: some View {
-        Circle().fill(Color.white).frame(width: 18, height: 18)
     }
 }
