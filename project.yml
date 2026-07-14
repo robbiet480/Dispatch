@@ -338,6 +338,11 @@ targets:
       # popover (MacFilterPopover, still in Mac/Sources/MacDashboardView.swift)
       # is #if os(macOS); the pager (.tabViewStyle(.page)) is iOS-only.
       - path: App/Sources/DashboardContentView.swift
+      # Mac Settings redesign (Task 1): the rotating-backup manager is
+      # UIKit-free (Foundation/SwiftData + kit-side rotation), so it joins the
+      # Mac target unmodified. Settings → Sync/Data need it for "Back Up Now"
+      # and the "also delete backups" opt-in of Delete All Data.
+      - path: App/Sources/Backup/BackupManager.swift
       # Shared place-search component (plan 50, #83): same dual-membership as
       # Shared/Providers — the MapKit autocomplete/geocode wrapper lets the Mac
       # editor pick a place, lifting the view-only restriction on place triggers.

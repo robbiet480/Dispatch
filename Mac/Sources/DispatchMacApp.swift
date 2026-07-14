@@ -17,6 +17,7 @@ struct DispatchMacApp: App {
     let visualizationFilterStore: VisualizationFilterStore
     let remoteChangeObserver: RemoteChangeObserver
     let exportController: MacExportController
+    let backupManager: BackupManager
     @State private var navigation = PaneNavigation()
     private let appDefaults: UserDefaults
     private let isTestEnvironment: Bool
@@ -67,6 +68,17 @@ struct DispatchMacApp: App {
         )
 
         exportController = MacExportController(container: container)
+
+        // Rotating backups (plan 16/25), shared with iOS: Settings drives
+        // "Back Up Now" and the "also delete backups" opt-in of Delete All
+        // Data. `storeCreatedAt: nil` — the Mac never auto-backs-up on a
+        // timer (no scene-active hook here), so the first-launch deferral
+        // guard it feeds has nothing to gate; manual Back Up Now bypasses it
+        // regardless. `isSyncActive` mirrors the container we actually built.
+        backupManager = BackupManager(
+            container: container, defaults: appDefaults, isTestEnvironment: isTestEnvironment,
+            storeCreatedAt: nil, isSyncActive: cloudKitActive
+        )
 
         // Deterministic UUIDv5 defaults (kit-side): a fresh Mac store before
         // the first CloudKit import seeds the SAME question IDs every device
@@ -173,6 +185,7 @@ struct DispatchMacApp: App {
                 .environment(themeStore)
                 .environment(remoteChangeObserver)
                 .environment(exportController)
+                .environment(backupManager)
                 .environment(\.appDefaults, appDefaults)
         }
         .modelContainer(container)
