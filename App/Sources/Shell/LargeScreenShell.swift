@@ -261,22 +261,38 @@ struct LargeScreenShell: View {
             Color.themeBackground(theme)
                 .ignoresSafeArea()
 
-            // DashboardContentView assumes a non-empty report set (the two empty
-            // states stay with the callers), so the shell owns the empty state.
-            if reports.isEmpty {
-                emptyStateLabel(
-                    title: "No reports yet",
-                    message: "File reports on your iPhone or Apple Watch — they sync here through iCloud."
-                )
-            } else {
-                DashboardContentView(
-                    searchQuery: reportsSearch,
-                    // Adaptive columns reflow on window/split resize (the Mac
-                    // dashboard's grid). The compact pager is unused at the
-                    // regular widths this shell targets.
-                    columns: [GridItem(.adaptive(minimum: 340), spacing: 16)],
-                    selectedQuestionID: .constant(nil)
-                )
+            // The iPad is a full iOS target, so the dashboard carries HomeView's
+            // REPORT / AWAKE-ASLEEP strip (the shared `DashboardActionBar`). The
+            // strip lives OUTSIDE the empty/non-empty branch so it's always
+            // visible — you can file your first report from the empty state.
+            VStack(spacing: 8) {
+                // DashboardContentView assumes a non-empty report set (the two
+                // empty states stay with the callers), so the shell owns the
+                // empty state.
+                if reports.isEmpty {
+                    Spacer()
+                    emptyStateLabel(
+                        title: "No reports yet",
+                        message: "Tap REPORT below to file your first one."
+                    )
+                    Spacer()
+                } else {
+                    DashboardContentView(
+                        searchQuery: reportsSearch,
+                        // Adaptive columns reflow on window/split resize (the Mac
+                        // dashboard's grid). The compact pager is unused at the
+                        // regular widths this shell targets.
+                        columns: [GridItem(.adaptive(minimum: 340), spacing: 16)],
+                        selectedQuestionID: .constant(nil)
+                    )
+                }
+
+                // No page dots here — the regular-width grid shows every
+                // visualization at once (dots are the iPhone pager's concern).
+                DashboardActionBar { EmptyView() }
+                    .padding(.horizontal, 20)
+                    .frame(minHeight: 52)
+                    .padding(.bottom, 8)
             }
         }
         #endif
