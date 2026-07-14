@@ -192,12 +192,15 @@ struct CatalogDetailView: View {
     }
 
     @ViewBuilder private var tagChips: some View {
-        HStack(spacing: 6) {
-            ForEach(entry.tags, id: \.self) { tag in
-                Text(tag).font(.caption2)
-                    .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(Color.white.opacity(0.15), in: Capsule())
-                    .foregroundStyle(.white)
+        // Scroll horizontally so a long tag list never clips at narrow widths.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(entry.tags, id: \.self) { tag in
+                    Text(tag).font(.caption2)
+                        .padding(.horizontal, 9).padding(.vertical, 3)
+                        .background(Color.white.opacity(0.15), in: Capsule())
+                        .foregroundStyle(.white)
+                }
             }
         }
     }
@@ -220,6 +223,9 @@ struct CatalogDetailView: View {
     }
 
     private func trimmed(_ v: Double) -> String {
-        v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)
+        // Format directly — `Int(v)` traps when `configSummary` passes a
+        // stepper/tapCounter config's `.greatestFiniteMagnitude` "no max"
+        // bound (same poison-pill class as the preview's A1 fix).
+        v == v.rounded() ? String(format: "%.0f", v) : String(format: "%.1f", v)
     }
 }

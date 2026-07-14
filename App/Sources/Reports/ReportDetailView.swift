@@ -4,6 +4,11 @@ import SwiftUI
 struct ReportDetailView: View {
     let report: Report
     @Environment(ThemeStore.self) private var themeStore
+    /// Task 3.8: suppresses this view's own title when hosted in
+    /// `LargeScreenShell` (the iPad Dashboard detail column), where the pane
+    /// picker is the sole title. Default false preserves the title on the
+    /// iPhone push.
+    @Environment(\.isInLargeScreenShell) private var inShell
 
     private var theme: Theme { themeStore.theme }
 
@@ -22,7 +27,7 @@ struct ReportDetailView: View {
             // Plan 27: readable column on iPad; no-op at iPhone widths.
             .readableColumn()
         }
-        .navigationTitle(timeTitle)
+        .navigationTitle(inShell ? "" : timeTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
     }

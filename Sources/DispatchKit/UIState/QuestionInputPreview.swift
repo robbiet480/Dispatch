@@ -66,7 +66,15 @@ public enum QuestionInputPreview {
             case .stepper:
                 return .number(.stepper(value: sampleCount(min: cfg.min, max: cfg.max)))
             case .tapCounter:
-                return .number(.tapCounter(value: Int(sampleCount(min: cfg.min, max: cfg.max))))
+                // `Int(hugeDouble)` traps — a poison-pill catalog entry with an
+                // extreme bound (e.g. min = 1e20) would otherwise crash the
+                // preview. Clamp into Int's representable range first, then cast
+                // via `Int(exactly:)`: `Double(Int.max)` rounds up to 2^63 (one
+                // past Int.max), so the exact boundary still needs the fallback.
+                let sample = sampleCount(min: cfg.min, max: cfg.max)
+                let safeSample = Swift.min(Swift.max(sample, Double(Int.min)), Double(Int.max))
+                let value = Int(exactly: safeSample.rounded(.towardZero)) ?? Int.max
+                return .number(.tapCounter(value: value))
             case .scale:
                 let points = NumberInputStyle.scalePoints(min: cfg.min, max: cfg.max)
                 let selected = points.isEmpty ? 0 : points[points.count / 2]

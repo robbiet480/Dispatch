@@ -19,14 +19,24 @@ struct ReportsListView: View {
     /// When nil (iPhone), rows keep the existing `NavigationLink` push.
     var selection: Binding<String?>? = nil
 
+    /// iPad shell: the reports search field drives the shell's shared
+    /// `reportsSearch`, so the dashboard grid filters off the same query
+    /// (matching the Mac's `MacReportsListView`). nil — the iPhone standalone
+    /// push (`HomeView`) — keeps search in the local `@State` below, so that
+    /// path is unchanged.
+    var searchText: Binding<String>? = nil
+
     @State private var searchQuery = ""
+    /// The effective search binding: the shell's shared one when injected,
+    /// otherwise the local `@State`.
+    private var searchBinding: Binding<String> { searchText ?? $searchQuery }
     // Fully qualified: DispatchKit declares a `FocusState` model type (the
     // focus sensor value), which makes the bare name ambiguous here.
     @SwiftUI.FocusState private var isSearchFocused: Bool
     @State private var showingBackfillSheet = false
     @State private var backfillDate = Date()
 
-    private var filteredReports: [Report] { ReportSearch.filter(reports, query: searchQuery) }
+    private var filteredReports: [Report] { ReportSearch.filter(reports, query: searchBinding.wrappedValue) }
 
     private var sections: [DaySection] { ReportsOverview.sections(from: filteredReports) }
 
@@ -160,7 +170,7 @@ struct ReportsListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .searchable(text: $searchQuery, prompt: "Search reports")
+        .searchable(text: searchBinding, prompt: "Search reports")
         .searchFocused($isSearchFocused)
         // Plan 27: ⌘F focuses the search field from a hardware keyboard.
         // A zero-size, accessibility-hidden button is the cheapest shortcut

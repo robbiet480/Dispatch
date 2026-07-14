@@ -457,8 +457,12 @@ struct QuestionEditorView: View {
             target = newQuestion
         }
 
-        try? context.save()
-        onSaved?(target.uniqueIdentifier)
+        do {
+            try context.save()
+            onSaved?(target.uniqueIdentifier)
+        } catch {
+            // Save failed — don't drive shell selection off unpersisted state.
+        }
         dismiss()
     }
 
