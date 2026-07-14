@@ -122,8 +122,10 @@ struct DashboardContentView: View {
             hasher.combine(person.alternateNames)
             partial ^= hasher.finalize()
         }
-        // searchQuery is a constant "" on iOS (never changes the key there);
-        // on the Mac a sidebar search must refire the rebuild.
+        // searchQuery drives the rebuild wherever a reports-sidebar search is
+        // wired: macOS, and iPad (the shell threads its sidebar search here).
+        // On iPhone HomeView passes no search, so it stays "". Keep it in the
+        // key regardless.
         return "\(reports.count)|\(newestDate)|\(identityFingerprint)|\(visibleIDs)|\(criteria)|\(peopleFingerprint)|\(searchQuery)"
     }
 
