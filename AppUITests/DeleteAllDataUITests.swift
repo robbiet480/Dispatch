@@ -13,8 +13,7 @@ final class DeleteAllDataUITests: XCTestCase {
 
         // Seed: file one report via the survey flow (SurveyFlowUITests pattern).
         let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        XCTAssertEqual(countLabel.label, "0 reports")
+        XCTAssertEqual(app.reportCountText(), "0 reports")
 
         app.buttons["report-button"].tap()
         let next = app.buttons["survey-next"]
@@ -33,9 +32,9 @@ final class DeleteAllDataUITests: XCTestCase {
         // Settings "Manage" section (Task 3.6) pushed the lower sections down;
         // SwiftUI's List lazily materializes off-screen rows, so scroll it in
         // before tapping.
-        app.buttons["settings-button"].tap()
+        app.openSettings()
         let dataLink = app.buttons["data-settings-link"]
-        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons[app.isPadShell ? "notifications-settings-link" : "questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
 
@@ -69,26 +68,32 @@ final class DeleteAllDataUITests: XCTestCase {
         successAlert.buttons["OK"].tap()
 
         // Back out of Settings to Home; the report count must be zero again.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        XCTAssertEqual(countLabel.label, "0 reports")
+        // iPhone pops the Data screen back to Home; the iPad shell dismisses the
+        // Settings sheet to reveal the Dashboard behind it.
+        if app.isPadShell {
+            app.closeSettings()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        XCTAssertEqual(app.reportCountText(), "0 reports")
 
         // Reports list is empty.
-        app.buttons["reports-list-button"].tap()
+        app.revealReports()
         XCTAssertTrue(
             app.otherElements["reports-list"].waitForExistence(timeout: 10)
                 || app.collectionViews["reports-list"].waitForExistence(timeout: 10)
                 || app.tables["reports-list"].waitForExistence(timeout: 10)
         )
         XCTAssertEqual(app.collectionViews["reports-list"].cells.count, 0)
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // iPhone pops the pushed reports list back to Home; on the iPad shell the
+        // reports list is the always-present Dashboard sidebar (nothing to pop).
+        if !app.isPadShell {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
 
-        // Default questions were reseeded: Settings → Questions shows the
-        // frozen catalog (spot-check two prompts).
-        app.buttons["settings-button"].tap()
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
+        // Default questions were reseeded: the Questions list shows the frozen
+        // catalog (spot-check two prompts).
+        app.openQuestions()
         // Question rows render their prompts uppercased.
         XCTAssertTrue(app.staticTexts["WHAT ARE YOU DOING?"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["ARE YOU WORKING?"].exists)
@@ -101,11 +106,11 @@ final class DeleteAllDataUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].tap()
+        app.openSettings()
         // Data section is below the fold after the Manage section (Task 3.6);
         // scroll the lazily-rendered row in before tapping.
         let dataLink = app.buttons["data-settings-link"]
-        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons[app.isPadShell ? "notifications-settings-link" : "questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
 

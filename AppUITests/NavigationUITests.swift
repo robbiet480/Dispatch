@@ -7,26 +7,22 @@ final class NavigationUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        // Reports list: open, assert, and navigate back.
-        let reportsListButton = app.buttons["reports-list-button"]
-        XCTAssertTrue(reportsListButton.waitForExistence(timeout: 10))
-        reportsListButton.tap()
+        // Reports list: open and assert.
+        app.revealReports()
 
         XCTAssertTrue(
             app.otherElements["reports-list"].waitForExistence(timeout: 10)
                 || app.collectionViews["reports-list"].waitForExistence(timeout: 10)
                 || app.tables["reports-list"].waitForExistence(timeout: 10)
         )
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // iPhone pops the pushed reports list back to Home; on the iPad shell the
+        // reports list is the always-present Dashboard sidebar (nothing to pop).
+        if !app.isPadShell {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
 
-        // Settings -> Questions: open, assert, and navigate back out.
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
+        // Questions: open and assert.
+        app.openQuestions()
 
         XCTAssertTrue(
             app.otherElements["question-settings-list"].waitForExistence(timeout: 10)
@@ -34,9 +30,14 @@ final class NavigationUITests: XCTestCase {
                 || app.tables["question-settings-list"].waitForExistence(timeout: 10)
         )
 
-        // Back out of Questions, then back out of Settings to Home.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Return to the dashboard for the awake toggle. iPhone pops Questions →
+        // Settings → Home; the iPad shell selects the Dashboard pane.
+        if app.isPadShell {
+            app.selectPane("Dashboard")
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
 
         // Awake toggle: capture current state, tap it, expect the survey sheet, cancel it.
         let awakeToggle = app.buttons["awake-toggle"]
@@ -144,13 +145,7 @@ final class NavigationUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let groupsLink = app.buttons["prompt-groups-link"]
-        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
-        groupsLink.tap()
+        app.openGroups()
 
         let addButton = app.buttons["group-add"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 10))
@@ -208,7 +203,12 @@ final class NavigationUITests: XCTestCase {
         app.buttons["group-save"].tap()
 
         // Back on the list: the calendar group shows with its schedule label
-        // and NO needs-access hint (full-access test posture).
+        // and NO needs-access hint (full-access test posture). On the iPad shell
+        // the editor took the detail column, so reveal the Groups sidebar to see
+        // the saved row.
+        if app.isPadShell {
+            app.revealSidebar(until: app.staticTexts[groupName.uppercased()])
+        }
         XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["When a calendar event ends – 1 question"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["group-row-needs-calendar"].exists)
@@ -230,13 +230,7 @@ final class NavigationUITests: XCTestCase {
                                "--stub-place-search"]
         app.launch()
 
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let groupsLink = app.buttons["prompt-groups-link"]
-        XCTAssertTrue(groupsLink.waitForExistence(timeout: 10))
-        groupsLink.tap()
+        app.openGroups()
 
         let addButton = app.buttons["group-add"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 10))
@@ -298,7 +292,12 @@ final class NavigationUITests: XCTestCase {
         app.buttons["group-save"].tap()
 
         // Back on the list: the place group shows with its schedule summary
-        // ("Arrive at HQ", immediate) and NO needs-Always hint.
+        // ("Arrive at HQ", immediate) and NO needs-Always hint. On the iPad shell
+        // the editor took the detail column, so reveal the Groups sidebar to see
+        // the saved row.
+        if app.isPadShell {
+            app.revealSidebar(until: app.staticTexts[groupName.uppercased()])
+        }
         XCTAssertTrue(app.staticTexts[groupName.uppercased()].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Arrive at HQ – 1 question"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["group-row-needs-always"].exists)

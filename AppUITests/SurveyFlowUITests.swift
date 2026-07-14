@@ -8,7 +8,7 @@ final class SurveyFlowUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["report-count"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["report-button"].waitForExistence(timeout: 10))
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
                       || app.progressIndicators["survey-progress"].waitForExistence(timeout: 10))
@@ -105,8 +105,7 @@ final class SurveyFlowUITests: XCTestCase {
         app.launch()
 
         let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        let before = countLabel.label // e.g. "0 reports"
+        let before = app.reportCountText() // e.g. "0 reports"
 
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
@@ -139,8 +138,7 @@ final class SurveyFlowUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["report-button"].waitForExistence(timeout: 10))
 
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
@@ -187,8 +185,7 @@ final class SurveyFlowUITests: XCTestCase {
         app.launch()
 
         let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        let before = countLabel.label
+        let before = app.reportCountText()
 
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
@@ -218,7 +215,7 @@ final class SurveyFlowUITests: XCTestCase {
 
         // Open the freshly saved report and assert the exact typed text
         // persisted — a real assertion on content, not just the count.
-        app.buttons["reports-list-button"].tap()
+        app.revealReports()
         let reportsList = app.collectionViews["reports-list"].exists
             ? app.collectionViews["reports-list"]
             : app.tables["reports-list"]
@@ -248,8 +245,7 @@ final class SurveyFlowUITests: XCTestCase {
         app.launch()
 
         let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        let before = countLabel.label
+        let before = app.reportCountText()
 
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
@@ -281,7 +277,7 @@ final class SurveyFlowUITests: XCTestCase {
         XCTAssertNotEqual(countLabel.label, before, "report count did not increment")
 
         // Open the freshly saved report and assert the token persisted.
-        app.buttons["reports-list-button"].tap()
+        app.revealReports()
         let reportsList = app.collectionViews["reports-list"].exists
             ? app.collectionViews["reports-list"]
             : app.tables["reports-list"]
@@ -337,13 +333,7 @@ final class SurveyFlowUITests: XCTestCase {
     /// returns the app on the Questions screen. Shared by the two time flows.
     @MainActor
     private func addTimeQuestion(_ app: XCUIApplication, prompt: String) {
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
-
-        let questionsLink = app.buttons["questions-settings-link"]
-        XCTAssertTrue(questionsLink.waitForExistence(timeout: 10))
-        questionsLink.tap()
+        app.openQuestions()
 
         let addButton = app.buttons["add-question-button"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 10))
@@ -368,10 +358,16 @@ final class SurveyFlowUITests: XCTestCase {
 
         app.buttons["Save"].tap()
 
-        // Back out of Questions, then Settings, to Home.
-        XCTAssertTrue(app.buttons["add-question-button"].waitForExistence(timeout: 10))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Back to the dashboard so the caller can start a survey. iPhone pops
+        // Questions → Settings → Home; the iPad shell just returns to the
+        // Dashboard pane (the editor lives in the detail column, not a push).
+        if app.isPadShell {
+            app.selectPane("Dashboard")
+        } else {
+            XCTAssertTrue(app.buttons["add-question-button"].waitForExistence(timeout: 10))
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
     }
 
     /// Plan 28 (time question), both branches in one launch: add TWO time
@@ -396,8 +392,7 @@ final class SurveyFlowUITests: XCTestCase {
         addTimeQuestion(app, prompt: untouchedPrompt)
 
         let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        let before = countLabel.label
+        let before = app.reportCountText()
 
         app.buttons["report-button"].tap()
         XCTAssertTrue(app.otherElements["survey-progress"].waitForExistence(timeout: 10)
@@ -426,7 +421,7 @@ final class SurveyFlowUITests: XCTestCase {
         XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
         XCTAssertNotEqual(countLabel.label, before, "report count did not increment")
 
-        app.buttons["reports-list-button"].tap()
+        app.revealReports()
         let reportsList = app.collectionViews["reports-list"].exists
             ? app.collectionViews["reports-list"]
             : app.tables["reports-list"]

@@ -17,8 +17,7 @@ final class AccessibilityUITests: XCTestCase {
         app.launch()
 
         let countLabel = app.staticTexts["report-count"]
-        XCTAssertTrue(countLabel.waitForExistence(timeout: 10))
-        let before = countLabel.label
+        let before = app.reportCountText()
 
         let reportButton = app.buttons["report-button"]
         XCTAssertTrue(reportButton.isHittable, "report button not hittable at accessibility3")

@@ -11,13 +11,13 @@ final class BackupSettingsUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].tap()
+        app.openSettings()
         // The Data section renders below the fold after the Settings "Manage"
         // section (Task 3.6) pushed the lower sections down; SwiftUI's List
         // lazily materializes off-screen rows, so scroll it in before asserting
         // (same idiom as testICloudScreenBackUpNowButtonAndCaption below).
         let dataLink = app.buttons["data-settings-link"]
-        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons["questions-settings-link"])
+        app.scrollUntilHittable(dataLink, anchoredOn: app.buttons[app.isPadShell ? "notifications-settings-link" : "questions-settings-link"])
         XCTAssertTrue(dataLink.waitForExistence(timeout: 10))
         dataLink.tap()
 
@@ -43,7 +43,7 @@ final class BackupSettingsUITests: XCTestCase {
         app.launchArguments = ["--mock-sensors", "--ui-testing", "--skip-onboarding"]
         app.launch()
 
-        app.buttons["settings-button"].tap()
+        app.openSettings()
         let iCloudLink = app.buttons["icloud-settings-link"]
         // The Data section renders below the fold on compact iPhone widths, and
         // SwiftUI's List lazily materializes off-screen rows — so the row isn't

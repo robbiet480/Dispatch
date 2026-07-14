@@ -27,9 +27,7 @@ final class SensorSettingsUITests: XCTestCase {
         }
         app.launch()
 
-        let settingsButton = app.buttons["settings-button"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 10))
-        settingsButton.tap()
+        app.openSettings()
         let sensorsLink = app.buttons["Sensors"].firstMatch
         XCTAssertTrue(sensorsLink.waitForExistence(timeout: 10))
         sensorsLink.tap()
