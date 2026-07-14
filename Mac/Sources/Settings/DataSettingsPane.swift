@@ -118,6 +118,13 @@ struct DataSettingsPane: View {
                 .autocorrectionDisabled()
                 .accessibilityIdentifier("delete-confirm-field")
             Button("Delete Everything", role: .destructive) {
+                // Defense in depth. `.disabled` below is the affordance; THIS is
+                // the gate. SwiftUI has not been consistent across releases about
+                // re-evaluating a `.disabled` alert button as its bound TextField
+                // changes, and the action behind it is an irreversible full wipe —
+                // so re-check the typed confirmation at the moment of the tap.
+                // (iOS's DataSettingsView relies on exactly this runtime check.)
+                guard confirmText == "DELETE" else { return }
                 deleteAllData(includeBackups: deleteBackupsToo)
             }
             .disabled(confirmText != "DELETE")
