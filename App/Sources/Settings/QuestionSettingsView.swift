@@ -18,6 +18,10 @@ struct QuestionsList: View {
     @Query(sort: \Question.sortOrder) private var questions: [Question]
     @Query private var responses: [Response]
     @Environment(ThemeStore.self) private var themeStore
+    /// Polish batch: on iPad/Mac (`LargeScreenShell`) the Catalog is a
+    /// top-level pane, so the "QUESTION CATALOG…" row below is redundant and
+    /// hidden. The iPhone push host has no such tab, so the row stays there.
+    @Environment(\.isInLargeScreenShell) private var inShell
     #if os(macOS)
     // Task 2.3 (iPad/Mac UI convergence): the Mac file-picker question
     // import/export lives on `MacExportController` (NSOpenPanel/NSSavePanel
@@ -109,16 +113,22 @@ struct QuestionsList: View {
                     .listRowBackground(Color.white.opacity(0.12))
                     .accessibilityIdentifier("add-question-button")
 
-                    Button {
-                        onOpenCatalog()
-                    } label: {
-                        Text("QUESTION CATALOG…")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
+                    // Hidden inside the shell (iPad/Mac): Catalog is a
+                    // top-level pane there, so this row would be redundant.
+                    // Kept on iPhone, where the only route to the catalog is
+                    // this row.
+                    if !inShell {
+                        Button {
+                            onOpenCatalog()
+                        } label: {
+                            Text("QUESTION CATALOG…")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                        }
+                        .listRowBackground(Color.white.opacity(0.12))
+                        .accessibilityIdentifier("question-catalog-link")
                     }
-                    .listRowBackground(Color.white.opacity(0.12))
-                    .accessibilityIdentifier("question-catalog-link")
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
