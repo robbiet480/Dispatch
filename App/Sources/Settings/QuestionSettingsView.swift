@@ -291,6 +291,7 @@ struct QuestionRowView: View {
             Toggle("", isOn: enabledBinding)
                 .labelsHidden()
                 .tint(.white.opacity(0.4))
+                .toggleStyle(.switch)
                 #if os(macOS)
                 .accessibilityIdentifier("mac-question-enabled-\(question.uniqueIdentifier)")
                 #endif
