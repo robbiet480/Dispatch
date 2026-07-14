@@ -316,6 +316,7 @@ struct PromptGroupRowView: View {
             Toggle("", isOn: enabledBinding)
                 .labelsHidden()
                 .tint(.white.opacity(0.4))
+                .toggleStyle(.switch)
         }
     }
 
