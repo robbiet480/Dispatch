@@ -242,17 +242,32 @@ final class BackupManager {
     // (`Mobile Documents`) — the old atPath listing threw Cocoa error 260
     // ("The folder Backups doesn't exist") on every iCloud pass.
 
+    /// Raised when "Also delete backups" could not remove everything. Carries a
+    /// message rather than the underlying error so it can cross the actor
+    /// boundary out of the detached deletion task.
+    struct DeletionFailure: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
     /// Delete All Data opt-in ("Also delete backups"): removes the whole
     /// Backups directory off-main and resets the staleness marker + caption
     /// state, so the next scene-active `backUpIfStale()` writes a fresh
     /// backup of the (reseeded) store. The enabled toggle is untouched —
     /// deleting data is not a request to stop backing up.
-    func deleteAllBackups() {
+    ///
+    /// AWAITABLE, and it throws. This used to be fire-and-forget with the
+    /// filesystem errors swallowed into the log, so the delete-all flow put up
+    /// "All Data Deleted" while the user's backups were, in fact, still on
+    /// disk — the one outcome someone who ticks "also delete backups" would
+    /// most want to know about. The caller now waits and reports the truth.
+    func deleteAllBackups() async throws {
         guard !isSkipped else { return }
         // Both destinations: local always, plus the cached iCloud directory
         // when it resolved — "also delete backups" means all of them.
         let directories = [directory, iCloudDirectory].compactMap { $0 }
-        Task.detached(priority: .utility) {
+        let failure = await Task.detached(priority: .utility) { () -> String? in
+            var firstFailure: String?
             for directory in directories {
                 do {
                     // percentEncoded:false — the ubiquity path contains a
@@ -262,17 +277,27 @@ final class BackupManager {
                         try FileManager.default.removeItem(at: directory)
                     }
                 } catch {
+                    // Keep going: a failure on the iCloud copy must not strand
+                    // the LOCAL backups the user also asked to delete.
                     backupLog.error("failed to delete backups: \(error, privacy: .public)")
+                    firstFailure = firstFailure ?? error.localizedDescription
                 }
             }
-            backupLog.info("deleted all backups (delete-all-data opt-in)")
-            await MainActor.run {
-                self.lastBackupDate = nil
-                self.backupCount = 0
-                self.lastICloudBackupFailed = false
-                self.defaults.removeObject(forKey: Self.lastBackupKey)
-            }
+            return firstFailure
+        }.value
+
+        // These markers describe what is on disk — only clear them when the
+        // disk agrees. If something survived, reconcile instead of claiming a
+        // clean slate, and let the caller surface the failure.
+        guard failure == nil else {
+            refreshCountAsync()
+            throw DeletionFailure(message: failure ?? "Unknown error")
         }
+        backupLog.info("deleted all backups (delete-all-data opt-in)")
+        lastBackupDate = nil
+        backupCount = 0
+        lastICloudBackupFailed = false
+        defaults.removeObject(forKey: Self.lastBackupKey)
     }
 
     private func refreshCountAsync() {

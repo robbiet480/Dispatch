@@ -133,3 +133,73 @@ private func seedFullStore(in context: ModelContext) throws {
         #expect(defaults.string(forKey: key) == "keep", "\(key) should be retained")
     }
 }
+
+// MARK: - resetToDefaults (atomicity)
+//
+// The delete-all flow used to be two saves: deleteAllModels() saved the wipe,
+// then seedIfEmpty() saved the reseed. A throw between them left the store
+// PERMANENTLY wiped-but-unseeded while the UI reported "Delete Failed" — the
+// user is told nothing happened, and their data is gone AND their questions
+// are gone. resetToDefaults collapses both into a single save so the store can
+// only ever be seen fully reset or untouched.
+
+@Test func resetToDefaultsWipesEveryModelAndReseedsTheCatalog() throws {
+    let context = try makeContext()
+    try seedFullStore(in: context)
+
+    let counts = try DeleteAllData.resetToDefaults(in: context)
+
+    // Reports the same counts deleteAllModels would.
+    #expect(counts.total == 6)
+
+    // Data gone…
+    #expect(try context.fetchCount(FetchDescriptor<Report>()) == 0)
+    #expect(try context.fetchCount(FetchDescriptor<Response>()) == 0)
+    #expect(try context.fetchCount(FetchDescriptor<PromptGroup>()) == 0)
+    #expect(try context.fetchCount(FetchDescriptor<TokenEntity>()) == 0)
+    #expect(try context.fetchCount(FetchDescriptor<PersonEntity>()) == 0)
+
+    // …and the default catalog is back, with its frozen identifiers. The old
+    // user question ("q-1") must NOT survive.
+    let questions = try context.fetch(FetchDescriptor<Question>())
+    #expect(questions.count == DefaultQuestions.all.count)
+    #expect(!questions.contains { $0.uniqueIdentifier == "q-1" })
+    #expect(Set(questions.map(\.uniqueIdentifier))
+        == Set(DefaultQuestions.all.map(\.identifier)))
+}
+
+/// The reseed must not depend on a fetchCount of pending (unsaved) deletes:
+/// the wipe is uncommitted when the seeder runs, so a `seedIfEmpty`-style
+/// "is the store empty?" guard could read the pre-delete rows and skip seeding
+/// — leaving the user with NO questions at all. Seed unconditionally instead.
+@Test func resetToDefaultsReseedsEvenThoughTheWipeIsStillUnsaved() throws {
+    let context = try makeContext()
+    // Many pre-existing questions, so a stale count would be conspicuously > 0.
+    for index in 0..<5 {
+        let question = Question()
+        question.uniqueIdentifier = "user-q-\(index)"
+        question.prompt = "Custom \(index)"
+        context.insert(question)
+    }
+    try context.save()
+
+    try DeleteAllData.resetToDefaults(in: context)
+
+    let questions = try context.fetch(FetchDescriptor<Question>())
+    #expect(questions.count == DefaultQuestions.all.count)
+    #expect(!questions.contains { $0.uniqueIdentifier.hasPrefix("user-q-") })
+}
+
+@Test func resetToDefaultsLeavesNoUnsavedChanges() throws {
+    let context = try makeContext()
+    try seedFullStore(in: context)
+    try DeleteAllData.resetToDefaults(in: context)
+    #expect(!context.hasChanges)
+}
+
+@Test func resetToDefaultsOnEmptyStoreStillSeedsTheCatalog() throws {
+    let context = try makeContext()
+    let counts = try DeleteAllData.resetToDefaults(in: context)
+    #expect(counts.total == 0)
+    #expect(try context.fetchCount(FetchDescriptor<Question>()) == DefaultQuestions.all.count)
+}

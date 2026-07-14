@@ -29,14 +29,19 @@ public enum DeleteAllData {
         }
     }
 
-    /// Deletes ALL rows of every model in `context` and saves ONCE.
+    /// Deletes ALL rows of every model in `context`, saving once unless the
+    /// caller is composing a larger transaction (`save: false`).
     ///
     /// Responses are deleted explicitly (not left to the Report cascade) so
     /// the pass never depends on when SwiftData materializes cascade deletes,
     /// and orphaned rows (report already nil) are caught too. Order is
     /// responses → reports → questions → prompt groups → vocabulary.
+    ///
+    /// Prefer `resetToDefaults(in:)` for the user-facing Delete All Data flow:
+    /// deleting without reseeding leaves a store with no questions at all.
     @discardableResult
-    public static func deleteAllModels(in context: ModelContext) throws -> Counts {
+    public static func deleteAllModels(in context: ModelContext,
+                                       save: Bool = true) throws -> Counts {
         var counts = Counts()
         counts.responses = try deleteAll(Response.self, in: context)
         counts.reports = try deleteAll(Report.self, in: context)
@@ -44,6 +49,30 @@ public enum DeleteAllData {
         counts.promptGroups = try deleteAll(PromptGroup.self, in: context)
         counts.tokens = try deleteAll(TokenEntity.self, in: context)
         counts.people = try deleteAll(PersonEntity.self, in: context)
+        if save {
+            try context.save()
+        }
+        return counts
+    }
+
+    /// The Delete All Data core: wipe every model AND restore the default
+    /// question catalog, in a SINGLE save.
+    ///
+    /// The wipe and the reseed are one transaction on purpose. Done as two
+    /// saves, a throw in the reseed committed the wipe and then reported
+    /// failure — so the user was told "Delete Failed" while their reports were
+    /// permanently gone AND they were left with no questions at all, which is
+    /// not a state the app can otherwise be in. One save means the store is
+    /// only ever observable as fully reset or entirely untouched.
+    ///
+    /// The reseed is unconditional rather than `seedIfEmpty`: at this point the
+    /// deletes are still pending, so an "is the store empty?" guard would be
+    /// asking about rows this very transaction is removing. We know it is empty
+    /// — we just emptied it.
+    @discardableResult
+    public static func resetToDefaults(in context: ModelContext) throws -> Counts {
+        let counts = try deleteAllModels(in: context, save: false)
+        try DefaultQuestions.seedDefaults(into: context, save: false)
         try context.save()
         return counts
     }
