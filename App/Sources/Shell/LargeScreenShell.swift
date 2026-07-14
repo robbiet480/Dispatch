@@ -85,6 +85,17 @@ struct LargeScreenShell: View {
                 // legitimate sidebar chrome, not a duplicate).
                 .environment(\.isInLargeScreenShell, true)
         }
+        // Owner feedback: tint the toolbar/pane-bar to the app theme color so
+        // the bar and the themed content read as ONE surface — otherwise the
+        // toolbar renders on the default dark window chrome while the content
+        // is themed, a jarring seam most visible on Insights (all content).
+        #if os(macOS)
+        .toolbarBackground(Color.themeBackground(theme), for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
+        #else
+        .toolbarBackground(Color.themeBackground(theme), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        #endif
         // Pane change: a "new" editor never survives leaving its pane, and
         // Insights collapses the sidebar to go full-width. `initial: true`
         // seeds the correct column visibility on first appearance.
