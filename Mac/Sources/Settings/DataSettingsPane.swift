@@ -46,16 +46,24 @@ struct DataSettingsPane: View {
             }
 
             Section {
-                exportRow("Day One JSON") { exportController.exportDayOne() }
-                exportRow("Markdown Folder") { exportController.exportMarkdown() }
-                exportRow("Dispatch JSON") { exportController.exportDispatchJSON() }
-                exportRow("CSV") { exportController.exportCSV() }
-                exportRow("Questions JSON") { exportController.exportQuestionsJSON() }
-                exportRow("Questions CSV") { exportController.exportQuestionsCSV() }
+                // One row per SUBJECT, its formats as buttons on the trailing
+                // edge — "Questions [JSON] [CSV]", not a row per file type. The
+                // two dispatch-export.* files are the same data in two formats,
+                // so they share a row.
+                exportRow("Dispatch",
+                          .init("JSON", "export-dispatch-json", exportController.exportDispatchJSON),
+                          .init("CSV", "export-dispatch-csv", exportController.exportCSV))
+                exportRow("Markdown",
+                          .init("Folder", "export-markdown-folder", exportController.exportMarkdown))
+                exportRow("Day One",
+                          .init("JSON", "export-day-one-json", exportController.exportDayOne))
+                exportRow("Questions",
+                          .init("JSON", "export-questions-json", exportController.exportQuestionsJSON),
+                          .init("CSV", "export-questions-csv", exportController.exportQuestionsCSV))
             } header: {
                 Text("Export")
             } footer: {
-                Text("Everything here also lives in the File menu.")
+                Text("Dispatch JSON is the only format that imports back. Questions exports the question definitions, not your reports. Everything here also lives in the File menu.")
             }
 
             Section {
@@ -144,9 +152,28 @@ struct DataSettingsPane: View {
         }
     }
 
-    private func exportRow(_ title: String, action: @escaping () -> Void) -> some View {
+    /// A subject and the formats it can be written as.
+    private struct ExportFormat: Identifiable {
+        let label: String
+        let identifier: String
+        let action: () -> Void
+        var id: String { identifier }
+
+        init(_ label: String, _ identifier: String, _ action: @escaping () -> Void) {
+            self.label = label
+            self.identifier = identifier
+            self.action = action
+        }
+    }
+
+    private func exportRow(_ title: String, _ formats: ExportFormat...) -> some View {
         LabeledContent(title) {
-            Button("Export…", action: action)
+            HStack(spacing: 8) {
+                ForEach(formats) { format in
+                    Button(format.label, action: format.action)
+                        .accessibilityIdentifier(format.identifier)
+                }
+            }
         }
     }
 
