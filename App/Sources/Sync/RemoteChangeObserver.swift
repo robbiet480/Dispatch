@@ -33,7 +33,9 @@ final class RemoteChangeObserver {
     /// by BackupManager's first-launch guard (an automatic backup taken
     /// before the initial CloudKit import completes snapshots an empty
     /// store). Events only arrive while subscribed, i.e. sync-active.
-    static let firstRemoteChangeKey = "sync.firstRemoteChangeDate"
+    /// Canonical definition now lives in DispatchKit (`SyncDefaultsKeys`) so
+    /// readers like BackupManager need not depend on this observer.
+    static let firstRemoteChangeKey = SyncDefaultsKeys.firstRemoteChange
 
     private let container: ModelContainer
     private let defaults: UserDefaults

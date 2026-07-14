@@ -30,6 +30,8 @@ struct DataSettingsPane: View {
     @State private var showSuccess = false
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var backupWarning: String?
+    @State private var showBackupWarning = false
 
     var body: some View {
         Form {
@@ -146,6 +148,16 @@ struct DataSettingsPane: View {
             Text("Dispatch has been reset to its default questions.")
         }
         .alert("Delete Failed", isPresented: $showError, presenting: errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        // Its OWN alert, not the "Delete Failed" one: here the data really was
+        // deleted and only the backups survived. Putting this message under a
+        // "Delete Failed" title tells the user the opposite of what happened —
+        // the headline is the part people read.
+        .alert("Data Deleted — Backups Remain", isPresented: $showBackupWarning,
+               presenting: backupWarning) { _ in
             Button("OK") {}
         } message: { message in
             Text(message)
@@ -272,8 +284,9 @@ struct DataSettingsPane: View {
         isDeleting = false
         resetDeleteGates()
         if let backupFailure {
-            errorMessage = "Your data was deleted, but the backups could not be removed: \(backupFailure)"
-            showError = true
+            backupWarning = "Your data was deleted and the default questions restored, "
+                + "but the backups could not be removed: \(backupFailure)"
+            showBackupWarning = true
         } else {
             showSuccess = true
         }

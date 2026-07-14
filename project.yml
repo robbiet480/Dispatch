@@ -432,6 +432,11 @@ targets:
       # the hostless bundle so PlaceSearchModelTests can drive it with stub
       # completer/resolver (no network) — the OptionBlockLayout precedent.
       - path: Shared/Search/PlaceSearch.swift
+      # Same precedent: BackupManager's deletion path (quiesce, partial failure,
+      # unreachable-iCloud reporting) guards an irreversible wipe and had no
+      # coverage. It compiles standalone now that its one App-target reference
+      # (RemoteChangeObserver.firstRemoteChangeKey) moved to DispatchKit.
+      - path: App/Sources/Backup/BackupManager.swift
     dependencies:
       # PlaceSearch.swift imports DispatchKit (MonitorDelay.floorRadiusMeters).
       - package: DispatchKit

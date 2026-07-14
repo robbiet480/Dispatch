@@ -31,6 +31,10 @@ struct DataSettingsView: View {
     @State private var deleteConfirmationText = ""
     @State private var isDeleting = false
     @State private var showDeleteSuccess = false
+    @State private var deleteErrorMessage: String?
+    @State private var showDeleteError = false
+    @State private var backupWarningMessage: String?
+    @State private var showBackupWarning = false
 
     private var theme: Theme { themeStore.theme }
 
@@ -111,6 +115,23 @@ struct DataSettingsView: View {
             handleImportResult(result)
         }
         .alert("Import", isPresented: $showAlert, presenting: alertMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        // Delete-all outcomes get their OWN alerts. They used to route through
+        // presentAlert above — so a failed wipe, and a wipe whose backups
+        // survived, were both announced under a dialog titled "Import".
+        .alert("Delete Failed", isPresented: $showDeleteError,
+               presenting: deleteErrorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        // Distinct from "Delete Failed": here the data really was deleted and
+        // only the backups survived. The headline is the part people read.
+        .alert("Data Deleted — Backups Remain", isPresented: $showBackupWarning,
+               presenting: backupWarningMessage) { _ in
             Button("OK") {}
         } message: { message in
             Text(message)
@@ -337,7 +358,8 @@ struct DataSettingsView: View {
                 deleteAllLog.error("delete all data failed: \(error, privacy: .public)")
                 await MainActor.run {
                     isDeleting = false
-                    presentAlert("Delete failed: \(error.localizedDescription)")
+                    deleteErrorMessage = "Delete failed: \(error.localizedDescription)"
+                    showDeleteError = true
                 }
             }
         }
@@ -392,7 +414,9 @@ struct DataSettingsView: View {
         }
         isDeleting = false
         if let backupFailure {
-            presentAlert("Your data was deleted, but the backups could not be removed: \(backupFailure)")
+            backupWarningMessage = "Your data was deleted and the default questions restored, "
+                + "but the backups could not be removed: \(backupFailure)"
+            showBackupWarning = true
         } else {
             showDeleteSuccess = true
         }

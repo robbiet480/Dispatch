@@ -203,3 +203,30 @@ private func seedFullStore(in context: ModelContext) throws {
     #expect(counts.total == 0)
     #expect(try context.fetchCount(FetchDescriptor<Question>()) == DefaultQuestions.all.count)
 }
+
+/// THE atomicity test.
+///
+/// The behavioural tests above all pass against the OLD two-save implementation
+/// too — they pin the end state, not the transaction, so they would have let
+/// the bug walk right back in. This one pins the transaction itself: the wipe
+/// and the reseed must land in ONE save. Split them back into two and this
+/// fails (2 != 1), which is the entire point.
+@Test func resetToDefaultsCommitsTheWipeAndReseedInASingleSave() throws {
+    let context = try makeContext()
+    try seedFullStore(in: context)
+
+    final class SaveCounter: @unchecked Sendable {
+        var count = 0
+    }
+    let counter = SaveCounter()
+    // Scoped to THIS context: swift-testing runs suites in parallel, and a
+    // nil object would count every other test's saves too.
+    let token = NotificationCenter.default.addObserver(
+        forName: ModelContext.didSave, object: context, queue: nil
+    ) { _ in counter.count += 1 }
+    defer { NotificationCenter.default.removeObserver(token) }
+
+    try DeleteAllData.resetToDefaults(in: context)
+
+    #expect(counter.count == 1)
+}
