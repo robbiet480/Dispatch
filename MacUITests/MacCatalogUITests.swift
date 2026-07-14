@@ -68,26 +68,20 @@ final class MacCatalogUITests: XCTestCase {
                       "Manage → Question Catalog menu item should exist")
         catalogItem.click()
 
-        // The catalog LIST lives in the split-view SIDEBAR (CatalogListView).
-        // On the default (narrow) window the NavigationSplitView collapses the
-        // sidebar behind a "Show Sidebar" toolbar toggle — the reports sidebar
-        // survives via its column-width floor, but the catalog sidebar sets
-        // none — so mac-catalog-list/empty/loading aren't on screen until it's
-        // revealed. Reveal it only if the catalog view isn't already up (a
-        // no-op when the sidebar shows). This reveals a present-but-collapsed
-        // list; a genuinely missing catalog still fails the assertion below.
-        // (Loading/empty are accepted too so the assertion proves "did not
-        // crash", not a particular data shape.)
+        // On macOS the catalog list surfaces as `question-catalog-list`: the
+        // shared CatalogListView applies `mac-catalog-list` to the inner List,
+        // but on the AppKit Outline the enclosing Group's `question-catalog-list`
+        // wins, so that's the identifier that resolves here (mac-catalog-list is
+        // absent in the macOS a11y tree). The split view shows the sidebar at
+        // this window width (the toolbar toggle reads "Hide Sidebar"), so the
+        // list, its detail, and the entries are all on screen. (Loading/empty
+        // are accepted too so the assertion proves "did not crash", not a shape.)
         let list = app.descendants(matching: .any)
-            .matching(identifier: "mac-catalog-list").firstMatch
+            .matching(identifier: "question-catalog-list").firstMatch
         let empty = app.descendants(matching: .any)
             .matching(identifier: "mac-catalog-empty").firstMatch
         let loading = app.descendants(matching: .any)
             .matching(identifier: "mac-catalog-loading").firstMatch
-        if !list.waitForExistence(timeout: 8), !empty.exists, !loading.exists {
-            let showSidebar = app.buttons["Show Sidebar"].firstMatch
-            if showSidebar.waitForExistence(timeout: 5) { showSidebar.click() }
-        }
         let catalogAppeared = list.waitForExistence(timeout: 20)
             || empty.waitForExistence(timeout: 2)
             || loading.waitForExistence(timeout: 2)
@@ -99,8 +93,13 @@ final class MacCatalogUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground,
                        "the app should still be alive after opening the catalog")
 
-        // Sanity: the stubbed entries actually populated the list.
-        XCTAssertTrue(app.staticTexts["Did you drink water today?"].waitForExistence(timeout: 10),
+        // Sanity: the stubbed entries populated the list. Rows render uppercased
+        // (the app's list casing), so match the stub prompt case-insensitively.
+        let waterRow = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                        "drink water", "drink water")
+        ).firstMatch
+        XCTAssertTrue(waterRow.waitForExistence(timeout: 10),
                       "expected the stubbed catalog entries to render")
     }
 }
