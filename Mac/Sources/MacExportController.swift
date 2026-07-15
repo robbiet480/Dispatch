@@ -19,10 +19,17 @@ private let exportLog = Logger(subsystem: "io.robbie.Dispatch", category: "expor
 final class MacExportController {
     private let container: ModelContainer
 
-    /// Result surface: MacRootView presents this in an alert.
-    var message: String?
-    var isShowingMessage = false
+    /// Result surface. Both Mac scenes (main window + Settings) observe this
+    /// controller, so the message carries the scene that triggered it and only
+    /// that scene presents — otherwise the confirmation appears in both windows
+    /// at once. See `ResultMessageState`.
+    private(set) var messageState = ResultMessageState()
     var isImportRunning = false
+
+    /// Clears the result message (bound to each scene's alert dismiss).
+    func dismissMessage() {
+        messageState.dismiss()
+    }
 
     /// Plan 47: question-definition import preview state. The open panel +
     /// parse + plan run here; `QuestionSettingsView` (Task 2.3's shared Mac
@@ -37,28 +44,28 @@ final class MacExportController {
 
     // MARK: - Exports
 
-    func exportDayOne() {
-        savePanelExport(suggestedName: "Dispatch Day One Export.json", type: .json) { context in
+    func exportDayOne(from origin: ResultMessageState.Scene = .primary) {
+        savePanelExport(suggestedName: "Dispatch Day One Export.json", type: .json, from: origin) { context in
             let reports = try context.fetch(FetchDescriptor<Report>())
             return try DayOneExporter.export(reports: reports)
         }
     }
 
-    func exportDispatchJSON() {
-        savePanelExport(suggestedName: "dispatch-export.json", type: .json) { context in
+    func exportDispatchJSON(from origin: ResultMessageState.Scene = .primary) {
+        savePanelExport(suggestedName: "dispatch-export.json", type: .json, from: origin) { context in
             try V2Exporter.exportData(from: context)
         }
     }
 
-    func exportCSV() {
-        savePanelExport(suggestedName: "dispatch-export.csv", type: .commaSeparatedText) { context in
+    func exportCSV(from origin: ResultMessageState.Scene = .primary) {
+        savePanelExport(suggestedName: "dispatch-export.csv", type: .commaSeparatedText, from: origin) { context in
             Data(try CSVExporter.exportCSV(from: context).utf8)
         }
     }
 
     /// One `.md` per report into a user-chosen folder — pick an empty folder
     /// and it opens directly as an Obsidian vault.
-    func exportMarkdown() {
+    func exportMarkdown(from origin: ResultMessageState.Scene = .primary) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -73,10 +80,10 @@ final class MacExportController {
                 try Data(file.contents.utf8)
                     .write(to: folder.appending(path: file.filename), options: .atomic)
             }
-            present("Exported \(files.count) Markdown file\(files.count == 1 ? "" : "s") to \(folder.lastPathComponent).")
+            present("Exported \(files.count) Markdown file\(files.count == 1 ? "" : "s") to \(folder.lastPathComponent).", from: origin)
         } catch {
             exportLog.error("markdown export failed: \(error, privacy: .public)")
-            present("Markdown export failed: \(error.localizedDescription)")
+            present("Markdown export failed: \(error.localizedDescription)", from: origin)
         }
     }
 
@@ -85,15 +92,15 @@ final class MacExportController {
     /// Export the question DEFINITIONS (not report data) as JSON — mirrors the
     /// catalog seed shape so a personal export and a curated seed are the same
     /// file shape.
-    func exportQuestionsJSON() {
-        savePanelExport(suggestedName: "dispatch-questions.json", type: .json) { context in
+    func exportQuestionsJSON(from origin: ResultMessageState.Scene = .primary) {
+        savePanelExport(suggestedName: "dispatch-questions.json", type: .json, from: origin) { context in
             try QuestionPortability.encodeJSON(Self.questionDefinitions(in: context))
         }
     }
 
     /// Export the question definitions as CSV (documented column schema).
-    func exportQuestionsCSV() {
-        savePanelExport(suggestedName: "dispatch-questions.csv", type: .commaSeparatedText) { context in
+    func exportQuestionsCSV(from origin: ResultMessageState.Scene = .primary) {
+        savePanelExport(suggestedName: "dispatch-questions.csv", type: .commaSeparatedText, from: origin) { context in
             Data(QuestionPortability.encodeCSV(try Self.questionDefinitions(in: context)).utf8)
         }
     }
@@ -160,6 +167,7 @@ final class MacExportController {
     }
 
     private func savePanelExport(suggestedName: String, type: UTType,
+                                 from origin: ResultMessageState.Scene = .primary,
                                  produce: (ModelContext) throws -> Data) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [type]
@@ -169,10 +177,10 @@ final class MacExportController {
         do {
             let data = try produce(ModelContext(container))
             try data.write(to: url, options: .atomic)
-            present("Exported \(url.lastPathComponent).")
+            present("Exported \(url.lastPathComponent).", from: origin)
         } catch {
             exportLog.error("export failed: \(error, privacy: .public)")
-            present("Export failed: \(error.localizedDescription)")
+            present("Export failed: \(error.localizedDescription)", from: origin)
         }
     }
 
@@ -180,7 +188,7 @@ final class MacExportController {
 
     /// v1 Reporter JSON or v2 Dispatch JSON, sniffed by the top-level
     /// `schemaVersion` key (v2-only) — same routing as iOS.
-    func importJSON() {
+    func importJSON(from origin: ResultMessageState.Scene = .primary) {
         guard !isImportRunning else { return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -206,13 +214,14 @@ final class MacExportController {
                     self?.isImportRunning = false
                     self?.present(
                         "Imported \(summary.questionsImported) questions, \(summary.reportsImported) reports, "
-                            + "\(summary.responsesImported) responses. Skipped: \(summary.skipped)."
+                            + "\(summary.responsesImported) responses. Skipped: \(summary.skipped).",
+                        from: origin
                     )
                 }
             } catch {
                 await MainActor.run { [weak self] in
                     self?.isImportRunning = false
-                    self?.present("Import failed: \(error.localizedDescription)")
+                    self?.present("Import failed: \(error.localizedDescription)", from: origin)
                 }
             }
         }
@@ -226,8 +235,10 @@ final class MacExportController {
         return try V1Importer.importExport(data, into: context)
     }
 
-    private func present(_ text: String) {
-        message = text
-        isShowingMessage = true
+    // Defaults to `.primary`: File-menu and Questions-pane results belong to the
+    // main window. The Settings Data pane passes `.settings` so its own
+    // export/import confirmations stay in the Settings window.
+    private func present(_ text: String, from origin: ResultMessageState.Scene = .primary) {
+        messageState.present(text, from: origin)
     }
 }
