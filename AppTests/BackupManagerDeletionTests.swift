@@ -63,6 +63,11 @@ final class BackupManagerDeletionTests: XCTestCase {
         defaults.set(date.timeIntervalSince1970, forKey: BackupManager.lastBackupKey)
     }
 
+    /// Marks this install as having written an iCloud backup previously.
+    private func seedHasWrittenICloud() {
+        defaults.set(true, forKey: BackupManager.hasWrittenICloudKey)
+    }
+
     private func exists(_ url: URL) -> Bool {
         FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
     }
@@ -121,9 +126,9 @@ final class BackupManagerDeletionTests: XCTestCase {
                        "markers must NOT be cleared while backups survive")
     }
 
-    /// Local-only destination with no iCloud directory is not a failure — the
-    /// user never asked for iCloud backups, so there is nothing to warn about.
-    func testLocalOnlyDestinationDoesNotWarnAboutICloud() async throws {
+    /// Local-only destination that NEVER wrote iCloud backups: no iCloud copies
+    /// can exist, so an unreachable container is not a failure.
+    func testLocalOnlyNeverWroteICloudDoesNotWarn() async throws {
         let local = try seedBackups(in: root.appending(path: "Backups"))
         let manager = try makeManager(local: local, iCloud: nil, destination: .local)
 
@@ -131,6 +136,39 @@ final class BackupManagerDeletionTests: XCTestCase {
 
         XCTAssertFalse(exists(local))
         XCTAssertNil(manager.lastBackupDate)
+    }
+
+    /// CodeRabbit #108: history, not the current destination, decides whether
+    /// iCloud copies might survive. A user who wrote iCloud backups and later
+    /// switched to local-only still has those exports on the server — so an
+    /// unreachable container here MUST warn, even though `destination == .local`.
+    func testWarnsWhenPreviouslyWroteICloudThenSwitchedToLocal() async throws {
+        let local = try seedBackups(in: root.appending(path: "Backups"))
+        seedHasWrittenICloud()
+        let manager = try makeManager(local: local, iCloud: nil, destination: .local)
+
+        do {
+            try await manager.deleteAllBackups()
+            XCTFail("must warn: iCloud backups written earlier may survive")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("iCloud"),
+                          "message should name iCloud: \(error.localizedDescription)")
+        }
+        XCTAssertFalse(exists(local), "reachable local backups must still be deleted")
+    }
+
+    /// A successful full deletion clears the write-history marker — otherwise
+    /// the NEXT wipe would warn about iCloud copies that no longer exist.
+    func testSuccessfulDeletionClearsICloudWriteHistory() async throws {
+        let local = try seedBackups(in: root.appending(path: "Backups"))
+        let cloud = try seedBackups(in: root.appending(path: "iCloud/Backups"))
+        seedHasWrittenICloud()
+        let manager = try makeManager(local: local, iCloud: cloud, destination: .both)
+
+        try await manager.deleteAllBackups()
+
+        XCTAssertFalse(defaults.bool(forKey: BackupManager.hasWrittenICloudKey),
+                       "write-history marker should reset once every backup is gone")
     }
 
     /// No backups written yet: deleting is a no-op, not an error.
@@ -157,17 +195,30 @@ final class BackupManagerDeletionTests: XCTestCase {
     /// Backups are quiesced during deletion: nothing may start a new backup
     /// while the directories are being removed, or it would write a fresh
     /// backup into the tree we just deleted.
-    func testBackupsAreRefusedWhileDeletionIsInFlight() async throws {
-        let local = try seedBackups(in: root.appending(path: "Backups"))
+    func testBackupEntryPointsAreRefusedWhileDeleting() throws {
+        let manager = try makeManager(local: root.appending(path: "Backups"))
+        // Deterministically hold the gate open (rather than racing a real
+        // in-flight deletion) and prove both entry points bail out.
+        manager.setDeletingBackupsForTesting(true)
+        manager.backUpNow(now: Date(timeIntervalSince1970: 2_000_000_000))
+        manager.backUpIfStale(now: Date(timeIntervalSince1970: 2_000_000_000))
+        XCTAssertFalse(manager.isBackingUp,
+                       "no backup may start while a deletion holds the gate")
+        manager.setDeletingBackupsForTesting(false)
+    }
+
+    /// Deletion AWAITS the in-flight backup (no polling deadline), so a backup
+    /// triggered just before deletion cannot leave a file behind: it lands,
+    /// then the directory is removed.
+    func testDeletionAwaitsAnInFlightBackup() async throws {
+        let local = root.appending(path: "Backups")
         let manager = try makeManager(local: local)
 
-        async let deletion: Void = manager.deleteAllBackups()
-        // Racy by nature; assert the flag exists and gates the entry points
-        // rather than trying to hit the window reliably.
-        manager.backUpNow()
-        try await deletion
+        manager.backUpNow(now: Date(timeIntervalSince1970: 2_000_000_000))
+        try await manager.deleteAllBackups()
 
         XCTAssertFalse(manager.isDeletingBackups, "the flag must be cleared when deletion finishes")
-        XCTAssertFalse(exists(local), "a backup must not have recreated the deleted directory")
+        XCTAssertNil(manager.backupTaskForTesting, "the awaited backup task must be cleared")
+        XCTAssertFalse(exists(local), "the awaited backup must not have left a surviving tree")
     }
 }
