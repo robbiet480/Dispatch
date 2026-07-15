@@ -40,6 +40,12 @@ final class BackupManager {
     static let enabledKey = "backup.enabled"
     static let lastBackupKey = "backup.lastBackupDate"
     static let installIDKey = "backup.installID"
+    /// Sticky once true: this install has written at least one iCloud backup.
+    /// The "also delete backups" flow reads it to decide whether an unreachable
+    /// ubiquity container means iCloud copies SURVIVED — the current
+    /// `destination` can't answer that, because switching to local-only leaves
+    /// earlier iCloud exports in place.
+    static let hasWrittenICloudKey = "backup.hasWrittenICloud"
 
     @ObservationIgnored private let container: ModelContainer
     @ObservationIgnored private let defaults: UserDefaults
@@ -86,6 +92,20 @@ final class BackupManager {
     /// silently resurrecting backups the user just asked to destroy, while the
     /// flow still reported success. Every backup entry point checks it.
     private(set) var isDeletingBackups = false
+
+    /// The in-flight `performBackup` task, retained so `deleteAllBackups()` can
+    /// AWAIT its completion rather than poll a deadline — a backup that outran
+    /// the old ten-second cutoff would otherwise write into the tree deletion
+    /// was mid-way through removing.
+    @ObservationIgnored private var backupTask: Task<Void, Never>?
+
+    #if DEBUG
+    // Test seams: the deletion gate is `private(set)` and the task is private,
+    // but the quiesce guarantee (entry points refused while deleting; the task
+    // is awaited and cleared) is worth pinning directly.
+    func setDeletingBackupsForTesting(_ value: Bool) { isDeletingBackups = value }
+    var backupTaskForTesting: Task<Void, Never>? { backupTask }
+    #endif
     /// Tri-state iCloud Drive availability for the Settings status line:
     /// nil while the off-main ubiquity resolution is still in flight.
     private(set) var iCloudAvailability: Bool?
@@ -199,9 +219,10 @@ final class BackupManager {
         isBackingUp = true
         let container = container
         let slug = deviceSlug
-        Task.detached(priority: .utility) {
+        backupTask = Task.detached(priority: .utility) {
             var result: (date: Date, count: Int)?
             var cloudFailed = false
+            var cloudWritten = false
             do {
                 // Background ModelContext — same cross-context pattern as
                 // import and the remote-change observer; the export never
@@ -220,6 +241,7 @@ final class BackupManager {
                         // The caption's count comes from the local copy when
                         // both were written (they rotate identically).
                         if result == nil { result = (now, count) }
+                        cloudWritten = true
                     } catch {
                         // Quota-full or provider errors: logged + surfaced in
                         // Settings; the local copy is unaffected.
@@ -233,9 +255,15 @@ final class BackupManager {
                 backupLog.error("backup failed: \(error, privacy: .public)")
                 result = nil
             }
-            await MainActor.run { [result, cloudFailed] in
+            await MainActor.run { [result, cloudFailed, cloudWritten] in
                 self.isBackingUp = false
+                self.backupTask = nil
                 self.lastICloudBackupFailed = cloudFailed
+                // Sticky: once an iCloud backup lands, remember it so a later
+                // wipe with iCloud unreachable knows those copies may survive.
+                if cloudWritten {
+                    self.defaults.set(true, forKey: Self.hasWrittenICloudKey)
+                }
                 if let result {
                     self.lastBackupDate = result.date
                     self.defaults.set(result.date.timeIntervalSince1970, forKey: Self.lastBackupKey)
@@ -274,23 +302,26 @@ final class BackupManager {
         guard !isSkipped else { return }
 
         // Close the door before opening the trapdoor: no new backup may start
-        // while we delete, and an in-flight one must land BEFORE we remove the
-        // directory — otherwise its write recreates what we just deleted.
+        // while we delete (the `isDeletingBackups` gate on every entry point),
+        // and an in-flight one must FULLY LAND before we remove the directory —
+        // otherwise its write recreates what we just deleted. Await the actual
+        // task rather than polling a deadline: a backup that outran the poll
+        // would slip through and resurrect the tree.
         isDeletingBackups = true
         defer { isDeletingBackups = false }
-        var waited = 0
-        while isBackingUp && waited < 100 {
-            try? await Task.sleep(for: .milliseconds(100))
-            waited += 1
-        }
+        await backupTask?.value
 
-        // "Also delete backups" means ALL of them. If the user targets iCloud
-        // but the ubiquity container never resolved — signed out, iCloud Drive
-        // off, or the resolve simply hasn't landed — then their iCloud backups
-        // are full exports of the reports we are about to irreversibly wipe,
-        // and we cannot touch them. Delete what we can reach, then SAY SO,
-        // rather than reporting a clean slate we never achieved.
-        let unreachableICloud = destination != .local && iCloudDirectory == nil
+        // "Also delete backups" means ALL of them. If iCloud copies may exist
+        // but the ubiquity container is unreachable — signed out, iCloud Drive
+        // off, or the resolve simply hasn't landed — then those backups are full
+        // exports of the reports we are about to irreversibly wipe, and we
+        // cannot touch them. "May exist" is decided by WRITE HISTORY, not the
+        // current destination: switching to local-only leaves earlier iCloud
+        // exports in place, so a destination check would miss them. Delete what
+        // we can reach, then SAY SO, rather than claiming a clean slate.
+        let mightHaveICloudBackups = defaults.bool(forKey: Self.hasWrittenICloudKey)
+            || destination != .local
+        let unreachableICloud = mightHaveICloudBackups && iCloudDirectory == nil
         let directories = [directory, iCloudDirectory].compactMap { $0 }
         let failure = await Task.detached(priority: .utility) { () -> String? in
             var firstFailure: String?
@@ -327,6 +358,10 @@ final class BackupManager {
         backupCount = 0
         lastICloudBackupFailed = false
         defaults.removeObject(forKey: Self.lastBackupKey)
+        // Every reachable backup is gone, so the write-history marker resets —
+        // otherwise the next wipe would warn about iCloud copies that no longer
+        // exist. (Only reached on full success; the unreachable path threw.)
+        defaults.removeObject(forKey: Self.hasWrittenICloudKey)
     }
 
     private func refreshCountAsync() {
