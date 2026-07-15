@@ -16,11 +16,13 @@ struct MacRootView: View {
     var body: some View {
         LargeScreenShell()
             // Import/export results from the File menu land here (the main
-            // window); the Settings scene carries its own copy of this alert.
+            // window). The Settings scene has its OWN alert; each fires only for
+            // the scene that triggered the operation, so a Settings-triggered
+            // export no longer raises the confirmation in both windows at once.
             .alert("Dispatch", isPresented: Binding(
-                get: { exportController.isShowingMessage },
-                set: { exportController.isShowingMessage = $0 }
-            ), presenting: exportController.message) { _ in
+                get: { exportController.messageState.isPresented(in: .primary) },
+                set: { if !$0 { exportController.dismissMessage() } }
+            ), presenting: exportController.messageState.text) { _ in
                 Button("OK") {}
             } message: { message in
                 Text(message)

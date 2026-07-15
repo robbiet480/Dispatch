@@ -37,7 +37,7 @@ struct DataSettingsPane: View {
         Form {
             Section {
                 LabeledContent("Reporter/Dispatch JSON") {
-                    Button("Import…") { exportController.importJSON() }
+                    Button("Import…") { exportController.importJSON(from: .settings) }
                         .accessibilityIdentifier("import-button")
                         .disabled(exportController.isImportRunning)
                 }
@@ -53,15 +53,15 @@ struct DataSettingsPane: View {
                 // two dispatch-export.* files are the same data in two formats,
                 // so they share a row.
                 exportRow("Dispatch",
-                          .init("JSON", "export-dispatch-json", exportController.exportDispatchJSON),
-                          .init("CSV", "export-dispatch-csv", exportController.exportCSV))
+                          .init("JSON", "export-dispatch-json") { exportController.exportDispatchJSON(from: .settings) },
+                          .init("CSV", "export-dispatch-csv") { exportController.exportCSV(from: .settings) })
                 exportRow("Markdown",
-                          .init("Folder", "export-markdown-folder", exportController.exportMarkdown))
+                          .init("Folder", "export-markdown-folder") { exportController.exportMarkdown(from: .settings) })
                 exportRow("Day One",
-                          .init("JSON", "export-day-one-json", exportController.exportDayOne))
+                          .init("JSON", "export-day-one-json") { exportController.exportDayOne(from: .settings) })
                 exportRow("Questions",
-                          .init("JSON", "export-questions-json", exportController.exportQuestionsJSON),
-                          .init("CSV", "export-questions-csv", exportController.exportQuestionsCSV))
+                          .init("JSON", "export-questions-json") { exportController.exportQuestionsJSON(from: .settings) },
+                          .init("CSV", "export-questions-csv") { exportController.exportQuestionsCSV(from: .settings) })
             } header: {
                 Text("Export")
             } footer: {
@@ -93,12 +93,14 @@ struct DataSettingsPane: View {
                 .ignoresSafeArea()
             }
         }
-        // The Settings window is its own scene — it needs its own alert
-        // surface for import/export results triggered from here.
+        // The Settings window is its own scene — it needs its own alert surface
+        // for import/export results triggered from here. It fires only for
+        // `.settings`-origin messages, so File-menu results stay in the main
+        // window and Settings results stay here — never both at once.
         .alert("Dispatch", isPresented: Binding(
-            get: { exportController.isShowingMessage },
-            set: { exportController.isShowingMessage = $0 }
-        ), presenting: exportController.message) { _ in
+            get: { exportController.messageState.isPresented(in: .settings) },
+            set: { if !$0 { exportController.dismissMessage() } }
+        ), presenting: exportController.messageState.text) { _ in
             Button("OK") {}
         } message: { message in
             Text(message)
