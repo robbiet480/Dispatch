@@ -1,0 +1,198 @@
+# Screenshots
+#
+# Regenerates ALL App Store screenshots for a chosen ref and opens a follow-up
+# PR containing the refreshed PNGs. This automates the manual
+# `scripts/screenshots.sh` step (plan 23; iPhone/iPad/watch/Mac).
+#
+# Trigger:   workflow_dispatch ONLY — pick the ref (branch) to screenshot.
+# Runner:    the self-hosted M4 Mac mini pool (labels: self-hosted, macOS,
+#            dispatch-selfhosted) — the same pool the UI suites use. It needs
+#            the iOS/watchOS simulators (iPhone/iPad/watch shots) and, for the
+#            Mac shots, the real Apple Development signing identity in the
+#            mini's login keychain (the DispatchMac app carries sandbox +
+#            iCloud entitlements launchd won't spawn under ad-hoc signing). No
+#            hosted runner can produce these shots.
+# Output:    scripts/screenshots.sh writes docs/app-store/screenshots/
+#            <device-slug>-<nn>-<name>.png. This workflow commits those onto a
+#            new `screenshots/<ref>-<run-id>` branch and opens a PR TARGETING
+#            the ref that was screenshotted, so the diff lands back on that ref.
+#
+# KNOWN CAVEAT (do NOT try to fix here): on some branches MacScreenshotTests
+# references a stale accessibility id (`detail-pane-picker`) and the Mac
+# capture fails. That's a separate issue being fixed elsewhere. This workflow
+# is intentionally REF-AGNOSTIC: it runs whatever `scripts/screenshots.sh` (and
+# whatever MacScreenshotTests) exist on the checked-out ref, and does not work
+# around Mac failures — it just opens a PR with whatever shots succeeded. The
+# Mac shots therefore depend on MacScreenshotTests passing on the target ref.
+#
+# How to run:
+#   Actions → "Screenshots" → Run workflow → pick a ref → Run.
+#   A follow-up PR ("chore: regenerate App Store screenshots (<ref>)") opens
+#   against that ref with the refreshed PNGs.
+
+name: Screenshots
+
+# Push a branch + open a PR: needs write on both.
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (branch) to screenshot (blank = the branch this run was launched from)"
+        required: false
+        default: ""
+
+# One run per target ref; re-dispatching on the same ref supersedes the stale
+# run (each run opens its own run-id-suffixed branch, so distinct refs never
+# collide either).
+concurrency:
+  group: screenshots-${{ github.event.inputs.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    # Self-hosted runners must never execute fork-PR code (the minis hold the
+    # Apple Development signing identity). workflow_dispatch is not a
+    # pull_request event, so this gate is always true here — kept for parity
+    # with the documented "every self-hosted job carries a same-repo-PR gate"
+    # invariant (docs/selfhosted-runners.md).
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    # Self-hosted M4 mini pool (labels: self-hosted, macOS, dispatch-selfhosted).
+    runs-on: [self-hosted, macOS, dispatch-selfhosted]
+    timeout-minutes: 120
+    env:
+      # The branch to screenshot: the workflow_dispatch `ref` input, or (blank)
+      # the branch this run was launched from. Everything downstream — the
+      # checkout, the screenshots branch name, and the PR base — keys off this.
+      TARGET_REF: ${{ github.event.inputs.ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # Screenshot whatever ref was chosen. persist-credentials (default
+          # true) leaves the GITHUB_TOKEN wired into the origin remote so the
+          # `git push` of the screenshots branch below authenticates.
+          ref: ${{ env.TARGET_REF }}
+      - name: Homebrew on PATH
+        # LaunchAgent PATH is minimal; brew tools (xcodegen, gh) live under
+        # /opt/homebrew/bin.
+        run: echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+      - name: Select Xcode
+        # Runner defaults to CommandLineTools; point at full Xcode without sudo.
+        run: |
+          # Fail fast if no Xcode is installed — a silent empty glob would
+          # otherwise write a bogus DEVELOPER_DIR and fail confusingly later.
+          XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE_APP" ] || { echo "::error::No Xcode found in /Applications on this runner"; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Verify runner toolchain
+        # xcodegen + gh are pre-installed on the minis (runner setup doc), not
+        # brewed per run; xcodebuild ships with Xcode. Fail fast with a clear
+        # message if the runner was reprovisioned without them.
+        run: |
+          for tool in xcodegen xcodebuild gh; do
+            command -v "$tool" >/dev/null || { echo "::error::$tool missing on self-hosted runner — install it (see docs/selfhosted-runners.md)"; exit 1; }
+          done
+      - name: Generate project
+        run: xcodegen generate
+      - name: Capture screenshots
+        # scripts/screenshots.sh (SCREENSHOT_MODE-gated) WIPES
+        # docs/app-store/screenshots and regenerates iPhone 17 Pro Max /
+        # iPhone 17 / iPad Pro 13-inch (M5) (simulator), Apple Watch Ultra 3
+        # (simulator), and Mac (local DispatchMac).
+        #
+        # The script is `set -euo pipefail` and runs the platforms serially, so
+        # the FIRST failing platform aborts the rest. We deliberately DON'T fail
+        # the job here (the `if` condition exempts the command from bash -e): we
+        # record the exit status, surface which platform it died on, and still
+        # proceed to open a PR with whatever PNGs succeeded — a single
+        # platform's failure never silently loses the others. The final step
+        # re-raises the failure so the run is visibly red.
+        #
+        # Ref-agnostic: whatever screenshots.sh / MacScreenshotTests exist on
+        # the target ref run as-is. On some branches MacScreenshotTests
+        # references a stale `detail-pane-picker` id and the Mac capture (the
+        # LAST platform) fails — a separate, known issue; this workflow does not
+        # work around it.
+        id: capture
+        run: |
+          set -o pipefail
+          if ./scripts/screenshots.sh 2>&1 | tee "$RUNNER_TEMP/screenshots.log"; then
+            echo "capture_failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "capture_failed=true" >> "$GITHUB_OUTPUT"
+            LAST=$(grep '==> Capturing on' "$RUNNER_TEMP/screenshots.log" | tail -1 | sed 's/.*==> Capturing on //')
+            echo "::warning::scripts/screenshots.sh exited non-zero (last platform attempted: ${LAST:-unknown}). Opening a PR with whatever PNGs changed; see this step's log."
+          fi
+      - name: Open screenshots PR
+        env:
+          # gh is self-contained on the minis; the built-in token can push the
+          # branch (contents: write) and open the PR (pull-requests: write).
+          GH_TOKEN: ${{ github.token }}
+          CAPTURE_FAILED: ${{ steps.capture.outputs.capture_failed }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # docs/app-store/screenshots/ is gitignored (output-only) yet its PNGs
+          # are tracked, so `-f` is required to stage newly-named shots.
+          if [ "${CAPTURE_FAILED}" = "true" ]; then
+            # A platform failed. screenshots.sh `rm -f`'d the dir before
+            # regenerating, so the failed platform's committed PNGs are missing
+            # from the tree. Stage adds/mods ONLY (--ignore-removal) so a failed
+            # capture keeps its last-good shots instead of deleting them.
+            git add --ignore-removal -f docs/app-store/screenshots/
+          else
+            # Clean full run: stage adds, mods AND removals so renamed/dropped
+            # shots are pruned from the committed set.
+            git add -A -f docs/app-store/screenshots/
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No screenshot changes — nothing to commit. Skipping PR."
+            exit 0
+          fi
+
+          # Branch name: sanitize the ref (it may contain slashes) and suffix
+          # the run id so concurrent/repeat runs never clash.
+          SANITIZED=$(printf '%s' "${TARGET_REF}" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-*//;s/-*$//')
+          BRANCH="screenshots/${SANITIZED}-${{ github.run_id }}"
+          git switch -c "${BRANCH}"
+
+          git commit \
+            -m "chore: regenerate App Store screenshots (${TARGET_REF})" \
+            -m "Generated by the Screenshots workflow (run ${{ github.run_id }})." \
+            -m "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+          git push origin "${BRANCH}"
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BODY="Regenerated App Store screenshots for \`${TARGET_REF}\`.
+
+          - Generated by the **Screenshots** workflow ([run ${{ github.run_id }}](${RUN_URL})).
+          - Captures iPhone 17 Pro Max, iPhone 17, iPad Pro 13-inch (M5), Apple Watch Ultra 3, and Mac via \`scripts/screenshots.sh\`.
+          - Merge into \`${TARGET_REF}\` to update the committed screenshots."
+          if [ "${CAPTURE_FAILED}" = "true" ]; then
+            BODY="${BODY}
+
+          > ⚠️ One or more platform captures FAILED on this run (see the [workflow log](${RUN_URL})). The shots from the platforms that succeeded are included; any failed platform keeps its previously-committed shots. Known caveat: on some branches \`MacScreenshotTests\` references a stale \`detail-pane-picker\` accessibility id and the Mac capture fails — tracked separately."
+          fi
+
+          # PR base is the ref that was screenshotted (a branch — you can't open
+          # a PR against a tag/SHA), so the diff lands back on that branch.
+          gh pr create \
+            --base "${TARGET_REF}" \
+            --head "${BRANCH}" \
+            --title "chore: regenerate App Store screenshots (${TARGET_REF})" \
+            --body "${BODY}"
+      - name: Surface capture failure
+        # The screenshots PR (if any) is already open above; now mark the run
+        # red so a failed platform capture is visible rather than silently green.
+        if: steps.capture.outputs.capture_failed == 'true'
+        run: |
+          echo "::error::One or more platform captures failed — see the 'Capture screenshots' step log. A PR with the shots that succeeded may still have been opened."
+          exit 1
